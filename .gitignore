@@ -16,3 +16,6 @@ uv.lock
 htmlcov/
 config/config.toml
 config/policy.toml
+
+reports/
+live.db

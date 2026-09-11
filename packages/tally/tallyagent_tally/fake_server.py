@@ -47,10 +47,24 @@ class FakeVoucher:
 class FakeTally:
     """In-memory Tally. Not thread-safe; one instance per test."""
 
-    def __init__(self, company: str = "Demo Traders Pvt Ltd", version: str = "6.0.3") -> None:
+    def __init__(
+        self,
+        company: str = "Demo Traders Pvt Ltd",
+        version: str = "6.0.3",
+        companies: list[str] | None = None,
+        edu: bool = False,
+        supports_company_create: bool = True,
+    ) -> None:
         self.company = company
-        self.companies = [company]
+        # ``companies=[]`` reproduces a fresh install sitting on Select Company,
+        # which is the state Stage 14 bootstraps out of.
+        self.companies = [company] if companies is None else list(companies)
         self.version = version
+        # Educational mode only accepts vouchers on these days of the month.
+        self.edu = edu
+        # TallyPrime 1.1.7.1 refuses company creation over XML. Flipping this
+        # off reproduces that refusal, so both paths are testable.
+        self.supports_company_create = supports_company_create
         self.ledgers: dict[str, FakeLedger] = {}
         self.vouchers: list[FakeVoucher] = []
         self.requests: list[bytes] = []
@@ -281,6 +295,16 @@ class FakeTally:
         errors: list[str] = []
         last_voucher_id = last_master_id = ""
 
+        company_elements = list(root.iter("COMPANY"))
+        if company_elements:
+            return self._handle_company_import(root, company_elements)
+
+        # Real Tally resolves a current company before any import. With none
+        # loaded it refuses, and the error text is verbatim from TallyPrime.
+        target = (root.findtext(".//SVCURRENTCOMPANY") or "").strip()
+        if not target and not self.companies:
+            return self._import_response(0, 0, ["Could not find Company ''"], "", "")
+
         for ledger_el in root.iter("LEDGER"):
             name = ledger_el.findtext("NAME") or ledger_el.get("NAME") or ""
             if name in self.ledgers:
@@ -333,6 +357,14 @@ class FakeTally:
                 altered += 1
                 continue
 
+            when = from_tally_date(voucher_el.findtext("DATE") or "")
+            if self.edu and when is not None and when.day not in (1, 2, 31):
+                errors.append(
+                    "Educational version of Tally allows entry of vouchers only "
+                    "on the 1st, 2nd and 31st of a month"
+                )
+                continue
+
             number = voucher_el.findtext("VOUCHERNUMBER") or self.next_voucher_number(
                 voucher_type
             )
@@ -359,6 +391,45 @@ class FakeTally:
         return self._import_response(
             created, altered, errors, last_voucher_id, last_master_id
         )
+
+    def _handle_company_import(
+        self, root: etree._Element, elements: list[etree._Element]
+    ) -> bytes:
+        """Company creation over XML.
+
+        TallyPrime 1.1.7.1 refuses this - every import resolves a current
+        company first - so the refusal is reproduced verbatim when
+        ``supports_company_create`` is off, which is what sends the bootstrap
+        tool down its Tier 3 path in tests.
+        """
+        if not self.supports_company_create:
+            return self._import_response(
+                0, 0, ["Could not find Company ''"], "", ""
+            )
+        created = 0
+        errors: list[str] = []
+        for element in elements:
+            name = element.findtext("NAME") or element.get("NAME") or ""
+            if not name:
+                errors.append("Company name is empty")
+                continue
+            if name in self.companies:
+                errors.append(f"Company '{name}' already exists")
+                continue
+            self.companies.append(name)
+            self.company = name
+            created += 1
+        return self._import_response(created, 0, errors, "", str(next(self._ids)))
+
+    def create_company_via_ui(self, name: str) -> None:
+        """What the Tier 3 keyboard path achieves, without a keyboard.
+
+        The fake cannot be driven by keystrokes, so this is how a test asserts
+        the outcome of the UI path: the company exists and is loaded.
+        """
+        if name not in self.companies:
+            self.companies.append(name)
+        self.company = name
 
     def _import_response(
         self,

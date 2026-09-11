@@ -252,9 +252,23 @@ class Session:
             self.stats.tier3_used = True
         return turn.say("system", result.message)
 
+    def _sync_company(self) -> None:
+        """The tool context owns the active company; Services follows it.
+
+        ``bootstrap_company`` switches the context to the company it just made,
+        and without this the panels and /company would keep reporting the old
+        one. One source of truth, read in one direction.
+        """
+        self.services.company = self.services.tools.company
+
     async def cmd_company(self, args: list[str], turn: Turn) -> Turn:
+        self._sync_company()
         if not args:
-            return turn.say("system", f"active company: {self.services.company.name!r}")
+            name = self.services.tools.company.name
+            return turn.say(
+                "system",
+                f"active company: {name!r}" if name else "no company is active yet",
+            )
         name = " ".join(args)
         self.services.company = self.services.company.model_copy(update={"name": name})
         self.services.tools.company = self.services.company
@@ -276,6 +290,8 @@ class Session:
         )
         if result.data and result.data.get("used_tier3"):
             self.stats.tier3_used = True
+        self._sync_company()
+        self.services.reset(self.conversation)
         return turn.say("system", result.message)
 
     async def cmd_seed(self, args: list[str], turn: Turn) -> Turn:

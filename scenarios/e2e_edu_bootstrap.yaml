@@ -1,0 +1,81 @@
+name: EDU bootstrap end to end
+description: >
+  Takes a TallyPrime Educational instance from an empty Select Company screen to
+  a populated, reconciled company. Runs unchanged against the fake Tally in CI
+  (tests/e2e/test_edu_bootstrap.py) and against a live instance
+  (scripts/live_e2e.py), which is the point: the scripted path and the path a
+  human drives through the TUI are the same Session.
+
+steps:
+  - say: /probe
+    note: Tally reachable, edition known, write scope stated.
+    expect:
+      - reachable
+      - PASS ready for live mode
+
+  - say: /bootstrap TA-Demo Traders
+    note: >
+      Creates the company. Over XML where the Tally version supports it,
+      otherwise by driving the Create Company screen. Either way it is verified
+      back over XML before this step passes.
+    expect:
+      - TA-Demo Traders
+    expect_not:
+      - cannot be created
+
+  - say: /company
+    note: The created company is the active one.
+    expect:
+      - TA-Demo Traders
+
+  - say: /seed coa
+    note: >
+      The standard GST trading chart of accounts as ONE approval with one diff,
+      not twenty tickets.
+    expect:
+      - Output IGST
+      - Acme Industries
+      - Bharat Supplies
+
+  - say: which ledgers exist?
+    note: The masters are really in Tally, read back through a tool.
+    expect:
+      - Sales - GST 18%
+      - Output CGST
+
+  - say: /seed txns 4
+    note: >
+      Sales, purchase, receipt and payment through the normal voucher tools and
+      the normal approval queue, on EDU-legal dates.
+    expect:
+      - Queued
+    expect_not:
+      - Educational mode will not accept
+
+  - say: what is outstanding?
+    note: Read back from Tally, never from the model's memory.
+    expect:
+      - receivable
+
+  - say: show me the day book
+    expect:
+      - day book line
+
+  - say: /egress
+    note: Exactly what left the machine, in bytes and message shapes.
+    expect:
+      - bytes left this machine
+
+  - say: /approvals
+    note: Everything queued has been decided; nothing is left hanging.
+    expect:
+      - Nothing waiting
+
+  - say: /close
+    note: >
+      Session summary: vouchers posted, approvals, rejections, tokens, cost,
+      bytes egressed, and whether Tier 3 was needed.
+    expect:
+      - voucher(s) posted
+      - bytes egressed
+      - Tier 3 used
