@@ -1,0 +1,62 @@
+{% if flash %}
+<p class="mb-2 rounded px-3 py-2 text-sm {{ 'bg-emerald-100 text-emerald-900' if flash_ok else 'bg-rose-100 text-rose-900' }}">
+  {{ flash }}
+</p>
+{% endif %}
+
+<div class="rounded border border-slate-200 bg-slate-50 p-3 text-sm space-y-3">
+
+  <form hx-post="/approvals/{{ item.ticket }}/edit" hx-target="#approvals">
+    <table class="w-full text-left text-xs">
+      <thead class="text-slate-500">
+        <tr><th class="py-1">Ledger</th><th class="py-1 text-right">Debit</th><th class="py-1 text-right">Credit</th></tr>
+      </thead>
+      <tbody>
+        {% for line in diff.ledger_impact %}
+        <tr class="border-t border-slate-200">
+          <td class="py-1">
+            <input name="ledger_{{ loop.index0 }}" value="{{ line.ledger }}"
+                   class="w-full rounded border border-slate-200 bg-white px-2 py-1">
+          </td>
+          <td class="py-1 text-right font-mono">{{ line.debit }}</td>
+          <td class="py-1 text-right font-mono">{{ line.credit }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="border-t-2 border-slate-300 font-medium">
+          <td class="py-1">Total</td>
+          <td class="py-1 text-right font-mono">{{ diff.totals.debit }}</td>
+          <td class="py-1 text-right font-mono">{{ diff.totals.credit }}</td>
+        </tr>
+      </tfoot>
+    </table>
+    <div class="mt-2 flex gap-2">
+      <input name="reason" placeholder="why you changed it"
+             class="flex-1 rounded border border-slate-300 px-2 py-1 text-xs">
+      <button class="rounded border border-slate-400 px-3 py-1 text-xs">Edit &amp; approve</button>
+    </div>
+  </form>
+
+  <div>
+    <h4 class="text-xs font-semibold text-slate-600">Validation</h4>
+    <ul class="mt-1 space-y-0.5 text-xs">
+      {% for rule in diff.validation.results %}
+      <li class="{{ 'text-slate-600' if rule.passed else ('text-amber-700' if rule.severity == 'warning' else 'text-rose-700') }}">
+        {{ 'PASS' if rule.passed else rule.severity | upper }} &mdash; {{ rule.rule }}: {{ rule.message }}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <details>
+    <summary class="cursor-pointer text-xs font-semibold text-slate-600">
+      XML that will be sent to Tally
+    </summary>
+    <pre class="mt-1 overflow-x-auto rounded bg-white p-2 text-[11px] leading-snug">{{ diff.raw_xml }}</pre>
+  </details>
+
+  <p class="text-xs text-slate-500">
+    Source: {{ diff.source }} &middot; queued {{ diff.created_at }} &middot; amount {{ diff.amount }}
+  </p>
+</div>

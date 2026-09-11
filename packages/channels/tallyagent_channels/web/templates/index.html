@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tallyagent &mdash; {{ services.company.name }}</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+<div class="max-w-5xl mx-auto p-6 space-y-6">
+
+  <header class="flex flex-wrap items-baseline justify-between gap-2 border-b pb-3">
+    <div>
+      <h1 class="text-xl font-semibold">tallyagent</h1>
+      <p class="text-sm text-slate-600">{{ services.company.name }}</p>
+    </div>
+    <dl class="flex gap-4 text-xs text-slate-600">
+      <div><dt class="inline font-medium">Model:</dt> <dd class="inline">{{ status.provider }}/{{ status.model }}</dd></div>
+      <div><dt class="inline font-medium">Tokens:</dt> <dd class="inline">{{ status.tokens }}</dd></div>
+      <div><dt class="inline font-medium">Cost:</dt> <dd class="inline">${{ status.cost_usd }}</dd></div>
+    </dl>
+  </header>
+
+  <section>
+    <h2 class="text-lg font-semibold mb-2">Ask</h2>
+    <form hx-post="/chat" hx-target="#chat" hx-swap="afterbegin"
+          class="flex gap-2" hx-on::after-request="this.reset()">
+      <input name="message" required autocomplete="off"
+             placeholder="e.g. what is outstanding from Acme?"
+             class="flex-1 rounded border border-slate-300 px-3 py-2 text-sm">
+      <button class="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white">Send</button>
+    </form>
+    <div id="chat" class="mt-4 space-y-3"></div>
+  </section>
+
+  <section>
+    <div class="flex items-baseline justify-between mb-2">
+      <h2 class="text-lg font-semibold">Awaiting approval</h2>
+      <button hx-get="/approvals" hx-target="#approvals"
+              class="text-xs text-slate-600 underline">refresh</button>
+    </div>
+    <div id="approvals">
+      {% include "_approvals.html" %}
+    </div>
+  </section>
+
+  <footer class="border-t pt-3 text-xs text-slate-500">
+    {{ status.audit }}
+    &mdash; nothing is posted to Tally until you approve it here.
+  </footer>
+</div>
+</body>
+</html>

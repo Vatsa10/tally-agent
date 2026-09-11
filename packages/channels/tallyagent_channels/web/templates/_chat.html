@@ -1,0 +1,35 @@
+<article class="rounded border border-slate-200 bg-white p-3">
+  <p class="text-xs text-slate-500">You asked</p>
+  <p class="text-sm">{{ question }}</p>
+
+  <p class="mt-2 text-xs text-slate-500">tallyagent</p>
+  <p class="whitespace-pre-line text-sm">{{ answer }}</p>
+
+  {% if tickets %}
+  <p class="mt-2 text-xs text-amber-800">
+    Queued for your approval: {{ tickets | join(", ") }} &mdash; nothing has been posted yet.
+    <button hx-get="/approvals" hx-target="#approvals" class="underline">show</button>
+  </p>
+  {% endif %}
+
+  {% if steps %}
+  <details class="mt-2">
+    <summary class="cursor-pointer text-xs text-slate-500">
+      {{ steps | length }} step(s)
+    </summary>
+    <ul class="mt-1 space-y-0.5 text-[11px] text-slate-600">
+      {% for step in steps %}
+      <li>
+        {{ step.index }}.
+        {% if step.tool %}<span class="font-mono">{{ step.tool }}</span>{% else %}answer{% endif %}
+        &middot; {{ step.latency_ms }}ms
+        &middot; {{ step.prompt_tokens }}+{{ step.completion_tokens }} tok
+        &middot; {{ step.egress_bytes }}B sent
+        {% if step.output_hash %}&middot; out {{ step.output_hash }}{% endif %}
+        {% if step.error %}<span class="text-rose-700">&middot; {{ step.error }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</article>
