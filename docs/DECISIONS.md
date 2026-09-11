@@ -299,15 +299,16 @@ These are the known gaps.
   does not wire one, so with the fallback enabled but no hook supplied a mutating
   step stops the session. That is the safe failure, but it means Tier 3 is usable
   programmatically and not yet from the web UI.
-- **Trial balance and outstanding are not implemented against live Tally.**
-  Both report exports return empty on TallyPrime 1.1.7.1 (D-107) and the obvious
-  TDL route hangs it (D-110). They work against the fake, and the day book -
-  which is what duplicate detection and bank reconciliation depend on - works
-  against both. A live trial balance needs a TDL shape that has not been found
-  yet; read it in Tally until then.
-- **Bank reconciliation and GSTR-2B have not been run against live Tally.**
-  Both are tested on fixtures and the day book they consume now works live, but
-  the reconciliations themselves have only met the fake.
+- **Amending or deleting a voucher over XML does not work on TallyPrime
+  1.1.7.1** (D-120). It is refused rather than attempted, because attempting it
+  duplicates. Amend in Tally, or set `[tally] supports_voucher_alter = true` on a
+  version that handles it. Deleting is a UI job (D-123).
+- **Inventory, cost centres, multi-currency and payroll are untouched.** Every
+  voucher tallyagent writes is accounting-only: `ALLLEDGERENTRIES` with no
+  `ALLINVENTORYENTRIES`. A trading company that tracks stock needs that added.
+- **One company at a time.** The daemon holds a single company from config; a CA
+  firm running 50 needs per-request company switching and a per-company memory
+  namespace.
 - **`pyinstaller` and `pystray` were not executed on this machine.** The spec,
   the build script and the Dockerfile are present, documented, and asserted to
   exist and to be correctly shaped; an actual Windows build and an actual
@@ -489,3 +490,63 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
   screen grab is used only when Tally is verifiably foreground, and otherwise
   the capture is **refused** with `WindowObscuredError` rather than taken. The
   claim in D-062 that cropping was sufficient was wrong.
+
+### What live Tally taught us, part four (found by making every feature work)
+
+- **D-113 Trial balance and outstanding are derived, not requested.** The report
+  exports return nothing (D-107) and `CLOSINGBALANCE` on a Ledger collection
+  hangs the process (D-110, re-confirmed at a 90s timeout). Closing balance is
+  therefore opening plus every posting - the arithmetic Tally itself does - and
+  outstanding is built from bill-wise allocations. Verified live: debits equal
+  credits, 332600.00 both sides.
+- **D-114 A party's outstanding total must equal its ledger balance.** It did
+  not: Acme showed 59000 receivable against a nil ledger because a receipt went
+  "On Account" and never settled INV-001. Unallocated amounts now settle the
+  oldest open bills first, the way a payment on account behaves, and the two
+  reports agree. Two numbers that disagree give a CA no way to choose.
+- **D-115 Invoice numbers ride on the party line as a bill reference,** and a
+  receipt or payment marks its allocation `Agst Ref` rather than `New Ref`.
+  Marking a settlement "New Ref" makes Tally open a *second* bill and leave the
+  original outstanding for ever.
+- **D-116 On-account balances are aged from the first transaction date.**
+  Without a date they reported "not due" for ever, which is the opposite of what
+  a receivables report is for.
+- **D-117 The capital contra is computed from the openings actually created.**
+  Tally ships Cash and Profit & Loss A/c already, and an existing ledger does not
+  take our opening, so a hardcoded capital figure left the books out by the
+  difference. An unmatched opening is now reported as "difference in opening
+  balances", which is what Tally calls it, rather than as broken books.
+- **D-118 Date filters are not honoured by a TDL collection.** `SVFROMDATE` and
+  `SVTODATE` work on a *report*; a collection returns the whole book regardless.
+  So "the day book for the last 30 days" silently meant "every voucher ever",
+  and so did every figure derived from it. Filtered in `get_vouchers`, where the
+  ledger-name filter already had to be.
+- **D-119 Duplicate detection only worked with an invoice reference.** Receipts
+  and payments usually have none, so the same receipt and the same payment were
+  both posted twice during a scenario run. An unreferenced voucher now matches on
+  party, amount, type and a tight one-day window; the referenced path keeps its
+  month. A second payment of the same amount to the same party is normal - just
+  not on the same day.
+- **D-120 Voucher amendment is impossible over XML on 1.1.7.1, and silently
+  duplicates.** An Alter aimed at an existing voucher is not matched: Tally
+  creates a second voucher and reports `CREATED 1`. Verified against `REMOTEID`,
+  `VCHKEY`, `GUID` and `MASTERID`; `Delete` answers "Voucher does not exist!"
+  and `Cancel` creates another. `alter_voucher` therefore refuses unless
+  `[tally] supports_voucher_alter` is on (default off), a blank or `0` id is
+  refused before the envelope is built, and an Alter that returns CREATED is
+  reported as a failure naming the duplicate. The fake reproduces the silent
+  create so the guard is exercised in CI.
+- **D-121 `LASTMID` is 0 on a voucher import** because master ids are for
+  masters. Taking that literally handed `"0"` to an alter. Ids of `0` are now
+  absent, and the `<ERRORS>` counter is parsed alongside `<EXCEPTIONS>`.
+- **D-122 `parse_voucher_rows` was picking up the `<VOUCHER>` object counter
+  inside `<CMPINFO>`** and emitting a phantom empty row. Scoped to
+  `<COLLECTION>`.
+- **D-123 Deleting a voucher is a UI job on this version,** and it works:
+  Day Book, `Space` to select, `Alt+D`, confirm. Used to remove the duplicates
+  that D-120 had already created before it was caught. The bottom-bar letters
+  need `Alt`; the bare letter does nothing.
+- **D-124 Input GST showed negative on the purchase register.** Tax is a credit
+  on a sale and a debit on a purchase, but a GST return states it positive
+  either way. Portal floats were also rendering as `23600.0` beside book
+  Decimals at `23600.00`.

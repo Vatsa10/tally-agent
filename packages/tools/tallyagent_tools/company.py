@@ -333,8 +333,22 @@ async def seed_chart_of_accounts(
         )
 
     if not ledgers and not parties:
+        # Say what is in place rather than only that nothing happened - the
+        # useful answer to "set up the chart of accounts" on an already-set-up
+        # company is the chart, not the word "no".
+        present = [spec.name for spec in specs if spec.name in existing]
+        party_names = [p.name for p in DEMO_PARTIES if p.name in existing]
+        listing = "\n".join(
+            [f"  ledger  {name}" for name in present]
+            + [f"  party   {name}" for name in party_names]
+        )
         return ToolResult(
-            message=f"The {profile} chart of accounts is already in place; nothing to do."
+            message=(
+                f"The {profile} chart of accounts is already in place "
+                f"({len(present)} ledger(s), {len(party_names)} part(y/ies)):"
+                f"\n{listing}"
+            ),
+            data={"ledgers": 0, "parties": 0, "already": present + party_names},
         )
 
     elements = [builders.build_ledger_element(lg) for lg in ledgers]
