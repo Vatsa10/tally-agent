@@ -1,0 +1,2 @@
+[console_scripts]
+tally-mcp = tally_mcp.server:main

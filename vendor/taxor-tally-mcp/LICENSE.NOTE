@@ -1,0 +1,5 @@
+Upstream https://github.com/taxor-ai/tally-mcp declares "MIT License" in its
+README (section "License") but ships no LICENSE file at commit d1fb008.
+Vendored here under that stated MIT grant. No upstream code is copied into
+packages/ verbatim; only XML envelope shapes and error-classification ideas
+were ported. See docs/DECISIONS.md.

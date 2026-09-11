@@ -1,0 +1,62 @@
+# tallyagent configuration. Copy to config/config.toml and edit.
+# Secrets are NEVER read from this file — see docs/SECURITY.md.
+
+[tally]
+# Placeholder on purpose: tallyagent must not talk to a real Tally until you
+# set this. TallyPrime: F1 > Settings > Connectivity > Client/Server > Server.
+host = "0.0.0.0"          # non-routable placeholder; set to 127.0.0.1 for local Tally
+port = 9000
+timeout_seconds = 60
+company = ""               # blank = whichever company is open in Tally
+# Tally ODBC/HTTP user, if your Tally requires one. Password comes from
+# the OS keyring / TALLY_PASSWORD env var, never from here.
+username = ""
+
+[company]
+# Used for GST CGST/SGST vs IGST determination and period validation.
+state_code = "27"          # Maharashtra
+gstin = ""
+fy_start = "2026-04-01"
+fy_end = "2027-03-31"
+locked_before = "2026-04-01"   # no vouchers may be posted before this date
+
+[model]
+provider = "deepseek"      # deepseek | anthropic | openai | mock
+model = "deepseek-flash"
+base_url = "https://api.deepseek.com"
+max_steps = 12
+# API key: DEEPSEEK_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY env var or keyring.
+
+[storage]
+db_path = "./tallyagent.db"
+
+[daemon]
+host = "127.0.0.1"
+port = 8787
+tray = true
+
+[tiers]
+# Tier 2 = read-only screen perception. Tier 3 = gated computer-use fallback.
+perception_enabled = false
+perception_interval_seconds = 30
+fallback_enabled = false
+fallback_max_steps = 10
+
+[channels.whatsapp]
+enabled = false
+provider = "meta"          # meta | twilio
+verify_token = ""          # webhook hub.verify_token (non-secret handshake value)
+# app secret -> WHATSAPP_APP_SECRET env var
+phone_number_id = ""
+# number -> company allowlist. Unknown numbers get a fixed refusal.
+[channels.whatsapp.allowlist]
+"+919876543210" = "Demo Traders Pvt Ltd"
+
+[mcp]
+enabled = true
+transport = "stdio"        # stdio | http
+# bearer token -> TALLYAGENT_MCP_TOKEN env var
+
+[logging]
+level = "INFO"
+egress_log = "./egress.jsonl"

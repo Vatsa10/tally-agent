@@ -1,0 +1,55 @@
+name: create_sales_voucher
+description: Create a sales voucher (customer invoice) with line items
+implicit_params:
+  - company_name
+input_schema:
+  properties:
+    date:
+      type: string
+      description: Invoice date in YYYYMMDD format
+    reference:
+      type: string
+      description: Invoice/reference number
+    narration:
+      type: string
+      description: Invoice description
+    party_ledger_name:
+      type: string
+      description: Customer/debtor ledger name (for tracking against customer account)
+    lines:
+      type: array
+      description: Array of line items (ledger entries). Negative amounts are debits, positive amounts are credits. All entries must balance to zero.
+      items:
+        type: object
+        description: A line item with ledger name and signed amount
+        properties:
+          ledger_name:
+            type: string
+            description: "Ledger account name. Common examples: party ledger name (typically negative/debit), revenue accounts (positive/credit), tax accounts like 'Output SGST' or 'Output CGST' (positive/credit)"
+            example: "Delivery Management Software Service-GST"
+          amount:
+            type: number
+            description: "Signed amount: negative for debit, positive for credit. Example: party receives invoice as -5310 (debit), revenue is 4500 (credit)"
+            example: 4500
+          bill_allocations:
+            type: array
+            description: Optional bill allocations for tracking against bills/invoices. Can be omitted if not needed.
+            items:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Bill/invoice reference name or number
+                type:
+                  type: string
+                  description: Type of bill allocation (e.g., "Bill Reference", "Invoice")
+                amount:
+                  type: number
+                  description: Amount allocated against this bill
+        required: [ledger_name, amount]
+  required:
+    - date
+    - reference
+    - narration
+    - party_ledger_name
+    - lines

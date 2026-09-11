@@ -1,0 +1,60 @@
+name: create_payment
+description: Create a payment voucher (payment to creditor/vendor) with line items and bill allocations
+implicit_params:
+  - company_name
+input_schema:
+  properties:
+    date:
+      type: string
+      description: Payment date in YYYYMMDD format
+    reference:
+      type: string
+      description: Payment/cheque number or reference
+    narration:
+      type: string
+      description: Payment description/remarks
+    party_ledger_name:
+      type: string
+      description: Creditor/vendor ledger name (for tracking against vendor account)
+    bank_account:
+      type: string
+      description: Bank/cash account from which payment is made
+    lines:
+      type: array
+      description: Array of creditor/party line items. Include creditor entries being paid. Do NOT include the bank_account here.
+      items:
+        type: object
+        description: A creditor line item with ledger name and amount
+        properties:
+          ledger_name:
+            type: string
+            description: "Creditor/party ledger name"
+            example: "Cursor"
+          amount:
+            type: number
+            description: "Amount being paid to the creditor (positive for credits)"
+            example: 10000
+          bill_allocations:
+            type: array
+            description: Optional bill allocations for tracking payment against purchase invoices or bills
+            items:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Bill/invoice reference name or number (e.g., "INV-001", "PO-2026-04")
+                type:
+                  type: string
+                  description: "Type of bill allocation: 'New Ref' (new reference), 'Agnst Ref' (against existing reference), 'Advance' (advance payment), 'On Account' (generic allocation)"
+                  example: "Agnst Ref"
+                amount:
+                  type: number
+                  description: Amount allocated against this bill/reference
+        required: [ledger_name, amount]
+  required:
+    - date
+    - reference
+    - narration
+    - party_ledger_name
+    - bank_account
+    - lines

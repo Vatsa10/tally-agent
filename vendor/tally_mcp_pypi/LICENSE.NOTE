@@ -1,0 +1,5 @@
+PyPI package `tally-mcp` 0.2.0. Wheel METADATA declares:
+  License-Expression: MIT
+  Classifier: License :: OSI Approved :: MIT License
+The wheel ships no LICENSE text file; vendored under that declared MIT grant.
+Full original METADATA retained at tally_mcp-0.2.0.dist-info/METADATA.

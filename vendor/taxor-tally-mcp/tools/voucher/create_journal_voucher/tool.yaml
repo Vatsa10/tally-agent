@@ -1,0 +1,51 @@
+name: create_journal_voucher
+description: Create a journal voucher with multiple ledger line entries
+implicit_params:
+  - company_name
+input_schema:
+  properties:
+    date:
+      type: string
+      description: Voucher date in YYYYMMDD format
+    reference:
+      type: string
+      description: Reference number/invoice number for tracking
+    narration:
+      type: string
+      description: Description of the transaction
+    lines:
+      type: array
+      description: Array of ledger entries. Negative amounts are debits, positive amounts are credits. Must balance to zero.
+      items:
+        type: object
+        description: A ledger entry with account name and signed amount
+        properties:
+          ledger_name:
+            type: string
+            description: Name of the ledger account (e.g., "Office Rent", "Travel Expense", "Bank Account")
+            example: "Travel Expense"
+          amount:
+            type: number
+            description: "Signed amount: negative for debit, positive for credit. Example: debit expense as -1000, credit bank as 1000"
+            example: -1000
+          bill_allocations:
+            type: array
+            description: Optional bill allocations for tracking against bills/invoices. Can be omitted if not needed.
+            items:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Bill/invoice reference name or number
+                type:
+                  type: string
+                  description: Type of bill allocation (e.g., "Bill Reference", "Invoice")
+                amount:
+                  type: number
+                  description: Amount allocated against this bill
+        required: [ledger_name, amount]
+  required:
+    - date
+    - reference
+    - narration
+    - lines

@@ -1,0 +1,138 @@
+Metadata-Version: 2.4
+Name: tally-mcp
+Version: 0.2.0
+Summary: MCP server for TallyPrime integration
+Project-URL: Homepage, https://github.com/proceduretech/pro-tally-mcp
+Project-URL: Repository, https://github.com/proceduretech/pro-tally-mcp
+Project-URL: Documentation, https://github.com/proceduretech/pro-tally-mcp/tree/main/docs
+Author-email: Baheti <noreply@example.com>
+License-Expression: MIT
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Office/Business :: Financial :: Accounting
+Requires-Python: >=3.11
+Requires-Dist: fastmcp>=2.0.0
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: lxml>=5.0.0
+Requires-Dist: pydantic-settings>=2.0.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: python-dotenv>=1.0.0
+Provides-Extra: dev
+Requires-Dist: pytest-asyncio>=0.23.0; extra == 'dev'
+Requires-Dist: pytest-cov>=5.0.0; extra == 'dev'
+Requires-Dist: pytest-httpx>=0.30.0; extra == 'dev'
+Requires-Dist: pytest>=8.0.0; extra == 'dev'
+Requires-Dist: ruff>=0.4.0; extra == 'dev'
+Description-Content-Type: text/markdown
+
+# Tally MCP
+
+MCP server that bridges AI assistants (Claude, etc.) to TallyPrime accounting software via XML-over-HTTP.
+
+40 tools covering financial reports, master data, voucher creation, bulk imports, and more.
+
+## Quick Start
+
+### Local (single user, same machine as Tally)
+
+```bash
+uvx tally-mcp
+```
+
+Or add to your MCP client config (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "tally": {
+      "command": "uv",
+      "args": ["run", "tally-mcp"],
+      "env": { "TALLY_MCP_TALLY_PORT": "9000" }
+    }
+  }
+}
+```
+
+### Remote (team access)
+
+On the Tally machine:
+
+```bash
+pip install tally-mcp
+tally-mcp --http
+```
+
+Then expose via Cloudflare Tunnel, distribute scoped tokens to team members. See the [remote setup guide](docs/guide/setup-remote.md).
+
+## Prerequisites
+
+- **Python 3.11+**
+- **TallyPrime** with server mode enabled (F12 > Connectivity > port 9000)
+- At least one company **open** in TallyPrime
+
+## What you can do
+
+Once connected, ask your AI assistant questions like:
+
+```
+"Show me the trial balance for March 2026"
+"Give me monthly sales by customer for FY 2025-26"
+"Who owes us money?"
+"What's the P&L for this quarter?"
+"Create a sales invoice for Acme Corp, 50,000, dated March 15"
+```
+
+## Tools (40)
+
+| Category | Count | Examples |
+|----------|-------|---------|
+| Reports | 13 | Trial Balance, P&L, Balance Sheet, Sales/Purchase Register, Receivables, Payables, Day Book, Sales by Party |
+| Masters (read) | 7 | List ledgers, groups, stock items, voucher types |
+| Masters (write) | 4 | Create/alter ledgers, groups, stock items |
+| Vouchers | 2 | Create and cancel vouchers (Sales, Purchase, Payment, Receipt, Journal, Contra, Credit/Debit Note) |
+| Bulk | 5 | Bulk create from JSON/CSV, custom XML queries |
+| Onboarding | 4 | Discover companies, configure multi-company routing |
+| Auth | 3 | Generate/cycle/list scoped tokens |
+| Utility | 2 | Health check, heartbeat |
+
+See [docs/tools.md](docs/tools.md) for the full reference.
+
+## Key Features
+
+- **Multi-company support** — configure multiple businesses with date-based routing
+- **Scoped access tokens** — per-company tokens for team access control
+- **Sales by party** — single-call party x month grid (no per-customer API calls)
+- **Dual transport** — stdio (local) or streamable-http (remote)
+- **Inline TDL** — custom collection queries for advanced report extraction
+
+## Documentation
+
+| Topic | Link |
+|-------|------|
+| Setup (local) | [docs/guide/setup-local.md](docs/guide/setup-local.md) |
+| Setup (remote/team) | [docs/guide/setup-remote.md](docs/guide/setup-remote.md) |
+| Managing access | [docs/guide/managing-access.md](docs/guide/managing-access.md) |
+| Adding companies | [docs/guide/adding-companies.md](docs/guide/adding-companies.md) |
+| Common queries | [docs/guide/common-queries.md](docs/guide/common-queries.md) |
+| Tool reference | [docs/tools.md](docs/tools.md) |
+| Configuration | [docs/configuration.md](docs/configuration.md) |
+| Architecture | [docs/architecture.md](docs/architecture.md) |
+
+## Development
+
+```bash
+git clone https://github.com/proceduretech/pro-tally-mcp.git
+cd pro-tally-mcp
+make setup    # creates venv + installs editable with dev deps
+make test     # run unit tests
+make dev      # start dev server
+```
+
+## License
+
+MIT

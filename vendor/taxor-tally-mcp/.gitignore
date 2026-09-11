@@ -1,0 +1,45 @@
+# Binaries
+tally-mcp
+tally-mcp.exe
+*.o
+*.a
+*.so
+
+# Vendor
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+tally-mcp.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/*
+!build/claude_extension.sh
+
+# Environment and secrets
+.env
+.env.local
+.env.test
+.env.*.local
+*.pem
+*.key
+credentials.json
+config.local.yaml
+config.local.yml
+
+# Test artifacts
+coverage.out
+*.test
+
+samples/
