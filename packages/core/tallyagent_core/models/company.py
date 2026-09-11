@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
 # GST state codes 01-38 plus 97 (other territory) and 99 (centre). Used to decide
 # CGST+SGST (intra-state) vs IGST (inter-state).
@@ -32,9 +32,13 @@ class Period(BaseModel):
 
 
 class Company(BaseModel):
-    """The Tally company we are acting on behalf of."""
+    """The Tally company we are acting on behalf of.
 
-    name: str = Field(min_length=1)
+    ``name`` may be empty: a freshly installed daemon has no company configured
+    yet, and it must be able to start and say so rather than refuse to load.
+    """
+
+    name: str = ""
     state_code: str = "27"
     gstin: str | None = None
     period: Period | None = None
