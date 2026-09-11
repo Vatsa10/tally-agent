@@ -66,6 +66,13 @@ exclude = ["vendor", "deepseek-harness"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.isort]
+known-first-party = [
+    "tallyagent_core", "tallyagent_tally", "tallyagent_backends", "tallyagent_tools",
+    "tallyagent_llm", "tallyagent_agent", "tallyagent_approvals",
+    "tallyagent_channels", "tallyagent_mcp_server", "tallyagent_daemon",
+]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

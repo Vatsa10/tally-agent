@@ -6,6 +6,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+
 from tallyagent_core import idempotency
 from tallyagent_core.models import (
     Company,

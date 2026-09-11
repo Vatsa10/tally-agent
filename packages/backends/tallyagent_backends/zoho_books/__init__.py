@@ -1,0 +1,1 @@
+"""Zoho Books adapter skeleton."""
