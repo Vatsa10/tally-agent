@@ -31,7 +31,13 @@ def fake_tally() -> FakeTally:
 @pytest.fixture
 def tally_client(fake_tally: FakeTally) -> TallyClient:
     return TallyClient(
-        TallyConfig(host="127.0.0.1", port=9000, company=DEMO_COMPANY),
+        TallyConfig(
+            host="127.0.0.1",
+            port=9000,
+            company=DEMO_COMPANY,
+            # The fake matches ids properly, so the alter path stays tested.
+            supports_voucher_alter=True,
+        ),
         transport=fake_tally.transport,
     )
 

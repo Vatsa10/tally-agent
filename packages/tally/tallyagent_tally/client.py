@@ -34,6 +34,12 @@ class TallyConfig:
     username: str = ""
     password: str = ""
     timeout_seconds: float = 60.0
+    #: TallyPrime 1.1.7.1's XML import is create-only: an Alter, Delete or
+    #: Cancel aimed at an existing voucher does not match it and creates a new
+    #: voucher instead - verified against REMOTEID, VCHKEY, GUID and MASTERID.
+    #: Off by default in live mode, because "amend" that silently duplicates is
+    #: worse than "amend" that refuses. Turn on for a Tally that supports it.
+    supports_voucher_alter: bool = False
 
     @property
     def url(self) -> str:

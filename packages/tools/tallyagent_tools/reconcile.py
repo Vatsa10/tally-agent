@@ -214,6 +214,12 @@ async def bank_reco(
 VALUE_TOLERANCE = Decimal("1.00")
 
 
+def _money(value: Decimal) -> str:
+    """Figures from the GST portal arrive as JSON floats; the books are in
+    Decimal. A report that mixes 23600.0 and 23600.00 reads as two numbers."""
+    return format(value.quantize(PAISA), "f")
+
+
 def _normalise_invoice_no(raw: str) -> str:
     """2B and books disagree on case, spaces and leading zeros constantly."""
     return raw.strip().upper().replace(" ", "").replace("-", "").lstrip("0")
@@ -298,11 +304,9 @@ async def gstr2b_vs_purchase_register(
                 "supplier_gstin": portal["supplier_gstin"],
                 "invoice_no": portal["invoice_no"],
                 "invoice_date": portal["invoice_date"],
-                "gstr2b_total": format(Decimal(str(portal["total"])), "f"),
-                "books_total": format(book_total, "f"),
-                "difference": format(
-                    Decimal(str(portal["total"])) - book_total, "f"
-                ),
+                "gstr2b_total": _money(Decimal(str(portal["total"]))),
+                "books_total": _money(book_total),
+                "difference": _money(Decimal(str(portal["total"])) - book_total),
             }
         )
 
@@ -317,9 +321,9 @@ async def gstr2b_vs_purchase_register(
                 "supplier_gstin": "",
                 "invoice_no": str(book.get("reference") or book.get("voucher_number")),
                 "invoice_date": str(book.get("date", "")),
-                "gstr2b_total": "0",
-                "books_total": format(Decimal(book["total"]), "f"),
-                "difference": format(-Decimal(book["total"]), "f"),
+                "gstr2b_total": "0.00",
+                "books_total": _money(Decimal(book["total"])),
+                "difference": _money(-Decimal(book["total"])),
             }
         )
 

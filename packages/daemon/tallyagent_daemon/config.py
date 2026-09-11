@@ -154,6 +154,9 @@ def from_dict(
             # Password is a secret: env only.
             password=os.environ.get("TALLY_PASSWORD", ""),
             timeout_seconds=float(tally_raw.get("timeout_seconds") or 60),
+            supports_voucher_alter=bool(
+                tally_raw.get("supports_voucher_alter", False)
+            ),
         ),
         company=company,
         model=ModelConfig(

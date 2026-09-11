@@ -379,6 +379,49 @@ class TallyBackend:
                 )
         return bills
 
+    async def find_vouchers(
+        self,
+        company: str | None = None,
+        reference: str = "",
+        voucher_number: str = "",
+        voucher_type: str = "",
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[dict[str, str]]:
+        """Find posted vouchers and, crucially, their Tally ids.
+
+        Amending needs an id Tally can match. ``REMOTEID`` is a GUID and is the
+        safest: ``MASTERID`` is only unique within a company, and the id
+        returned by an import is a sequence number that is not either of them.
+        """
+        seen: dict[str, dict[str, str]] = {}
+        for row in await self.get_vouchers(
+            company=company, from_date=from_date, to_date=to_date
+        ):
+            number = str(row.get("VOUCHERNUMBER") or "")
+            kind = str(row.get("VOUCHERTYPENAME") or "")
+            ref = str(row.get("REFERENCE") or "")
+            if reference and ref != reference:
+                continue
+            if voucher_number and number != voucher_number:
+                continue
+            if voucher_type and kind.lower() != voucher_type.lower():
+                continue
+            key = f"{kind}|{number}|{ref}"
+            seen.setdefault(
+                key,
+                {
+                    "voucher_type": kind,
+                    "voucher_number": number,
+                    "reference": ref,
+                    "date": str(row.get("DATE") or ""),
+                    "master_id": str(row.get("MASTERID") or ""),
+                    "remote_id": str(row.get("REMOTEID") or ""),
+                    "narration": str(row.get("NARRATION") or ""),
+                },
+            )
+        return list(seen.values())
+
     async def get_bank_ledger(
         self,
         ledger_name: str,
@@ -414,6 +457,7 @@ class TallyBackend:
         request_type: str,
         idempotency_key: str,
         company: str | None,
+        expect_altered: bool = False,
     ) -> WriteResult:
         """Idempotency gate + import + result recording, shared by every write."""
         target = self.client.company_or_default(company)
@@ -440,14 +484,24 @@ class TallyBackend:
             idempotency.record_failure(self.store, idempotency_key, str(exc))
             raise
 
-        if result.errors or not (result.created or result.altered):
-            idempotency.record_failure(
-                self.store, idempotency_key, "; ".join(result.messages) or "no rows written"
+        problems = list(result.messages)
+        if not result.errors and not (result.created or result.altered):
+            problems.append("Tally wrote nothing and gave no reason")
+        if expect_altered and result.created and not result.altered:
+            # The id did not match anything, so Tally treated an amendment as a
+            # new voucher. Silently duplicating a voucher is far worse than
+            # refusing, so this is a failure even though Tally said CREATED 1.
+            problems.append(
+                "the amendment did not match an existing voucher: Tally created a "
+                f"new one instead (created={result.created}, altered={result.altered}). "
+                "The duplicate must be removed in Tally."
             )
+        if problems:
+            idempotency.record_failure(self.store, idempotency_key, "; ".join(problems))
             return WriteResult(
                 ok=False,
                 idempotency_key=idempotency_key,
-                errors=result.messages or ["Tally wrote nothing and gave no reason"],
+                errors=problems,
                 raw_request=raw,
             )
 
@@ -480,11 +534,38 @@ class TallyBackend:
         idempotency_key: str,
         company: str | None = None,
     ) -> WriteResult:
+        if not self.client.config.supports_voucher_alter:
+            return WriteResult(
+                ok=False,
+                idempotency_key=idempotency_key,
+                errors=[
+                    "this TallyPrime does not support amending a voucher over XML. "
+                    "Its import is create-only: an Alter is not matched against the "
+                    "existing voucher, it silently creates a duplicate (verified "
+                    "against REMOTEID, VCHKEY, GUID and MASTERID on 1.1.7.1). "
+                    "Amend it in Tally, or set [tally] supports_voucher_alter = true "
+                    "if your version handles it."
+                ],
+            )
+        if not str(master_id).strip() or str(master_id).strip() == "0":
+            # Sending a blank or zero id makes Tally create a duplicate rather
+            # than amend anything. Refuse before it leaves.
+            return WriteResult(
+                ok=False,
+                idempotency_key=idempotency_key,
+                errors=[
+                    "cannot amend a voucher without its Tally id. Look it up with "
+                    "find_voucher first - an empty id makes Tally create a "
+                    "duplicate instead of amending."
+                ],
+            )
         amended = voucher.model_copy(update={"master_id": master_id})
         element = builders.build_voucher_element(
             amended, action="Alter", remote_id=master_id
         )
-        return await self._import_once([element], "Vouchers", idempotency_key, company)
+        return await self._import_once(
+            [element], "Vouchers", idempotency_key, company, expect_altered=True
+        )
 
     async def create_ledger(
         self,

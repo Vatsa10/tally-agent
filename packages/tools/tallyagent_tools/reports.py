@@ -227,6 +227,41 @@ async def party_transactions(
     )
 
 
+async def find_voucher(
+    ctx: ToolContext,
+    reference: str = "",
+    voucher_number: str = "",
+    voucher_type: str = "",
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> ToolResult:
+    """Find a posted voucher and its Tally id, so it can be amended.
+
+    Amending without an id makes Tally create a duplicate rather than refuse,
+    so this is the required first step before alter_voucher.
+    """
+    period = ctx.company.period
+    found = await ctx.backend.find_vouchers(  # type: ignore[attr-defined]
+        company=ctx.company.name,
+        reference=reference,
+        voucher_number=voucher_number,
+        voucher_type=voucher_type,
+        from_date=from_date or (period.start if period else None),
+        to_date=to_date or (period.end if period else None),
+    )
+    if not found:
+        return ToolResult(
+            message="No voucher matches that. Check the reference or number "
+            "with day_book first.",
+            data=[],
+        )
+    described = ", ".join(
+        f"{v['voucher_type']} {v['voucher_number']} ({v['reference'] or 'no ref'})"
+        for v in found[:5]
+    )
+    return ToolResult(message=f"{len(found)} voucher(s): {described}", data=found)
+
+
 def _gst_rows(entries: list[dict[str, str]], tax_prefix: str) -> list[dict[str, str]]:
     """Fold day-book lines into one row per voucher with its tax split."""
     grouped: dict[str, dict[str, str]] = {}
@@ -239,26 +274,34 @@ def _gst_rows(entries: list[dict[str, str]], tax_prefix: str) -> list[dict[str, 
                 "date": entry["date"],
                 "party": entry["party"],
                 "reference": entry.get("reference", ""),
-                "taxable_value": "0",
-                "cgst": "0",
-                "sgst": "0",
-                "igst": "0",
-                "total": "0",
+                "taxable_value": "0.00",
+                "cgst": "0.00",
+                "sgst": "0.00",
+                "igst": "0.00",
+                "total": "0.00",
             },
         )
         amount = Decimal(entry["amount"])
         ledger = entry["ledger"]
+        # Tax is a credit on a sale and a debit on a purchase, but a GST return
+        # states it positive either way - a negative IGST column on a purchase
+        # register is a formatting bug, not a credit note.
         if ledger == f"{tax_prefix} CGST":
-            row["cgst"] = format(-amount, "f")
+            row["cgst"] = _money(abs(amount))
         elif ledger == f"{tax_prefix} SGST":
-            row["sgst"] = format(-amount, "f")
+            row["sgst"] = _money(abs(amount))
         elif ledger == f"{tax_prefix} IGST":
-            row["igst"] = format(-amount, "f")
+            row["igst"] = _money(abs(amount))
         elif ledger == entry["party"]:
-            row["total"] = format(abs(amount), "f")
+            row["total"] = _money(abs(amount))
         else:
-            row["taxable_value"] = format(abs(amount), "f")
+            row["taxable_value"] = _money(abs(amount))
     return list(grouped.values())
+
+
+def _money(value: Decimal) -> str:
+    """Every figure a CA reads is to the paisa, whatever produced it."""
+    return format(value.quantize(PAISA), "f")
 
 
 async def gstr1_data(

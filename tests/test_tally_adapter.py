@@ -297,11 +297,66 @@ async def test_alter_voucher_by_master_id(backend, fake_tally, sales_voucher):
 
 
 async def test_alter_with_an_unknown_master_id_fails_loudly(backend, sales_voucher):
+    """Tally does not reject an unmatched amendment - it silently creates a new
+    voucher. That is worse than an error, so the adapter turns it into one."""
     result = await backend.alter_voucher(
         sales_voucher, "999999", make_key("Demo", sales_voucher, salt="alter")
     )
     assert not result.ok
-    assert "could not be found" in result.errors[0]
+    assert "did not match an existing voucher" in result.errors[0]
+    assert "duplicate must be removed" in result.errors[0]
+
+
+async def test_alter_without_an_id_never_reaches_tally(backend, fake_tally, sales_voucher):
+    """An empty id is the same trap, caught before the envelope is even built."""
+    before = len(fake_tally.requests)
+    result = await backend.alter_voucher(
+        sales_voucher, "", make_key("Demo", sales_voucher, salt="blank")
+    )
+    assert not result.ok
+    assert "find_voucher" in result.errors[0]
+    assert len(fake_tally.requests) == before, "nothing may be sent"
+
+    zero = await backend.alter_voucher(
+        sales_voucher, "0", make_key("Demo", sales_voucher, salt="zero")
+    )
+    assert not zero.ok
+
+
+async def test_a_voucher_id_of_zero_is_treated_as_absent():
+    """Tally returns LASTMID=0 on a voucher import; taking it literally hands
+    "0" to an alter, which then duplicates."""
+    xml = (
+        b"<RESPONSE><CREATED>1</CREATED><ALTERED>0</ALTERED>"
+        b"<LASTVCHID>9</LASTVCHID><LASTMID>0</LASTMID>"
+        b"<ERRORS>0</ERRORS><EXCEPTIONS>0</EXCEPTIONS></RESPONSE>"
+    )
+    result = parsers.parse_import_result(xml)
+    assert result.ok
+    assert result.last_voucher_id == "9"
+    assert result.last_master_id == "", "0 means no master id, not master id 0"
+
+
+async def test_an_errors_counter_is_a_failure_even_with_no_lineerror():
+    xml = (
+        b"<RESPONSE><CREATED>0</CREATED><ALTERED>0</ALTERED>"
+        b"<ERRORS>2</ERRORS><EXCEPTIONS>0</EXCEPTIONS></RESPONSE>"
+    )
+    result = parsers.parse_import_result(xml)
+    assert not result.ok
+    assert "2 error(s)" in result.messages[0]
+
+
+async def test_find_vouchers_returns_ids_an_amendment_can_use(
+    backend, fake_tally, sales_voucher
+):
+    await backend.create_voucher(sales_voucher, make_key("Demo", sales_voucher))
+    found = await backend.find_vouchers(reference="INV-001")
+    assert len(found) == 1
+    assert found[0]["voucher_type"] == "Sales"
+    assert found[0]["master_id"], "an amendment needs an id it can match on"
+
+    assert await backend.find_vouchers(reference="NOPE") == []
 
 
 async def test_outstanding_receivables_and_ageing(backend, sales_voucher):

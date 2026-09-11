@@ -117,6 +117,22 @@ TOOLS: tuple[Tool, ...] = (
         reports.gstr2_purchase_register,
     ),
     Tool(
+        "find_voucher",
+        "Find a posted voucher and its Tally id. Call this before alter_voucher: "
+        "amending without the id makes Tally create a duplicate instead of "
+        "refusing.",
+        _object(
+            {
+                "reference": {**_STRING, "description": "Invoice number on the voucher"},
+                "voucher_number": _STRING,
+                "voucher_type": _STRING,
+                "from_date": _DATE,
+                "to_date": _DATE,
+            }
+        ),
+        reports.find_voucher,
+    ),
+    Tool(
         "list_ledgers",
         "List ledger masters, optionally filtered to one group.",
         _object({"group": _STRING, "refresh": {"type": "boolean", "default": False}}),
@@ -275,7 +291,8 @@ TOOLS: tuple[Tool, ...] = (
     ),
     Tool(
         "alter_voucher",
-        "Amend an existing voucher, identified by its Tally MASTERID.",
+        "Amend an existing voucher. The master_id must come from find_voucher: "
+        "Tally does not reject an unmatched id, it silently creates a duplicate.",
         _object(
             {
                 "master_id": _STRING,

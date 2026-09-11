@@ -23,6 +23,11 @@ username = ""
 # is built. Companies the agent creates are named with this prefix.
 write_prefix = "TA-"
 
+# TallyPrime 1.1.7.1's XML import is create-only: amending a voucher does not
+# match the original, it silently creates a duplicate. Leave this off unless
+# your Tally genuinely supports Alter over XML.
+supports_voucher_alter = false
+
 # TallyPrime Educational (student) mode only accepts vouchers dated on the 1st,
 # 2nd or 31st of a month. Leave unset to default to true in live mode; set
 # false on a licensed install to allow any date.

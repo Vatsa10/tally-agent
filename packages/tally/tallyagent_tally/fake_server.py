@@ -217,7 +217,12 @@ class FakeTally:
             if to_date and voucher.date and voucher.date > to_date:
                 continue
             element = etree.SubElement(
-                collection, "VOUCHER", attrib={"VCHTYPE": voucher.voucher_type}
+                collection,
+                "VOUCHER",
+                attrib={
+                    "VCHTYPE": voucher.voucher_type,
+                    "REMOTEID": f"fake-guid-{voucher.master_id}",
+                },
             )
             etree.SubElement(element, "DATE").text = (
                 voucher.date.strftime("%Y%m%d") if voucher.date else ""
@@ -418,10 +423,31 @@ class FakeTally:
                     voucher_el.findtext("MASTERID") or ""
                 )
                 existing = next(
-                    (v for v in self.vouchers if v.master_id == master_id), None
+                    (
+                        v
+                        for v in self.vouchers
+                        if master_id and v.master_id == master_id
+                    ),
+                    None,
                 )
                 if existing is None:
-                    errors.append(f"Voucher with MASTERID '{master_id}' could not be found")
+                    # What real Tally does: an unmatched id is not an error, it
+                    # silently creates a NEW voucher. Reproduced here so the
+                    # guard against it is actually exercised.
+                    voucher = FakeVoucher(
+                        master_id=str(next(self._ids)),
+                        voucher_number=self.next_voucher_number(voucher_type),
+                        voucher_type=voucher_type,
+                        date=from_tally_date(voucher_el.findtext("DATE") or ""),
+                        party_name=voucher_el.findtext("PARTYLEDGERNAME") or "",
+                        reference=voucher_el.findtext("REFERENCE") or "",
+                        narration=voucher_el.findtext("NARRATION") or "",
+                        lines=lines,
+                        bills=bills,
+                    )
+                    self.vouchers.append(voucher)
+                    last_voucher_id = voucher.master_id
+                    created += 1
                     continue
                 existing.lines = lines
                 existing.date = from_tally_date(voucher_el.findtext("DATE") or "")

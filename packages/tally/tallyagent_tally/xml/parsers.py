@@ -100,9 +100,13 @@ def parse_voucher_rows(xml_bytes: bytes) -> list[dict[str, object]]:
             field: (voucher.findtext(field) or "").strip()
             for field in _VOUCHER_FIELDS
         }
-        shared.setdefault("VOUCHERTYPENAME", voucher.get("VCHTYPE", ""))
         if not shared.get("VOUCHERTYPENAME"):
             shared["VOUCHERTYPENAME"] = voucher.get("VCHTYPE", "")
+        # REMOTEID is a GUID and lives on the attribute, not as a child. It is
+        # the id an amendment should be aimed at.
+        shared["REMOTEID"] = voucher.get("REMOTEID", "")
+        if not shared.get("GUID"):
+            shared["GUID"] = voucher.get("REMOTEID", "")
 
         entries = list(voucher.iter("ALLLEDGERENTRIES.LIST"))
         if not entries:
@@ -188,19 +192,36 @@ class LineError:
         return None
 
 
+def _first_id(container: etree._Element, *names: str) -> str:
+    """An id from Tally, where ``0`` means "none".
+
+    A voucher import returns ``<LASTMID>0</LASTMID>`` because master ids are for
+    masters; taking that literally hands ``"0"`` to an alter, which Tally then
+    cannot match - and silently creates a *new* voucher instead.
+    """
+    value = _first_text(container, *names)
+    return "" if value.strip() in ("", "0") else value
+
+
 @dataclass(slots=True)
 class ImportResult:
     created: int = 0
     altered: int = 0
     ignored: int = 0
     exceptions: int = 0
+    errors_reported: int = 0
     last_voucher_id: str = ""
     last_master_id: str = ""
     errors: list[LineError] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
-        return not self.errors and self.exceptions == 0 and (self.created or self.altered)
+        return (
+            not self.errors
+            and self.exceptions == 0
+            and self.errors_reported == 0
+            and bool(self.created or self.altered)
+        )
 
     @property
     def messages(self) -> list[str]:
@@ -238,12 +259,17 @@ def parse_import_result(xml_bytes: bytes) -> ImportResult:
         altered=_first_int(container, "ALTERED"),
         ignored=_first_int(container, "IGNORED"),
         exceptions=_first_int(container, "EXCEPTIONS"),
-        last_voucher_id=_first_text(container, "LASTVCHID"),
-        last_master_id=_first_text(container, "LASTMASTERID", "LASTMID"),
+        errors_reported=_first_int(container, "ERRORS"),
+        last_voucher_id=_first_id(container, "LASTVCHID"),
+        last_master_id=_first_id(container, "LASTMASTERID", "LASTMID"),
     )
     result.errors = [
         LineError(err.text.strip()) for err in root.iter("LINEERROR") if err.text
     ]
+    if result.errors_reported and not result.errors:
+        result.errors.append(
+            LineError(f"Tally reported {result.errors_reported} error(s) on import")
+        )
     if result.exceptions and not result.errors:
         # Exceptions with no LINEERROR: LASTERROR is the only detail Tally gives.
         last_error = _first_text(container, "LASTERROR")
