@@ -293,3 +293,92 @@ async def test_unparseable_model_output_stops_the_session():
     session = await fallback(provider).run("do a thing")
     assert "unparseable action" in session.stopped_reason
     assert session.steps == []
+
+
+# --- Tier 2 capture must not capture other windows --------------------------
+
+
+def test_a_screen_grab_is_refused_when_tally_is_not_in_front(monkeypatch):
+    """The defect this guards against: mss grabs screen *pixels* at the window's
+    rectangle, so anything overlapping Tally - a browser, an email client,
+    another client's books - would be captured and sent to a model. Cropping to
+    the bounds does nothing about that."""
+    from tallyagent_agent.perception.screen import WindowObscuredError
+
+    monkeypatch.setattr(screen_mod, "capture_window_content", lambda bounds: None)
+    monkeypatch.setattr(screen_mod, "is_foreground", lambda bounds: False)
+
+    with pytest.raises(WindowObscuredError, match="not in front"):
+        screen_mod.capture(TALLY_WINDOW)
+
+
+def test_a_screen_grab_is_allowed_when_tally_is_in_front(monkeypatch):
+    monkeypatch.setattr(screen_mod, "capture_window_content", lambda bounds: None)
+    monkeypatch.setattr(screen_mod, "is_foreground", lambda bounds: True)
+
+    captured: list[dict] = []
+
+    class FakeShot:
+        rgb = b"\x00" * 12
+        size = (2, 2)
+
+    class FakeMss:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def grab(self, region):
+            captured.append(region)
+            return FakeShot()
+
+    import sys
+    import types
+
+    module = types.ModuleType("mss")
+    module.mss = lambda: FakeMss()  # type: ignore[attr-defined]
+    tools = types.ModuleType("mss.tools")
+    tools.to_png = lambda rgb, size: b"png-bytes"  # type: ignore[attr-defined]
+    module.tools = tools  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "mss", module)
+    monkeypatch.setitem(sys.modules, "mss.tools", tools)
+
+    assert screen_mod.capture(TALLY_WINDOW) == b"png-bytes"
+    assert captured == [
+        {"left": 100, "top": 80, "width": 1280, "height": 720}
+    ], "the grab is still cropped to the window"
+
+
+def test_the_windows_own_content_is_preferred_over_a_screen_grab(monkeypatch):
+    """PrintWindow renders the window itself, so it is correct even when
+    something is on top of it - and it is tried first for that reason."""
+    monkeypatch.setattr(
+        screen_mod, "capture_window_content", lambda bounds: b"own-pixels"
+    )
+
+    def explode(bounds):
+        raise AssertionError("must not consult the foreground when PrintWindow works")
+
+    monkeypatch.setattr(screen_mod, "is_foreground", explode)
+    assert screen_mod.capture(TALLY_WINDOW) == b"own-pixels"
+
+
+async def test_perception_reports_an_obscured_window_rather_than_leaking(monkeypatch):
+    """An obscured window stops the observation; it never falls back to
+    whatever happens to be on screen."""
+    from tallyagent_agent.perception.screen import WindowObscuredError
+
+    def obscured(bounds):
+        raise WindowObscuredError("not in front")
+
+    provider = mock.MockProvider()
+    observer = ScreenPerception(
+        Router(provider),
+        TierRouter(TierConfig(perception_enabled=True)),
+        locate=lambda: TALLY_WINDOW,
+        grab=obscured,
+    )
+    with pytest.raises(WindowObscuredError):
+        await observer.observe()
+    assert provider.calls == [], "nothing may be sent when the capture is unsafe"

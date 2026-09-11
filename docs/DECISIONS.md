@@ -299,6 +299,15 @@ These are the known gaps.
   does not wire one, so with the fallback enabled but no hook supplied a mutating
   step stops the session. That is the safe failure, but it means Tier 3 is usable
   programmatically and not yet from the web UI.
+- **Trial balance and outstanding are not implemented against live Tally.**
+  Both report exports return empty on TallyPrime 1.1.7.1 (D-107) and the obvious
+  TDL route hangs it (D-110). They work against the fake, and the day book -
+  which is what duplicate detection and bank reconciliation depend on - works
+  against both. A live trial balance needs a TDL shape that has not been found
+  yet; read it in Tally until then.
+- **Bank reconciliation and GSTR-2B have not been run against live Tally.**
+  Both are tested on fixtures and the day book they consume now works live, but
+  the reconciliations themselves have only met the fake.
 - **`pyinstaller` and `pystray` were not executed on this machine.** The spec,
   the build script and the Dockerfile are present, documented, and asserted to
   exist and to be correctly shaped; an actual Windows build and an actual
@@ -442,3 +451,41 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
 - **D-106 SPEC.md's example GSTIN `24AAAAA0000A1Z5` fails its own checksum.**
   Our `gstin_valid` rule caught it on the first live voucher. The demo uses
   `24AAAAA0000A1Z8`, which is the checksum-correct form of the same number.
+
+### What live Tally taught us, part three (found by posting and restarting)
+
+- **D-107 Reports return nothing; report-shaped data needs a TDL collection
+  too.** `Day Book`, `Trial Balance` and `Bills Receivable` as report exports
+  all come back empty on 1.1.7.1. Day-book-shaped reports now go through a TDL
+  `Voucher` collection fetching `ALLLEDGERENTRIES.LIST`, flattened to one row
+  per posting by `parsers.parse_voucher_rows`. `parse_collection` cannot do it:
+  ledger entries contain nested lists of their own, so the generic walker
+  serialises them to a string.
+- **D-108 Duplicate detection was silently dead against live Tally.** It reads
+  the Day Book, which returned nothing, so every re-submitted invoice sailed
+  through validation. Verified: the idempotency key still refused the double
+  post (`replayed: True`, voucher count unchanged), so nothing was written
+  twice - but the second line of defence was doing all the work. Fixed with
+  D-107 and verified live: a re-submitted invoice is now blocked by
+  `not_duplicate`, naming the voucher it duplicates.
+- **D-109 Amounts from a voucher collection are in Tally's convention.** They
+  are flipped to ours in `get_vouchers`, at the same boundary as every other
+  sign conversion, and the fake now emits Tally's convention too - emitting ours
+  would have hidden exactly this.
+- **D-110 `CLOSINGBALANCE` on a Ledger collection hangs Tally.** The process
+  survives but stops answering the port. Not used; trial balance remains
+  unimplemented against live Tally (see Incomplete). Recovery is
+  `install.stop()` then `install.start()`, which is what our own code did.
+- **D-111 A company that is not *loaded* is invisible over XML,** even with
+  `SVCURRENTCOMPANY` naming it. After a restart Tally sits on the licence screen
+  in EDU mode, which blocks the `Load=<number>` auto-load in tally.ini; dismiss
+  it with `T: Continue In Educational Mode` and the company loads itself. The
+  probe reports "no companies loaded" and says what to do.
+- **D-112 Tier 2 capture could capture other windows, and now cannot.** `mss`
+  grabs *screen pixels* at a rectangle, so anything overlapping Tally is inside
+  that rectangle - cropping to the window's bounds does nothing about it. Caught
+  in the act: a capture of the Tally window returned a browser. Now the window
+  is asked to render itself via `PrintWindow` (correct even when covered), a
+  screen grab is used only when Tally is verifiably foreground, and otherwise
+  the capture is **refused** with `WindowObscuredError` rather than taken. The
+  claim in D-062 that cropping was sufficient was wrong.

@@ -22,7 +22,7 @@ from tallyagent_core.idempotency import IdempotencyStore, InMemoryIdempotencySto
 from tallyagent_core.models import Ledger, Party, Voucher
 from tallyagent_tally.client import TallyClient
 from tallyagent_tally.xml import builders, parsers
-from tallyagent_tally.xml.quirks import from_tally_date
+from tallyagent_tally.xml.quirks import from_tally_date, to_tally_date
 
 log = logging.getLogger(__name__)
 
@@ -132,6 +132,52 @@ class TallyBackend:
                 )
         return Masters(ledgers=ledgers, parties=parties, groups=sorted(groups))
 
+    #: Voucher fields to fetch for day-book-shaped reports. Real Tally returns
+    #: nothing at all from the plain "Day Book" report export, so these come
+    #: from a TDL collection like the ledgers do.
+    VOUCHER_TDL = (
+        '<COLLECTION NAME="TAVouchers" ISMODIFY="No">'
+        "<TYPE>Voucher</TYPE>"
+        "<FETCH>DATE,VOUCHERTYPENAME,VOUCHERNUMBER,PARTYLEDGERNAME,REFERENCE,"
+        "NARRATION,MASTERID,ALLLEDGERENTRIES.LIST</FETCH>"
+        "</COLLECTION>"
+    )
+
+    #: Reports that are really voucher listings.
+    VOUCHER_REPORTS = frozenset({"Day Book", "Voucher Register", "Ledger Vouchers"})
+
+    async def get_vouchers(
+        self,
+        company: str | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        ledger_name: str = "",
+    ) -> list[dict[str, object]]:
+        """Voucher rows, one per ledger entry, in *our* sign convention.
+
+        Amounts arrive negated from Tally; they are flipped here, at the same
+        boundary where every other sign conversion happens.
+        """
+        extra = {"SVLEDGERNAME": ledger_name} if ledger_name else None
+        payload = builders.build_export_collection(
+            collection_name="TAVouchers",
+            company=self.client.company_or_default(company),
+            username=self.client.config.username,
+            password=self.client.config.password,
+            from_date=to_tally_date(from_date) if from_date else "",
+            to_date=to_tally_date(to_date) if to_date else "",
+            extra_vars=extra,
+            tdl=self.VOUCHER_TDL,
+        )
+        rows = parsers.parse_voucher_rows(await self.client.post(payload))
+        for row in rows:
+            if row.get("AMOUNT") not in (None, ""):
+                row["AMOUNT"] = format(-parsers.to_decimal(row["AMOUNT"]), "f")
+        if ledger_name:
+            # SVLEDGERNAME does not filter a TDL collection, so filter here.
+            rows = [row for row in rows if row.get("LEDGERNAME") == ledger_name]
+        return rows
+
     async def get_report(
         self,
         report_name: str,
@@ -140,6 +186,13 @@ class TallyBackend:
         to_date: date | None = None,
         extra_vars: dict[str, str] | None = None,
     ) -> list[dict[str, object]]:
+        if report_name in self.VOUCHER_REPORTS:
+            return await self.get_vouchers(
+                company=company,
+                from_date=from_date,
+                to_date=to_date,
+                ledger_name=(extra_vars or {}).get("SVLEDGERNAME", ""),
+            )
         element_tag = {
             "Trial Balance": "LEDGER",
             "List of Ledgers": "LEDGER",
@@ -190,13 +243,11 @@ class TallyBackend:
         to_date: date,
         company: str | None = None,
     ) -> list[LedgerEntry]:
-        rows = await self.client.export_report(
-            "Ledger Vouchers",
-            "VOUCHER",
+        rows = await self.get_vouchers(
             company=company,
             from_date=from_date,
             to_date=to_date,
-            extra_vars={"SVLEDGERNAME": ledger_name},
+            ledger_name=ledger_name,
         )
         return [
             LedgerEntry(

@@ -155,8 +155,10 @@ class FakeTally:
                 "LEDGER",
                 [{"@NAME": ledger.name} for ledger in self.ledgers.values()],
             )
-        if self._is_ledger_tdl(ident, root):
+        if self._is_tdl_over(root, "ledger"):
             return self._collection("LEDGER", self._ledger_rows(root))
+        if self._is_tdl_over(root, "voucher"):
+            return self._voucher_collection(root)
         if ident == "Trial Balance":
             return self._collection(
                 "LEDGER",
@@ -178,16 +180,61 @@ class FakeTally:
         # Unknown report: Tally answers with an empty envelope, not an error.
         return self._collection("UNKNOWN", [])
 
-    def _is_ledger_tdl(self, ident: str, root: etree._Element) -> bool:
-        """Does this request carry a TDL collection over Ledger?
+    def _is_tdl_over(self, root: etree._Element, type_name: str) -> bool:
+        """Does this request carry a TDL collection over ``type_name``?
 
         Matched on the TDL body rather than the collection name, because the
         name is the caller's to choose.
         """
         for collection in root.iter("COLLECTION"):
-            if (collection.findtext("TYPE") or "").strip().lower() == "ledger":
+            if (collection.findtext("TYPE") or "").strip().lower() == type_name:
                 return True
         return False
+
+    def _voucher_collection(self, root: etree._Element) -> bytes:
+        """Vouchers in the shape real Tally returns them.
+
+        Nested ``ALLLEDGERENTRIES.LIST`` children, and amounts in *Tally's*
+        convention (negated), because that is what the adapter has to flip.
+        Emitting our convention here would hide the conversion bug we would
+        then ship.
+        """
+        from_date = from_tally_date(root.findtext(".//SVFROMDATE") or "")
+        to_date = from_tally_date(root.findtext(".//SVTODATE") or "")
+
+        envelope = etree.Element("ENVELOPE")
+        body = etree.SubElement(envelope, "BODY")
+        data = etree.SubElement(body, "DATA")
+        collection = etree.SubElement(data, "COLLECTION")
+
+        for voucher in self.vouchers:
+            if from_date and voucher.date and voucher.date < from_date:
+                continue
+            if to_date and voucher.date and voucher.date > to_date:
+                continue
+            element = etree.SubElement(
+                collection, "VOUCHER", attrib={"VCHTYPE": voucher.voucher_type}
+            )
+            etree.SubElement(element, "DATE").text = (
+                voucher.date.strftime("%Y%m%d") if voucher.date else ""
+            )
+            etree.SubElement(element, "VOUCHERTYPENAME").text = voucher.voucher_type
+            etree.SubElement(element, "VOUCHERNUMBER").text = voucher.voucher_number
+            etree.SubElement(element, "PARTYLEDGERNAME").text = voucher.party_name
+            etree.SubElement(element, "REFERENCE").text = voucher.reference
+            etree.SubElement(element, "NARRATION").text = voucher.narration
+            etree.SubElement(element, "MASTERID").text = voucher.master_id
+            for name, amount in voucher.lines:
+                entry = etree.SubElement(element, "ALLLEDGERENTRIES.LIST")
+                etree.SubElement(entry, "LEDGERNAME").text = name
+                etree.SubElement(entry, "ISDEEMEDPOSITIVE").text = (
+                    "Yes" if amount > 0 else "No"
+                )
+                etree.SubElement(entry, "AMOUNT").text = format(-amount, "f")
+                # Real Tally nests further here; the parser must cope with it.
+                bill = etree.SubElement(entry, "BILLALLOCATIONS.LIST")
+                etree.SubElement(bill, "BILLTYPE").text = "On Account"
+        return etree.tostring(envelope, xml_declaration=False)
 
     def _ledger_rows(self, root: etree._Element) -> list[dict[str, str]]:
         """Only the fields the request asked for in <FETCH>.

@@ -61,6 +61,56 @@ def parse_companies(xml_bytes: bytes) -> list[str]:
     ]
 
 
+#: Voucher-level fields worth copying onto every one of its ledger rows.
+_VOUCHER_FIELDS = (
+    "DATE",
+    "VOUCHERTYPENAME",
+    "VOUCHERNUMBER",
+    "PARTYLEDGERNAME",
+    "REFERENCE",
+    "NARRATION",
+    "MASTERID",
+    "GUID",
+)
+
+
+def parse_voucher_rows(xml_bytes: bytes) -> list[dict[str, object]]:
+    """Flatten a voucher collection into one row per ledger entry.
+
+    ``parse_collection`` cannot do this: ``ALLLEDGERENTRIES.LIST`` contains
+    nested lists of its own (bill and cost-centre allocations), so the generic
+    walker serialises it to a string. Day-book-shaped reports want one row per
+    posting, which is what this produces.
+
+    Amounts stay in **Tally's** convention here (negated, debit negative); the
+    backend flips them to ours at the same boundary as everything else.
+    """
+    root = parse(xml_bytes)
+    rows: list[dict[str, object]] = []
+    for voucher in root.iter("VOUCHER"):
+        shared: dict[str, object] = {
+            field: (voucher.findtext(field) or "").strip()
+            for field in _VOUCHER_FIELDS
+        }
+        shared.setdefault("VOUCHERTYPENAME", voucher.get("VCHTYPE", ""))
+        if not shared.get("VOUCHERTYPENAME"):
+            shared["VOUCHERTYPENAME"] = voucher.get("VCHTYPE", "")
+
+        entries = list(voucher.iter("ALLLEDGERENTRIES.LIST"))
+        if not entries:
+            rows.append(dict(shared))
+            continue
+        for entry in entries:
+            row = dict(shared)
+            row["LEDGERNAME"] = (entry.findtext("LEDGERNAME") or "").strip()
+            row["AMOUNT"] = (entry.findtext("AMOUNT") or "").strip()
+            row["ISDEEMEDPOSITIVE"] = (
+                entry.findtext("ISDEEMEDPOSITIVE") or ""
+            ).strip()
+            rows.append(row)
+    return rows
+
+
 def to_decimal(raw: object, default: Decimal = Decimal("0")) -> Decimal:
     """Tally amounts arrive as ``"-11800.00"``, ``""``, ``"(-)500"`` or absent."""
     if raw is None:

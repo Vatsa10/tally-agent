@@ -6,9 +6,12 @@ report you are looking at shows...").
 
 Two hard constraints, both enforced here:
   - off by default, and gated by the tier router on every call;
-  - the capture is cropped to the Tally window's bounds. Never a full screen:
-    the user's email, their other clients' files and their password manager are
-    not ours to send anywhere.
+  - only TallyPrime's own pixels ever leave. Cropping a *screen* grab to the
+    window's rectangle is not enough, because anything overlapping Tally sits
+    inside that rectangle: a browser, an email client, another client's books.
+    So the window is asked to render itself (PrintWindow), and a screen grab is
+    used only when Tally is verifiably in front. When neither holds, the capture
+    is refused rather than taken.
 
 ``mss`` and ``pywin32`` are optional extras. Without them this degrades to a
 clear error, never to a silent full-screen grab.
@@ -16,6 +19,7 @@ clear error, never to a silent full-screen grab.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import re
@@ -24,11 +28,15 @@ from datetime import UTC, datetime
 
 from tallyagent_agent.context import UiContext
 from tallyagent_agent.tiers import TierRouter
-from tallyagent_core.errors import NotConfiguredError
+from tallyagent_core.errors import NotConfiguredError, TallyAgentError
 from tallyagent_llm.provider import Image, Message
 from tallyagent_llm.router import Router
 
 log = logging.getLogger(__name__)
+
+
+class WindowObscuredError(TallyAgentError):
+    """The Tally window could not be captured without capturing other windows."""
 
 CLASSIFY_PROMPT = """\
 This is a screenshot of a TallyPrime window. Reply with JSON only:
@@ -84,12 +92,125 @@ def find_tally_window() -> WindowBounds | None:
     return found[0] if found else None
 
 
-def capture(bounds: WindowBounds) -> bytes:
-    """Screenshot exactly the given rectangle, as PNG bytes."""
+def is_foreground(bounds: WindowBounds) -> bool:
+    """Is the Tally window the one actually on top?
+
+    A screen grab returns whatever pixels are on screen at that rectangle. If
+    another window overlaps Tally, those are *its* pixels, and cropping to
+    Tally's bounds does nothing to stop them being sent to a model.
+    """
+    try:
+        import win32gui  # type: ignore[import-not-found]
+    except ImportError:
+        return False
+    handle = win32gui.GetForegroundWindow()
+    if not handle:
+        return False
+    return bool(TALLY_TITLE.search(win32gui.GetWindowText(handle) or ""))
+
+
+def capture_window_content(bounds: WindowBounds) -> bytes | None:
+    """Capture the window's *own* pixels with PrintWindow.
+
+    Asks the window to render itself, so an overlapping window contributes
+    nothing. Returns None when it is unavailable or the window refuses, and the
+    caller then falls back to a screen grab only if Tally is in front.
+    """
+    try:
+        import win32gui  # type: ignore[import-not-found]
+        import win32ui  # type: ignore[import-not-found]
+        from PIL import Image  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+
+    handle = None
+
+    def visit(candidate: int, _extra: object) -> None:
+        nonlocal handle
+        if handle is None and win32gui.IsWindowVisible(candidate):
+            title = win32gui.GetWindowText(candidate) or ""
+            if title == bounds.title or TALLY_TITLE.search(title):
+                handle = candidate
+
+    win32gui.EnumWindows(visit, None)
+    if handle is None:
+        return None
+
+    window_dc = mfc_dc = save_dc = bitmap = None
+    try:
+        window_dc = win32gui.GetWindowDC(handle)
+        mfc_dc = win32ui.CreateDCFromHandle(window_dc)
+        save_dc = mfc_dc.CreateCompatibleDC()
+        bitmap = win32ui.CreateBitmap()
+        bitmap.CreateCompatibleBitmap(mfc_dc, bounds.width, bounds.height)
+        save_dc.SelectObject(bitmap)
+
+        # 2 = PW_RENDERFULLCONTENT, needed for modern composited windows.
+        import ctypes
+
+        ok = ctypes.windll.user32.PrintWindow(handle, save_dc.GetSafeHdc(), 2)
+        if not ok:
+            return None
+
+        info = bitmap.GetInfo()
+        image = Image.frombuffer(
+            "RGB",
+            (info["bmWidth"], info["bmHeight"]),
+            bitmap.GetBitmapBits(True),
+            "raw",
+            "BGRX",
+            0,
+            1,
+        )
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+    except Exception as exc:  # noqa: BLE001 - fall back rather than fail
+        log.debug("PrintWindow capture failed: %s", exc)
+        return None
+    finally:
+        for handle_obj, release in (
+            (bitmap, lambda b: win32gui.DeleteObject(b.GetHandle())),
+            (save_dc, lambda d: d.DeleteDC()),
+            (mfc_dc, lambda d: d.DeleteDC()),
+        ):
+            if handle_obj is not None:
+                try:
+                    release(handle_obj)
+                except Exception:  # noqa: BLE001, S110 - cleanup only
+                    pass
+        if window_dc:
+            try:
+                win32gui.ReleaseDC(handle, window_dc)
+            except Exception:  # noqa: BLE001, S110 - cleanup only
+                pass
+
+
+def capture(bounds: WindowBounds, allow_screen_grab: bool = True) -> bytes:
+    """Capture the Tally window, and nothing else.
+
+    PrintWindow first, because it renders the window's own content and is
+    therefore correct even when something overlaps it. A plain screen grab is
+    only acceptable when Tally is verifiably in front; otherwise we would be
+    sending whatever happens to be covering it - a browser, an email client,
+    another client's books - to a model. That is worth refusing over.
+    """
     if not bounds.is_sane:
         raise ValueError(
             f"refusing to capture a {bounds.width}x{bounds.height} region; "
             "the Tally window looks minimised or off-screen"
+        )
+
+    own = capture_window_content(bounds)
+    if own is not None:
+        return own
+
+    if not (allow_screen_grab and is_foreground(bounds)):
+        raise WindowObscuredError(
+            "refusing to capture: the TallyPrime window is not in front and its "
+            "own contents could not be rendered, so a screen grab would capture "
+            "whatever is covering it. Bring Tally to the foreground, or install "
+            "the desktop extra so PrintWindow is available."
         )
     try:
         import mss  # type: ignore[import-not-found]
