@@ -84,10 +84,18 @@ def parse_voucher_rows(xml_bytes: bytes) -> list[dict[str, object]]:
 
     Amounts stay in **Tally's** convention here (negated, debit negative); the
     backend flips them to ours at the same boundary as everything else.
+
+    Scoped to ``<COLLECTION>`` on purpose: every Tally response also carries a
+    ``<CMPINFO>`` block containing a ``<VOUCHER>`` element that is an object
+    *count*, not a voucher. Iterating the whole document picks it up and emits a
+    phantom empty row.
     """
     root = parse(xml_bytes)
+    collection = root.find(".//COLLECTION")
+    if collection is None:
+        return []
     rows: list[dict[str, object]] = []
-    for voucher in root.iter("VOUCHER"):
+    for voucher in collection.iter("VOUCHER"):
         shared: dict[str, object] = {
             field: (voucher.findtext(field) or "").strip()
             for field in _VOUCHER_FIELDS
@@ -107,8 +115,28 @@ def parse_voucher_rows(xml_bytes: bytes) -> list[dict[str, object]]:
             row["ISDEEMEDPOSITIVE"] = (
                 entry.findtext("ISDEEMEDPOSITIVE") or ""
             ).strip()
+            row["BILLS"] = _bill_allocations(entry)
             rows.append(row)
     return rows
+
+
+def _bill_allocations(entry: etree._Element) -> list[dict[str, str]]:
+    """Bill-wise allocations hanging off one ledger entry.
+
+    This is what makes outstanding-by-bill possible: Tally tracks receivables
+    against a bill reference, not just a party balance. ``BILLTYPE`` is
+    ``New Ref`` when a bill is raised, ``Agst Ref`` when one is settled, and
+    ``On Account`` when the entry is not against a specific bill at all.
+    """
+    bills: list[dict[str, str]] = []
+    for allocation in entry.iter("BILLALLOCATIONS.LIST"):
+        name = (allocation.findtext("NAME") or "").strip()
+        bill_type = (allocation.findtext("BILLTYPE") or "").strip()
+        amount = (allocation.findtext("AMOUNT") or "").strip()
+        if not name and not amount:
+            continue
+        bills.append({"name": name, "type": bill_type, "amount": amount})
+    return bills
 
 
 def to_decimal(raw: object, default: Decimal = Decimal("0")) -> Decimal:

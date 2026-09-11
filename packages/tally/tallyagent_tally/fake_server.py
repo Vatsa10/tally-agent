@@ -42,6 +42,10 @@ class FakeVoucher:
     narration: str
     # (ledger_name, amount) in *our* convention: positive = debit
     lines: list[tuple[str, Decimal]] = field(default_factory=list)
+    #: ledger name -> [(bill reference, bill type, amount)], as imported. Real
+    #: Tally echoes back the allocations it was given, so the fake must too:
+    #: inventing "On Account" for everything hid the bill-wise path entirely.
+    bills: dict[str, list[tuple[str, str, Decimal]]] = field(default_factory=dict)
 
 
 class FakeTally:
@@ -232,8 +236,18 @@ class FakeTally:
                 )
                 etree.SubElement(entry, "AMOUNT").text = format(-amount, "f")
                 # Real Tally nests further here; the parser must cope with it.
-                bill = etree.SubElement(entry, "BILLALLOCATIONS.LIST")
-                etree.SubElement(bill, "BILLTYPE").text = "On Account"
+                allocations = voucher.bills.get(name)
+                if allocations:
+                    for reference, bill_type, bill_amount in allocations:
+                        bill = etree.SubElement(entry, "BILLALLOCATIONS.LIST")
+                        etree.SubElement(bill, "NAME").text = reference
+                        etree.SubElement(bill, "BILLTYPE").text = bill_type
+                        etree.SubElement(bill, "AMOUNT").text = format(
+                            -bill_amount, "f"
+                        )
+                else:
+                    bill = etree.SubElement(entry, "BILLALLOCATIONS.LIST")
+                    etree.SubElement(bill, "BILLTYPE").text = "On Account"
         return etree.tostring(envelope, xml_declaration=False)
 
     def _ledger_rows(self, root: etree._Element) -> list[dict[str, str]]:
@@ -370,6 +384,7 @@ class FakeTally:
             action = voucher_el.get("ACTION", "Create")
             lines: list[tuple[str, Decimal]] = []
             unknown: list[str] = []
+            bills: dict[str, list[tuple[str, str, Decimal]]] = {}
             for entry in voucher_el.iter("ALLLEDGERENTRIES.LIST"):
                 name = entry.findtext("LEDGERNAME") or ""
                 if name not in self.ledgers:
@@ -378,6 +393,17 @@ class FakeTally:
                 # Undo Tally's negation to get back to our convention.
                 raw = entry.findtext("AMOUNT") or "0"
                 lines.append((name, -Decimal(raw)))
+                for allocation in entry.iter("BILLALLOCATIONS.LIST"):
+                    reference = allocation.findtext("NAME") or ""
+                    if not reference:
+                        continue
+                    bills.setdefault(name, []).append(
+                        (
+                            reference,
+                            allocation.findtext("BILLTYPE") or "New Ref",
+                            -Decimal(allocation.findtext("AMOUNT") or "0"),
+                        )
+                    )
             if unknown:
                 errors.extend(
                     f"Ledger '{name}' does not exist in the company" for name in unknown
@@ -430,6 +456,7 @@ class FakeTally:
                 reference=voucher_el.findtext("REFERENCE") or "",
                 narration=voucher_el.findtext("NARRATION") or "",
                 lines=lines,
+                bills=bills,
             )
             self.vouchers.append(voucher)
             last_voucher_id = voucher.master_id

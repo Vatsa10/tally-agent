@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from lxml import etree
 
-from tallyagent_core.models import Ledger, Party, Voucher
+from tallyagent_core.models import Ledger, Party, Voucher, VoucherType
 from tallyagent_tally.xml.quirks import (
     REPORT_NAME_ALIASES,
     tally_amount,
@@ -187,7 +187,15 @@ def build_voucher_element(
         if line.bill_reference:
             bill = etree.SubElement(entry, "BILLALLOCATIONS.LIST")
             etree.SubElement(bill, "NAME").text = line.bill_reference
-            etree.SubElement(bill, "BILLTYPE").text = "New Ref"
+            # A sale or a bill *raises* a reference; a receipt or payment
+            # *settles* one. Marking a settlement "New Ref" makes Tally open a
+            # second bill for the same invoice, and the original stays
+            # outstanding for ever.
+            etree.SubElement(bill, "BILLTYPE").text = (
+                "Agst Ref"
+                if voucher.voucher_type in (VoucherType.RECEIPT, VoucherType.PAYMENT)
+                else "New Ref"
+            )
             etree.SubElement(bill, "AMOUNT").text = amount_text
         if line.cost_centre:
             cat = etree.SubElement(entry, "CATEGORYALLOCATIONS.LIST")

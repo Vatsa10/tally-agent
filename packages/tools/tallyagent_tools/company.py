@@ -267,6 +267,13 @@ SERVICES_GST = (
     LedgerSpec("Cash", "Cash-in-Hand", "15000.00"),
 )
 
+#: The contra for whatever opening balances actually get created. Computed at
+#: seed time rather than hardcoded: Tally ships some ledgers (Cash, Profit &
+#: Loss A/c) already, and a ledger that already exists does not get our opening,
+#: so a fixed capital figure leaves the books out by the difference.
+CAPITAL_LEDGER = "Capital Account"
+CAPITAL_GROUP = "Capital Account"
+
 PROFILES = {"trading_gst": TRADING_GST, "services_gst": SERVICES_GST}
 
 #: Demo parties. GSTINs are the checksum-valid ones from tests/fixtures.
@@ -313,6 +320,17 @@ async def seed_chart_of_accounts(
         if s.name not in existing
     ]
     parties = [p for p in DEMO_PARTIES if p.name not in existing]
+
+    # Balance whatever openings we are about to create, and only those.
+    opening_total = sum((lg.opening_balance for lg in ledgers), Decimal("0"))
+    if opening_total and CAPITAL_LEDGER not in existing:
+        ledgers.append(
+            Ledger(
+                name=CAPITAL_LEDGER,
+                parent=CAPITAL_GROUP,
+                opening_balance=-opening_total,
+            )
+        )
 
     if not ledgers and not parties:
         return ToolResult(

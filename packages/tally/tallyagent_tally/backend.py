@@ -8,7 +8,8 @@ original result without touching Tally.
 from __future__ import annotations
 
 import logging
-from datetime import date
+from dataclasses import dataclass
+from datetime import date, timedelta
 from decimal import Decimal
 
 from tallyagent_backends.accounting_backend import (
@@ -20,6 +21,7 @@ from tallyagent_backends.accounting_backend import (
 from tallyagent_core import idempotency
 from tallyagent_core.idempotency import IdempotencyStore, InMemoryIdempotencyStore
 from tallyagent_core.models import Ledger, Party, Voucher
+from tallyagent_core.models.voucher import PAISA
 from tallyagent_tally.client import TallyClient
 from tallyagent_tally.xml import builders, parsers
 from tallyagent_tally.xml.quirks import from_tally_date, to_tally_date
@@ -44,6 +46,15 @@ STATE_CODES = {
 STATE_CODES.pop("Gujarat ", None)
 
 STATE_NAMES = {code: name for name, code in STATE_CODES.items()}
+
+
+@dataclass(slots=True)
+class _OpenBill:
+    """One bill reference and what is still open on it."""
+
+    reference: str
+    amount: Decimal
+    date: date | None = None
 
 
 def _party_state_code(gstin: str | None, state_name: str | None) -> str | None:
@@ -208,32 +219,164 @@ class TallyBackend:
             extra_vars=extra_vars,
         )
 
+    async def ledger_balances(
+        self,
+        company: str | None = None,
+        as_on: date | None = None,
+    ) -> dict[str, Decimal]:
+        """Closing balance per ledger, derived rather than asked for.
+
+        TallyPrime 1.1.7.1 returns nothing from the Trial Balance report export,
+        and fetching ``CLOSINGBALANCE`` on a Ledger collection hangs the process
+        outright (see docs/DECISIONS.md D-110). Both of those are dead ends, so
+        the balance is computed the way a ledger actually works: opening balance
+        plus every posting. Same arithmetic Tally does, from data we can get
+        reliably, and it agrees with Tally's own Trial Balance screen.
+        """
+        masters = await self.get_masters(company)
+        balances: dict[str, Decimal] = {
+            ledger.name: ledger.opening_balance for ledger in masters.ledgers
+        }
+        for row in await self.get_vouchers(company=company, to_date=as_on):
+            name = str(row.get("LEDGERNAME") or "")
+            if not name:
+                continue
+            balances[name] = balances.get(name, Decimal("0")) + parsers.to_decimal(
+                row.get("AMOUNT")
+            )
+        return balances
+
     async def get_outstanding(
         self,
         receivable: bool = True,
         company: str | None = None,
         as_on: date | None = None,
     ) -> list[OutstandingBill]:
-        report = "Bills Receivable" if receivable else "Bills Payable"
-        rows = await self.get_report(report, company=company, to_date=as_on)
+        """Outstanding bills, derived from bill-wise allocations.
+
+        Like the trial balance, the Bills Receivable/Payable report exports come
+        back empty, so this is built from the vouchers: every ``New Ref``
+        allocation opens a bill and every ``Agst Ref`` settles part of one. What
+        is left un-netted is outstanding. Entries with no bill reference fall
+        back to a single "(on account)" bill per party, which is exactly how
+        Tally shows them.
+        """
+        masters = await self.get_masters(company)
+        parties = {
+            party.name: party
+            for party in masters.parties
+            if party.is_customer is receivable
+        }
+        if not parties:
+            return []
+
+        openings = {
+            ledger.name: ledger.opening_balance
+            for ledger in masters.ledgers
+            if ledger.name in parties
+        }
+
+        rows = await self.get_vouchers(company=company, to_date=as_on)
+
+        # The party's ledger balance is the authority. Whatever the bill-wise
+        # breakdown says, the outstanding total for a party MUST equal it -
+        # otherwise the receivables report and the trial balance disagree, and
+        # a CA has two numbers and no way to choose.
+        balances: dict[str, Decimal] = dict(openings)
+        opened: dict[str, list[_OpenBill]] = {name: [] for name in parties}
+        allocated: dict[str, Decimal] = dict.fromkeys(parties, Decimal("0"))
+        # An on-account amount still has to be ageable, so remember the first
+        # date the party was transacted with. Without it every on-account
+        # balance reports as "not due" for ever, which is the opposite of what
+        # a receivables report is for.
+        first_seen: dict[str, date] = {}
+
+        for row in rows:
+            ledger = str(row.get("LEDGERNAME") or "")
+            if ledger not in parties:
+                continue
+            when = from_tally_date(str(row.get("DATE") or ""))
+            if when and (ledger not in first_seen or when < first_seen[ledger]):
+                first_seen[ledger] = when
+            balances[ledger] = balances.get(ledger, Decimal("0")) + parsers.to_decimal(
+                row.get("AMOUNT")
+            )
+            for bill in row.get("BILLS") or []:
+                if not isinstance(bill, dict) or not bill.get("name"):
+                    continue
+                # Allocation amounts arrive in Tally's convention too.
+                amount = -parsers.to_decimal(bill.get("amount"))
+                allocated[ledger] += amount
+                existing = next(
+                    (b for b in opened[ledger] if b.reference == bill["name"]), None
+                )
+                if existing is None:
+                    opened[ledger].append(
+                        _OpenBill(reference=str(bill["name"]), amount=amount, date=when)
+                    )
+                else:
+                    existing.amount += amount
+                    if when and (existing.date is None or when < existing.date):
+                        existing.date = when
+
         today = as_on or date.today()
         bills: list[OutstandingBill] = []
-        for row in rows:
-            bill_date = from_tally_date(str(row.get("BILLDATE") or ""))
-            due = from_tally_date(str(row.get("BILLDUEDATE") or "")) or bill_date
-            amount = parsers.to_decimal(
-                row.get("CLOSINGBALANCE") or row.get("AMOUNT")
-            )
-            bills.append(
-                OutstandingBill(
-                    party_name=str(row.get("PARTYNAME") or row.get("NAME") or ""),
-                    bill_reference=str(row.get("NAME") or ""),
-                    bill_date=bill_date,
-                    amount=abs(amount),
-                    due_date=due,
-                    overdue_days=(today - due).days if due else 0,
+
+        for party_name, party in parties.items():
+            balance = balances.get(party_name, Decimal("0")).quantize(PAISA)
+            if balance == 0:
+                continue
+
+            open_bills = [b for b in opened[party_name] if b.amount.quantize(PAISA) != 0]
+            open_bills.sort(key=lambda b: (b.date or date.max, b.reference))
+
+            # Anything not booked against a named bill - an "On Account"
+            # receipt, or an opening balance - is settled against the oldest
+            # bills first, the way a payment on account actually behaves.
+            unallocated = balance - allocated.get(party_name, Decimal("0"))
+            if openings.get(party_name):
+                unallocated -= Decimal("0")  # the opening is already in balance
+            for bill in open_bills:
+                if unallocated == 0:
+                    break
+                if (unallocated > 0) == (bill.amount > 0):
+                    continue  # same direction; it is not a settlement
+                applied = min(abs(unallocated), abs(bill.amount))
+                bill.amount -= applied if bill.amount > 0 else -applied
+                unallocated += applied if unallocated < 0 else -applied
+
+            remaining = [b for b in open_bills if b.amount.quantize(PAISA) != 0]
+            if unallocated.quantize(PAISA) != 0:
+                remaining.append(
+                    _OpenBill(
+                        reference="(on account)",
+                        amount=unallocated,
+                        date=first_seen.get(party_name),
+                    )
                 )
-            )
+
+            for bill in remaining:
+                # A receivable is a debit balance, a payable a credit one;
+                # either way the figure shown is positive.
+                if receivable and bill.amount < 0:
+                    continue
+                if not receivable and bill.amount > 0:
+                    continue
+                due = (
+                    bill.date + timedelta(days=party.credit_period_days)
+                    if bill.date and party.credit_period_days
+                    else bill.date
+                )
+                bills.append(
+                    OutstandingBill(
+                        party_name=party_name,
+                        bill_reference=bill.reference,
+                        bill_date=bill.date,
+                        amount=abs(bill.amount).quantize(PAISA),
+                        due_date=due,
+                        overdue_days=(today - due).days if due else 0,
+                    )
+                )
         return bills
 
     async def get_bank_ledger(
@@ -368,9 +511,4 @@ class TallyBackend:
     # --- convenience --------------------------------------------------------
 
     async def trial_balance(self, company: str | None = None) -> dict[str, Decimal]:
-        rows = await self.get_report("Trial Balance", company=company)
-        return {
-            str(row.get("NAME") or ""): parsers.to_decimal(row.get("CLOSINGBALANCE"))
-            for row in rows
-            if row.get("NAME")
-        }
+        return await self.ledger_balances(company=company)

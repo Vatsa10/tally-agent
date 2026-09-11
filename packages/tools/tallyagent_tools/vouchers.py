@@ -77,7 +77,15 @@ async def _gst_voucher(
     sign = Decimal("1") if is_sale else Decimal("-1")
 
     lines = [
-        VoucherLine(ledger_name=party_name, amount=total * sign),
+        # The invoice number rides on the party line as a bill reference. Our
+        # parties have bill-wise tracking on, so without it Tally files the
+        # whole amount "On Account" and outstanding-by-bill is impossible -
+        # you get a party balance and no idea which invoice is unpaid.
+        VoucherLine(
+            ledger_name=party_name,
+            amount=total * sign,
+            bill_reference=reference or None,
+        ),
         VoucherLine(ledger_name=revenue_ledger, amount=-taxable_value * sign),
     ]
     if igst:
@@ -200,7 +208,9 @@ async def create_payment(
         reference=reference,
         narration=narration,
         lines=[
-            VoucherLine(ledger_name=party_name, amount=value),
+            VoucherLine(
+                ledger_name=party_name, amount=value, bill_reference=reference or None
+            ),
             VoucherLine(ledger_name=bank_ledger, amount=-value),
         ],
     )
@@ -227,7 +237,9 @@ async def create_receipt(
         narration=narration,
         lines=[
             VoucherLine(ledger_name=bank_ledger, amount=value),
-            VoucherLine(ledger_name=party_name, amount=-value),
+            VoucherLine(
+                ledger_name=party_name, amount=-value, bill_reference=reference or None
+            ),
         ],
     )
     summary = f"Receipt of {value} from {party_name} into {bank_ledger}"

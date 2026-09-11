@@ -18,23 +18,76 @@ from tallyagent_tools.base import ToolContext, ToolResult
 AGEING_BUCKETS = ("not due", "0-30", "31-60", "61-90", "90+")
 
 
+async def _balances(ctx: ToolContext) -> tuple[dict[str, Decimal], dict[str, str]]:
+    """Closing balance and group per ledger.
+
+    Derived from opening balances plus postings - Tally's report exports return
+    nothing and the obvious TDL hangs it. See docs/DECISIONS.md D-107/D-110.
+    """
+    masters = await ctx.masters()
+    groups = {ledger.name: ledger.parent for ledger in masters.ledgers}
+    balances = await ctx.backend.ledger_balances(company=ctx.company.name)  # type: ignore[attr-defined]
+    return balances, groups
+
+
 async def trial_balance(ctx: ToolContext, group: str = "") -> ToolResult:
     """Closing balance per ledger. Positive is a debit balance."""
-    rows = await ctx.backend.get_report("Trial Balance", company=ctx.company.name)
-    balances = [
+    balances, groups = await _balances(ctx)
+    rows = [
         {
-            "ledger": str(row.get("NAME") or ""),
-            "group": str(row.get("PARENT") or ""),
-            "balance": format(parsers.to_decimal(row.get("CLOSINGBALANCE")), "f"),
+            "ledger": name,
+            "group": groups.get(name, ""),
+            "balance": format(balance.quantize(PAISA), "f"),
         }
-        for row in rows
-        if row.get("NAME") and (not group or row.get("PARENT") == group)
+        for name, balance in sorted(balances.items())
+        if not group or groups.get(name) == group
     ]
-    total = sum(Decimal(row["balance"]) for row in balances)
-    return ToolResult(
-        message=f"Trial balance: {len(balances)} ledger(s), net {total}.",
-        data={"rows": balances, "net": format(total, "f")},
+    total = sum((Decimal(row["balance"]) for row in rows), Decimal("0"))
+    debits = sum(
+        (Decimal(r["balance"]) for r in rows if Decimal(r["balance"]) > 0), Decimal("0")
     )
+    credits = -sum(
+        (Decimal(r["balance"]) for r in rows if Decimal(r["balance"]) < 0), Decimal("0")
+    )
+
+    # Tally shows an unmatched opening as "Difference in Opening Balances"
+    # rather than calling the books broken, because that is what it is: a
+    # ledger was opened without its contra, not a posting that went astray.
+    openings = await _opening_total(ctx)
+    difference = total.quantize(PAISA)
+    if difference == 0:
+        note = ""
+    elif difference == openings.quantize(PAISA) and openings != 0:
+        note = (
+            f", difference in opening balances {difference} "
+            "(a ledger was opened without its contra - post a capital or "
+            "opening-balance entry to clear it)"
+        )
+    else:
+        note = f", NET {difference} - the postings do not balance"
+
+    return ToolResult(
+        message=(
+            f"Trial balance: {len(rows)} ledger(s), debits {debits}, "
+            f"credits {credits}{note}"
+        ),
+        data={
+            "rows": rows,
+            "net": format(difference, "f"),
+            "debits": format(debits, "f"),
+            "credits": format(credits, "f"),
+            "balanced": difference == 0,
+            "opening_difference": format(
+                difference if difference == openings.quantize(PAISA) else Decimal("0"),
+                "f",
+            ),
+        },
+    )
+
+
+async def _opening_total(ctx: ToolContext) -> Decimal:
+    masters = await ctx.masters()
+    return sum((lg.opening_balance for lg in masters.ledgers), Decimal("0"))
 
 
 async def _outstanding(
@@ -94,11 +147,11 @@ async def outstanding_payables(
 
 async def cash_position(ctx: ToolContext) -> ToolResult:
     """Balances of every Bank Accounts and Cash-in-Hand ledger."""
-    rows = await ctx.backend.get_report("Trial Balance", company=ctx.company.name)
+    balances, groups = await _balances(ctx)
     accounts = {
-        str(row.get("NAME")): parsers.to_decimal(row.get("CLOSINGBALANCE"))
-        for row in rows
-        if str(row.get("PARENT") or "") in ("Bank Accounts", "Cash-in-Hand")
+        name: balance
+        for name, balance in balances.items()
+        if groups.get(name) in ("Bank Accounts", "Cash-in-Hand")
     }
     total = sum(accounts.values(), Decimal("0")).quantize(PAISA)
     return ToolResult(
