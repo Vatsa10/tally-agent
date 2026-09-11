@@ -1,0 +1,18 @@
+{
+  "vendor": "Bharat Supplies",
+  "gstin": "29AAGCB7383J1Z4",
+  "invoice_no": "BS/2026/41",
+  "invoice_date": "2026-06-05",
+  "line_items": [
+    {
+      "description": "Packaging material",
+      "amount": 5000.0
+    }
+  ],
+  "taxable_value": 5000.0,
+  "cgst": 0,
+  "sgst": 0,
+  "igst": 900.0,
+  "total": 5900.0,
+  "place_of_supply": "29"
+}

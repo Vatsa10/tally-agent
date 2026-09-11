@@ -137,7 +137,8 @@ def gst_split_correct(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
             f"intra-state supply (both {ctx.company.state_code}) must use "
             "CGST+SGST, not IGST",
         )
-    if not interstate and gst.cgst != gst.sgst:
+    # Halving an odd tax amount legitimately leaves one paisa on one side.
+    if not interstate and abs(gst.cgst - gst.sgst) > PAISA:
         return RuleResult(
             "gst_split_correct",
             False,
