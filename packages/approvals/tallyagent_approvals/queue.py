@@ -32,6 +32,13 @@ from tallyagent_tools.base import PendingAction
 Executor = Callable[[PendingAction], Awaitable[WriteResult]]
 
 
+def _money(value: Decimal) -> str:
+    """Every figure an approver sees is quantised to the paisa."""
+    from tallyagent_core.models.voucher import PAISA
+
+    return format(value.quantize(PAISA), "f")
+
+
 def _dump_validation(report: ValidationReport | None) -> str:
     if report is None:
         return "null"
@@ -146,12 +153,12 @@ class ApprovalItem:
             "company": self.company,
             "action_type": self.action_type,
             "source": self.source,
-            "amount": format(self.amount, "f"),
+            "amount": _money(self.amount),
             "created_at": self.created_at.isoformat(),
             "ledger_impact": self.ledger_impact(),
             "totals": {
-                "debit": format(self.voucher.total_debit, "f") if self.voucher else "0",
-                "credit": format(self.voucher.total_credit, "f") if self.voucher else "0",
+                "debit": _money(self.voucher.total_debit) if self.voucher else "0.00",
+                "credit": _money(self.voucher.total_credit) if self.voucher else "0.00",
             },
             "validation": {
                 "ok": validation.ok if validation else True,

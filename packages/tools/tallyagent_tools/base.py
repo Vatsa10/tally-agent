@@ -46,14 +46,20 @@ class PendingAction:
     payload: dict[str, Any] = field(default_factory=dict)
 
     def ledger_impact(self) -> list[dict[str, str]]:
-        """The debit/credit table shown to the approver."""
+        """The debit/credit table shown to the approver.
+
+        Always to the paisa: a figure rendered as "5000.0" in front of an
+        accountant reads as a bug in the numbers, not in the formatting.
+        """
         if self.voucher is None:
             return []
+        from tallyagent_core.models.voucher import PAISA
+
         return [
             {
                 "ledger": line.ledger_name,
-                "debit": format(line.debit, "f") if line.debit else "",
-                "credit": format(line.credit, "f") if line.credit else "",
+                "debit": format(line.debit.quantize(PAISA), "f") if line.debit else "",
+                "credit": format(line.credit.quantize(PAISA), "f") if line.credit else "",
             }
             for line in self.voucher.lines
         ]
@@ -129,8 +135,11 @@ class ToolContext:
     async def _recent_vouchers(self) -> list[PostedVoucher]:
         """Day Book rows, folded back into duplicate-detection shape.
 
-        A Day Book row is per ledger line, so rows are grouped by voucher and
-        only the debit side is kept as the voucher's value.
+        A Day Book row is one ledger line, so rows are grouped by voucher and
+        the voucher's value is the *sum* of its debit lines - not the largest
+        one. On a purchase the party sits on the credit side and the debits are
+        split across the expense and the tax ledgers, so taking the largest
+        single line would understate the voucher and miss the duplicate.
         """
         period = self.company.period
         if period is None:
@@ -151,15 +160,16 @@ class ToolContext:
             key = f"{number}|{row.get('VOUCHERTYPENAME')}"
             existing = grouped.get(key)
             if existing is None:
-                grouped[key] = PostedVoucher(
+                existing = PostedVoucher(
                     party_name=str(row.get("PARTYLEDGERNAME") or "") or None,
                     reference=str(row.get("REFERENCE") or ""),
-                    amount=amount if amount > 0 else Decimal("0"),
+                    amount=Decimal("0"),
                     date=from_tally_date(str(row.get("DATE") or "")) or date.min,
                     voucher_number=number,
                 )
-            elif amount > existing.amount:
-                existing.amount = amount
+                grouped[key] = existing
+            if amount > 0:
+                existing.amount += amount
         return list(grouped.values())
 
 
