@@ -117,6 +117,8 @@ async def _submit_master(
 async def _execute_master(ctx: ToolContext, pending: PendingAction):  # type: ignore[no-untyped-def]
     """Perform a queued master creation. Shared with the approvals executor."""
     payload = pending.payload
+    if payload.get("kind") == "masters_batch":
+        return await _execute_masters_batch(ctx, pending)
     if payload.get("kind") == "party":
         party = Party.model_validate(payload["party"])
         return await ctx.backend.create_party(  # type: ignore[attr-defined]
@@ -125,6 +127,39 @@ async def _execute_master(ctx: ToolContext, pending: PendingAction):  # type: ig
     ledger = Ledger.model_validate(payload["ledger"])
     return await ctx.backend.create_ledger(
         ledger, pending.idempotency_key, ctx.company.name
+    )
+
+
+async def _execute_masters_batch(ctx: ToolContext, pending: PendingAction):  # type: ignore[no-untyped-def]
+    """Import a whole chart of accounts in one envelope.
+
+    One request rather than twenty: Tally resolves masters within a single
+    import, so a party whose group was created in the same batch still lands,
+    and one <LINEERROR> tells us which row failed rather than which request.
+    """
+    from tallyagent_backends.accounting_backend import WriteResult
+
+    payload = pending.payload
+    elements = [
+        builders.build_ledger_element(Ledger.model_validate(raw))
+        for raw in payload.get("ledgers", [])
+    ] + [
+        builders.build_party_element(Party.model_validate(raw))
+        for raw in payload.get("parties", [])
+    ]
+    if not elements:
+        return WriteResult(ok=True, idempotency_key=pending.idempotency_key)
+
+    result, raw_xml = await ctx.backend.client.import_elements(  # type: ignore[attr-defined]
+        elements, "All Masters", company=ctx.company.name
+    )
+    ctx._masters_cache = None
+    return WriteResult(
+        ok=result.ok,
+        master_id=result.last_master_id,
+        idempotency_key=pending.idempotency_key,
+        errors=result.messages,
+        raw_request=raw_xml,
     )
 
 

@@ -134,21 +134,15 @@ class FakeTally:
                 "COMPANY", [{"NAME": name} for name in self.companies]
             )
         if ident in ("List of Ledgers", "Ledger"):
+            # Real Tally's plain ledger collection returns names and nothing
+            # else. Reproducing that is the point: code that assumes richer
+            # rows must fail here, not in front of a client.
             return self._collection(
                 "LEDGER",
-                [
-                    {
-                        "@NAME": ledger.name,
-                        "NAME": ledger.name,
-                        "PARENT": ledger.parent,
-                        "OPENINGBALANCE": format(ledger.opening_balance, "f"),
-                        "PARTYGSTIN": ledger.gstin,
-                        "LEDSTATENAME": ledger.state,
-                        "MASTERID": ledger.master_id,
-                    }
-                    for ledger in self.ledgers.values()
-                ],
+                [{"@NAME": ledger.name} for ledger in self.ledgers.values()],
             )
+        if self._is_ledger_tdl(ident, root):
+            return self._collection("LEDGER", self._ledger_rows(root))
         if ident == "Trial Balance":
             return self._collection(
                 "LEDGER",
@@ -169,6 +163,49 @@ class FakeTally:
             )
         # Unknown report: Tally answers with an empty envelope, not an error.
         return self._collection("UNKNOWN", [])
+
+    def _is_ledger_tdl(self, ident: str, root: etree._Element) -> bool:
+        """Does this request carry a TDL collection over Ledger?
+
+        Matched on the TDL body rather than the collection name, because the
+        name is the caller's to choose.
+        """
+        for collection in root.iter("COLLECTION"):
+            if (collection.findtext("TYPE") or "").strip().lower() == "ledger":
+                return True
+        return False
+
+    def _ledger_rows(self, root: etree._Element) -> list[dict[str, str]]:
+        """Only the fields the request asked for in <FETCH>.
+
+        Real Tally returns exactly what was fetched, so a missing field in the
+        FETCH list must be missing here too - otherwise the fake quietly
+        supplies data production will not have.
+        """
+        fetch: set[str] = set()
+        for element in root.iter("FETCH"):
+            fetch |= {
+                part.strip().upper() for part in (element.text or "").split(",") if part.strip()
+            }
+
+        available = {
+            "NAME": lambda lg: lg.name,
+            "PARENT": lambda lg: lg.parent,
+            "OPENINGBALANCE": lambda lg: format(lg.opening_balance, "f"),
+            "PARTYGSTIN": lambda lg: lg.gstin,
+            "LEDSTATENAME": lambda lg: lg.state,
+            "MASTERID": lambda lg: lg.master_id,
+        }
+        rows: list[dict[str, str]] = []
+        for ledger in self.ledgers.values():
+            row: dict[str, str] = {"@NAME": ledger.name}
+            for field_name, read in available.items():
+                if field_name in fetch:
+                    value = read(ledger)
+                    if value:
+                        row[field_name] = value
+            rows.append(row)
+        return rows
 
     def _voucher_rows(self, root: etree._Element) -> list[dict[str, str]]:
         from_date = from_tally_date(root.findtext(".//SVFROMDATE") or "")

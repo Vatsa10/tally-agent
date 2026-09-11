@@ -29,6 +29,10 @@ class Services:
     router: Router
     memory: Memory | None = None
     max_steps: int = 12
+    #: Tier router and the latest Tier 2 observation, when perception is on.
+    #: Typed loosely so channels do not depend on the agent package's internals.
+    tiers: Any = None
+    ui_context: Any = None
     #: One Agent per conversation key (a browser session, a phone number), so
     #: two people talking at once do not share a history.
     _agents: dict[str, Agent] = field(default_factory=dict)

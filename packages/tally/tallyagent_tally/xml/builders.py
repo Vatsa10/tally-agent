@@ -217,11 +217,23 @@ def build_ledger_element(ledger: Ledger, action: str = "Create") -> etree._Eleme
 
 
 def build_party_element(party: Party, action: str = "Create") -> etree._Element:
-    """A party is a ledger under Sundry Debtors/Creditors plus trade terms."""
+    """A party is a ledger under Sundry Debtors/Creditors plus trade terms.
+
+    The state travels with it. Tally stores a state *name* while GST reasons in
+    *codes*, so a party created without one has no resolvable place of supply,
+    and every voucher for that party then warns instead of choosing IGST or
+    CGST+SGST. Found against live Tally.
+    """
+    from tallyagent_tally.backend import STATE_NAMES
+
+    state = None
+    if party.state_code:
+        state = STATE_NAMES.get(party.state_code.zfill(2))
     ledger = Ledger(
         name=party.ledger_name,
         parent="Sundry Debtors" if party.is_customer else "Sundry Creditors",
         gstin=party.gstin,
+        state=state,
     )
     element = build_ledger_element(ledger, action=action)
     if party.credit_period_days:

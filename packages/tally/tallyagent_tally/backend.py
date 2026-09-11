@@ -26,6 +26,8 @@ from tallyagent_tally.xml.quirks import from_tally_date
 
 log = logging.getLogger(__name__)
 
+#: Tally stores a state *name*; GST works in *codes*. Both directions are
+#: needed: reading masters maps name -> code, writing them maps code -> name.
 STATE_CODES = {
     "Maharashtra": "27",
     "Karnataka": "29",
@@ -37,7 +39,25 @@ STATE_CODES = {
     "Telangana": "36",
     "Haryana": "06",
     "Rajasthan": "08",
+    "Gujarat ": "24",
 }
+STATE_CODES.pop("Gujarat ", None)
+
+STATE_NAMES = {code: name for name, code in STATE_CODES.items()}
+
+
+def _party_state_code(gstin: str | None, state_name: str | None) -> str | None:
+    """A party's GST state code.
+
+    The GSTIN's first two digits are the authoritative place of supply for a
+    registered party, so they win. The state name is the fallback for an
+    unregistered party, and Tally does not always return one.
+    """
+    if gstin and len(gstin.strip()) >= 2 and gstin.strip()[:2].isdigit():
+        return gstin.strip()[:2]
+    if state_name:
+        return STATE_CODES.get(state_name)
+    return None
 
 
 class TallyBackend:
@@ -61,9 +81,24 @@ class TallyBackend:
     async def list_companies(self) -> list[str]:
         return await self.client.list_companies()
 
+    #: Real Tally's plain "List of Ledgers" collection returns *names only* -
+    #: no parent, no GSTIN, no opening balance. Fields have to be asked for
+    #: explicitly with a TDL FETCH. Verified against TallyPrime 1.1.7.1; the
+    #: fake server reproduces both shapes.
+    LEDGER_FETCH = (
+        "NAME,PARENT,OPENINGBALANCE,PARTYGSTIN,LEDSTATENAME,"
+        "GSTREGISTRATIONTYPE,MASTERID"
+    )
+    LEDGER_TDL = (
+        '<COLLECTION NAME="TALedgers" ISMODIFY="No">'
+        "<TYPE>Ledger</TYPE>"
+        f"<FETCH>{LEDGER_FETCH}</FETCH>"
+        "</COLLECTION>"
+    )
+
     async def get_masters(self, company: str | None = None) -> Masters:
         rows = await self.client.export_collection(
-            "List of Ledgers", "LEDGER", company=company
+            "TALedgers", "LEDGER", company=company, tdl=self.LEDGER_TDL
         )
         ledgers: list[Ledger] = []
         parties: list[Party] = []
@@ -90,7 +125,7 @@ class TallyBackend:
                         name=name,
                         ledger_name=name,
                         gstin=ledger.gstin,
-                        state_code=STATE_CODES.get(state or ""),
+                        state_code=_party_state_code(ledger.gstin, state),
                         is_customer=parent == "Sundry Debtors",
                         master_id=ledger.master_id,
                     )

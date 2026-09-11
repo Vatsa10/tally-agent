@@ -108,6 +108,9 @@ class ToolContext:
     #: Live-mode guard rails. Default is fake mode, which permits everything.
     live: LiveMode = field(default_factory=LiveMode)
     enqueue: Enqueue | None = None
+    #: Optional Tier 3 runner, wired only when the fallback is enabled. Typed as
+    #: Any so the tools package does not depend on the agent package.
+    fallback: Any = None
     # alias -> canonical ledger, learned from approver edits (agent memory)
     ledger_aliases: dict[str, str] = field(default_factory=dict)
     source: str = "chat"

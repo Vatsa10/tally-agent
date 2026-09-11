@@ -374,3 +374,71 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
 - **D-090 `EDU_ALLOWED_DAYS` is duplicated in core and in the adapter** rather
   than imported, because `core` must not depend on `tally`. A test pins the two
   equal.
+
+### 14.0a / 14.1 — enabling Tally and bootstrapping a company
+
+- **D-091 The tally.ini connectivity keys are known, not guessed.** Read off the
+  live install: `Client Server=Both`, `ServerPort=9000`, `Enable ODBC Server=Yes`,
+  `Data=...`. Recorded in docs/TALLY_INI_KEYS.md. `enable_tally_server` edits
+  those three lines (after a timestamped backup), restarts Tally and waits for
+  the port. Tier 3 is only reached if the keys are *absent*, and it then diffs
+  tally.ini before/after to learn the real names rather than guessing them.
+- **D-092 tally.ini is not parsed with `configparser`.** It uses `;;` comments,
+  keys with spaces, and values containing `:` and `\`. Parsed line by line, and
+  rewritten line by line so the rest of the file survives byte for byte.
+- **D-093 Tally is launched with `Start-Process`, not a bare subprocess.** It is
+  a GUI app and must attach to the user's desktop session; started any other way
+  it exits immediately. Verified the hard way.
+- **D-094 Company creation over XML does not work on TallyPrime 1.1.7.1, and the
+  UI path does.** Confirmed end to end: driving Create Company with keystrokes
+  produced `TA-Demo Traders`, and `List of Companies` then returned it over XML.
+  `bootstrap_company` still tries XML first (cheap, harmless, and a later Tally
+  may support it) and records which path was used in the audit log.
+- **D-095 The chart of accounts is one batched approval, not twenty tickets.**
+  An approver asked to click through twenty near-identical master creations
+  stops reading them. One import envelope also lets Tally resolve masters
+  against each other within the batch. Verified live: 12 masters, one approval.
+- **D-096 Seeding goes through the normal tools and the normal queue.** It is the
+  first real exercise of the voucher path against a given Tally, and it should
+  fail the way a user's first invoice would. It did: see D-098 and D-099.
+
+### 14.2 — the terminal UI
+
+- **D-097 Everything the TUI can do lives in `Session`, not in the Textual app.**
+  The app is rendering and key handling only. The same `Session` drives
+  `chat --script`, so the control surface a human uses is the one CI exercises;
+  a surface only reachable by pressing keys is a surface that is never tested.
+- **D-098 `shlex.split` mangles every Windows path.** In POSIX mode a backslash
+  is an escape, so `/ingest D:\Files\bill.png` arrived as `D:Filesbill.png` and
+  the file was "missing". Split in non-POSIX mode and strip quotes afterwards.
+- **D-099 The app smoke test asserts behaviour, not Textual's render tree.**
+  Rich renderables are library internals; the meaningful claim is that typing in
+  the box runs a turn, records a tool call, and clears the input.
+- **D-100 Tier 3 approval shows a braille rendering of the screenshot.** An
+  approver has to answer "is it about to press Enter on the right screen?"
+  without leaving the terminal, which a filename and a keystroke cannot support.
+  Degrades to a one-line description without Pillow rather than blocking.
+- **D-101 Editing a queued voucher is done by saying so in chat,** not by a
+  terminal line-editor form. It goes through the same queue and learns the alias,
+  and a form here would be more UI than it is worth.
+
+### What live Tally taught us, part two (found by actually posting)
+
+- **D-102 `List of Ledgers` returns names and nothing else.** No parent, no
+  GSTIN, no opening balance. Fields must be requested with a TDL `FETCH`
+  collection. Our fake server had been returning rich rows, which is exactly the
+  divergence that makes a fake dangerous, so `fake_server` now returns names
+  only for the plain collection and honours `<FETCH>` for a TDL one.
+- **D-103 A TDL collection with `<TYPE>` and `<FETCH>` is safe; one without a
+  description crashes Tally.** The crash in D-081 was a malformed collection,
+  not TDL as such. The adapter uses the `TYPE`+`FETCH` form and nothing else.
+- **D-104 A party's state comes from its GSTIN, not from Tally.** `LEDSTATENAME`
+  is not a fetchable ledger field on this version, and the first two digits of a
+  GSTIN *are* the place of supply for a registered party. State name is the
+  fallback for an unregistered one.
+- **D-105 `build_party_element` was dropping `state_code`.** A party created
+  without a state has no resolvable place of supply, so every voucher for it
+  warned instead of choosing IGST or CGST+SGST. Found by posting for real.
+- **D-106 SPEC.md's example GSTIN `24AAAAA0000A1Z5` fails its own checksum.**
+  Our `gstin_valid` rule caught it on the first live voucher. The demo uses
+  `24AAAAA0000A1Z8`, which is the checksum-correct form of the same number.

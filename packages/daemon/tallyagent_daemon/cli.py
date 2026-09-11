@@ -1,7 +1,9 @@
 """The ``tallyagent`` command line.
 
-    tallyagent probe             is Tally there, which companies are open
-    tallyagent chat              a REPL against the configured model
+    tallyagent probe             is Tally there, which edition, what is loaded
+    tallyagent tui               the terminal chat UI (the main control surface)
+    tallyagent chat              a plain REPL, or --script for a scenario
+    tallyagent enable-server     turn on Tally's XML interface and restart it
     tallyagent serve             the daemon: web UI, WhatsApp webhook, scheduler
     tallyagent mcp               the MCP server (stdio or http)
     tallyagent audit verify      check the hash chain
@@ -67,6 +69,25 @@ def _wire(config: Config, fake: bool) -> wiring.Wired:
     return wiring.build(config, transport=transport)
 
 
+def _wire_fallback(wired: wiring.Wired) -> None:
+    """Attach the Tier 3 runner when policy allows it.
+
+    Wired here rather than in ``wiring.build`` so the fallback only exists in
+    the surfaces that can actually ask a human to approve a keystroke.
+    """
+    config = wired.config
+    if not config.tiers.fallback_enabled:
+        return
+    from tallyagent_agent.fallback.computer_use import ComputerUseFallback
+    from tallyagent_agent.tiers import TierRouter
+
+    router = TierRouter(config.tiers)
+    wired.services.tiers = router  # type: ignore[attr-defined]
+    wired.services.tools.fallback = ComputerUseFallback(
+        wired.services.router, router
+    )
+
+
 @app.command()
 def probe(
     config_path: str = CONFIG_OPTION,
@@ -99,11 +120,24 @@ def chat(
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
+    script: str = typer.Option(
+        "", "--script", help="Run a YAML scenario non-interactively instead of a REPL."
+    ),
 ) -> None:
-    """A REPL. Type a question; 'quit' to leave."""
+    """A REPL. Type a question; 'quit' to leave. --script runs a scenario."""
     config = _load(config_path, policy_path)
     wired = _wire(config, fake)
     services = wired.services
+
+    if script:
+        from tallyagent_channels.tui.script_runner import Scenario, run_scenario
+
+        scenario = Scenario.load(script)
+        result = asyncio.run(run_scenario(services, scenario, live=config.live))
+        typer.echo(result.report())
+        if not result.ok:
+            raise typer.Exit(code=1)
+        return
 
     typer.echo(f"tallyagent - {services.company.name or '(no company configured)'}")
     if wired.using_mock_model:
@@ -136,6 +170,45 @@ def chat(
             f"  [{len(result.steps)} step(s), {result.total_tokens} tokens, "
             f"{result.total_egress_bytes} bytes sent]"
         )
+
+
+@app.command()
+def tui(
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+    fake: bool = FAKE_OPTION,
+) -> None:
+    """The terminal UI: chat, Tally status, and the approval queue."""
+    from tallyagent_channels.tui.app import run as run_tui
+
+    config = _load(config_path, policy_path)
+    # The TUI owns the screen, so logging must not scribble over it.
+    logging.getLogger().handlers.clear()
+    logging.getLogger().addHandler(logging.NullHandler())
+
+    wired = _wire(config, fake)
+    _wire_fallback(wired)
+    run_tui(wired.services, config.live)
+
+
+@app.command("enable-server")
+def enable_server(
+    port: int = typer.Option(9000, help="The port Tally should listen on."),
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Turn on TallyPrime's XML interface, restart it, and verify the port."""
+    from tallyagent_tools import tally_admin
+
+    config = _load(config_path, policy_path)
+    wired = _wire(config, fake=False)
+    _wire_fallback(wired)
+    result = asyncio.run(
+        tally_admin.enable_tally_server(wired.services.tools, port=port)
+    )
+    typer.echo(result.message)
+    if not (result.data or {}).get("ok"):
+        raise typer.Exit(code=1)
 
 
 @app.command()
