@@ -28,6 +28,7 @@ class PostedVoucher:
     amount: Decimal
     date: date
     voucher_number: str = ""
+    voucher_type: str = ""
 
 
 @dataclass(slots=True)
@@ -199,25 +200,55 @@ def period_open(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
     return RuleResult("period_open", True, f"{voucher.date} is in an open period")
 
 
+#: Without an invoice number, two identical payments this many days apart are
+#: treated as the same one. Tighter than the reference-matched window, because
+#: a genuine second payment of the same amount to the same party does happen -
+#: just rarely on the same day.
+UNREFERENCED_WINDOW_DAYS = 1
+
+
 def not_duplicate(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
-    """Same party + invoice reference + amount inside the window."""
+    """Same party and amount, matched on the invoice reference where there is
+    one and on the date where there is not.
+
+    Receipts and payments often carry no reference, and matching on reference
+    alone let the same payment be posted twice - found live. An unreferenced
+    voucher therefore matches on party, amount, type and a much tighter date
+    window instead of being waved through.
+    """
     window = timedelta(days=ctx.duplicate_window_days)
+    tight = timedelta(days=UNREFERENCED_WINDOW_DAYS)
     amount = voucher.amount
+
     for posted in ctx.recent_vouchers:
         if posted.party_name != voucher.party_name:
             continue
-        if not posted.reference or posted.reference != voucher.reference:
-            continue
         if posted.amount.quantize(PAISA) != amount:
             continue
-        if abs(posted.date - voucher.date) > window:
-            continue
+
+        if voucher.reference and posted.reference:
+            if posted.reference != voucher.reference:
+                continue
+            if abs(posted.date - voucher.date) > window:
+                continue
+            why = f"reference {posted.reference!r} and amount {amount}"
+        else:
+            # No reference on one side or the other: fall back to date.
+            if abs(posted.date - voucher.date) > tight:
+                continue
+            if posted.voucher_type and posted.voucher_type != voucher.voucher_type.value:
+                continue
+            why = (
+                f"amount {amount} on the same date, and neither carries an "
+                "invoice reference to tell them apart"
+            )
+
         number = posted.voucher_number or "(unnumbered)"
         return RuleResult(
             "not_duplicate",
             False,
             f"looks like a duplicate of voucher {number} dated {posted.date}: "
-            f"same party, reference {posted.reference!r} and amount {amount}",
+            f"same party, {why}",
             details={
                 "voucher_number": posted.voucher_number,
                 "date": posted.date.isoformat(),

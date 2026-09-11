@@ -384,3 +384,77 @@ def test_auto_below_amount_without_a_limit_fails_closed():
         {"actions": {"create_receipt": {"mode": "auto_below_amount"}}}
     )
     assert policy.requires_approval("create_receipt", Decimal("1"))
+
+
+# --- duplicates without an invoice reference --------------------------------
+
+
+def _receipt(when: date, amount: str = "5000.00"):
+    """A receipt, which in real life usually carries no invoice reference."""
+    return Voucher(
+        voucher_type=VoucherType.RECEIPT,
+        date=when,
+        party_name="Acme Industries",
+        lines=[
+            VoucherLine(ledger_name="Bank - HDFC 1234", amount=Decimal(amount)),
+            VoucherLine(ledger_name="Acme Industries", amount=-Decimal(amount)),
+        ],
+    )
+
+
+def test_an_unreferenced_receipt_can_still_be_a_duplicate():
+    """Found live: matching on reference alone let the same payment post twice,
+    because receipts and payments usually have no reference at all."""
+    posted = PostedVoucher(
+        party_name="Acme Industries",
+        reference="",
+        amount=Decimal("5000.00"),
+        date=date(2026, 6, 1),
+        voucher_number="R/1",
+        voucher_type="Receipt",
+    )
+    report = validate(_receipt(date(2026, 6, 1)), ctx(recent_vouchers=[posted]))
+    failure = next(r for r in report.failures if r.rule == "not_duplicate")
+    assert "R/1" in failure.message
+    assert "neither carries an invoice reference" in failure.message
+
+
+def test_an_unreferenced_receipt_a_week_later_is_not_a_duplicate():
+    """The fallback window is deliberately tight: a second payment of the same
+    amount to the same party is normal, just not on the same day."""
+    posted = PostedVoucher(
+        party_name="Acme Industries",
+        reference="",
+        amount=Decimal("5000.00"),
+        date=date(2026, 6, 1),
+        voucher_number="R/1",
+        voucher_type="Receipt",
+    )
+    assert validate(_receipt(date(2026, 6, 8)), ctx(recent_vouchers=[posted])).ok
+
+
+def test_a_different_voucher_type_is_not_a_duplicate():
+    posted = PostedVoucher(
+        party_name="Acme Industries",
+        reference="",
+        amount=Decimal("5000.00"),
+        date=date(2026, 6, 1),
+        voucher_number="P/1",
+        voucher_type="Payment",
+    )
+    assert validate(_receipt(date(2026, 6, 1)), ctx(recent_vouchers=[posted])).ok
+
+
+def test_a_referenced_voucher_still_matches_on_its_reference():
+    """The tight window must not weaken the referenced case, which matches
+    across a month."""
+    posted = PostedVoucher(
+        party_name="Acme Industries",
+        reference="INV-001",
+        amount=Decimal("11800.00"),
+        date=date(2026, 6, 1),
+        voucher_number="S/1",
+        voucher_type="Sales",
+    )
+    report = validate(sales_voucher(date=date(2026, 6, 20)), ctx(recent_vouchers=[posted]))
+    assert any(r.rule == "not_duplicate" for r in report.failures)

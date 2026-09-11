@@ -405,3 +405,34 @@ async def test_zoho_skeleton_fails_loudly_with_a_useful_message():
     zoho = ZohoBooksBackend()
     with pytest.raises(NotImplementedError, match="AccountingBackend protocol"):
         await zoho.list_companies()
+
+
+async def test_voucher_queries_are_filtered_by_date(backend, fake_tally):
+    """Tally honours SVFROMDATE on a *report*, not on a TDL collection: it
+    returns the whole book regardless. Found live, where 'the day book for the
+    last 30 days' quietly meant 'every voucher ever'."""
+    from tallyagent_core.models import Voucher, VoucherLine, VoucherType
+
+    for when in (date(2026, 4, 1), date(2026, 6, 1), date(2026, 8, 1)):
+        voucher = Voucher(
+            voucher_type=VoucherType.JOURNAL,
+            date=when,
+            lines=[
+                VoucherLine(ledger_name="Cash", amount=Decimal("10")),
+                VoucherLine(ledger_name="Bank - HDFC 1234", amount=Decimal("-10")),
+            ],
+        )
+        await backend.create_voucher(voucher, make_key("Demo", voucher))
+
+    everything = await backend.get_vouchers()
+    assert len({row["DATE"] for row in everything}) == 3
+
+    june = await backend.get_vouchers(
+        from_date=date(2026, 5, 1), to_date=date(2026, 6, 30)
+    )
+    assert {row["DATE"] for row in june} == {"20260601"}
+
+    nothing = await backend.get_vouchers(
+        from_date=date(2027, 1, 1), to_date=date(2027, 1, 31)
+    )
+    assert nothing == []

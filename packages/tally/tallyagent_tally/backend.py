@@ -184,8 +184,24 @@ class TallyBackend:
         for row in rows:
             if row.get("AMOUNT") not in (None, ""):
                 row["AMOUNT"] = format(-parsers.to_decimal(row["AMOUNT"]), "f")
+
+        # SVFROMDATE, SVTODATE and SVLEDGERNAME are honoured by *reports*, not by
+        # a TDL collection: Tally returns the whole book regardless. Filtering
+        # has to happen here, or "the day book for June" quietly means "every
+        # voucher ever", and so does every figure derived from it.
+        if from_date or to_date:
+            kept = []
+            for row in rows:
+                when = from_tally_date(str(row.get("DATE") or ""))
+                if when is None:
+                    continue
+                if from_date and when < from_date:
+                    continue
+                if to_date and when > to_date:
+                    continue
+                kept.append(row)
+            rows = kept
         if ledger_name:
-            # SVLEDGERNAME does not filter a TDL collection, so filter here.
             rows = [row for row in rows if row.get("LEDGERNAME") == ledger_name]
         return rows
 

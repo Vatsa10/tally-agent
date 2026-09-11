@@ -173,6 +173,7 @@ class ToolContext:
                     amount=Decimal("0"),
                     date=from_tally_date(str(row.get("DATE") or "")) or date.min,
                     voucher_number=number,
+                    voucher_type=str(row.get("VOUCHERTYPENAME") or ""),
                 )
                 grouped[key] = existing
             if amount > 0:
