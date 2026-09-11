@@ -74,6 +74,7 @@ async def _submit_master(
     unapproved master is simply queued; policy can auto-approve it, and the
     executor calls the right backend method from ``payload["kind"]``.
     """
+    ctx.live.require_write_scope(ctx.company.name)
     # A master has no voucher, so the idempotency key is derived from a
     # synthetic one-line voucher standing in for "create this master".
     stand_in = Voucher(

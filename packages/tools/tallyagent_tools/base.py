@@ -16,6 +16,7 @@ from typing import Any
 
 from tallyagent_backends.accounting_backend import AccountingBackend, WriteResult
 from tallyagent_core import idempotency
+from tallyagent_core.livemode import LiveMode
 from tallyagent_core.models import Company, Voucher
 from tallyagent_core.policy import Policy
 from tallyagent_core.validation import (
@@ -104,6 +105,8 @@ class ToolContext:
     backend: AccountingBackend
     company: Company
     policy: Policy = field(default_factory=Policy.default)
+    #: Live-mode guard rails. Default is fake mode, which permits everything.
+    live: LiveMode = field(default_factory=LiveMode)
     enqueue: Enqueue | None = None
     # alias -> canonical ledger, learned from approver edits (agent memory)
     ledger_aliases: dict[str, str] = field(default_factory=dict)
@@ -130,6 +133,7 @@ class ToolContext:
                 p.name: p.state_code for p in masters.parties if p.state_code
             },
             recent_vouchers=await self._recent_vouchers(),
+            edu_mode=self.live.edu,
         )
 
     async def _recent_vouchers(self) -> list[PostedVoucher]:
@@ -182,10 +186,15 @@ async def submit(
 ) -> ToolResult:
     """The single path every voucher write takes.
 
-    validate -> block on failure -> auto-approve only if policy says so ->
-    otherwise queue. There is deliberately no way to reach the backend's
+    scope -> validate -> block on failure -> auto-approve only if policy says
+    so -> otherwise queue. There is deliberately no way to reach the backend's
     ``create_voucher`` from a tool without passing through here.
+
+    The write-scope check comes first and raises rather than returning a result:
+    a write aimed at a company we must not touch is a programming or config
+    error, not a validation finding to be shown to an approver.
     """
+    ctx.live.require_write_scope(ctx.company.name)
     report = validate(voucher, await ctx.validation_context())
     key = idempotency.make_key(ctx.company.name, voucher)
     raw_xml = builders.to_string(builders.build_voucher_element(voucher))

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import typer
@@ -53,6 +54,10 @@ def _wire(config: Config, fake: bool) -> wiring.Wired:
         # Report an honest address: the fake is in-process, not at the
         # placeholder host still sitting in config.toml.
         config.tally.host = "fake-tally"
+        # The fake cannot touch real books, so the live guard does not apply -
+        # leaving it on would refuse to write to the fake's demo company.
+        config.mode = "fake"
+        config.live = replace(config.live, enabled=False)
         if not config.company.name:
             config.company = config.company.model_copy(
                 update={"name": "Demo Traders Pvt Ltd"}
@@ -68,7 +73,7 @@ def probe(
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
 ) -> None:
-    """Check the Tally connection and list open companies."""
+    """Check the Tally connection, edition, server mode and open companies."""
     config = _load(config_path, policy_path)
     if config.tally_is_placeholder and not fake:
         typer.echo(
@@ -81,18 +86,12 @@ def probe(
 
     wired = _wire(config, fake)
 
-    async def go() -> dict[str, str]:
-        return await wired.backend.probe()
+    from tallyagent_tally.probe import probe as run_probe
 
-    try:
-        info = asyncio.run(go())
-    except Exception as exc:  # noqa: BLE001 - the whole point is to report this
-        typer.echo(f"Could not reach Tally: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    typer.echo(f"Tally at {info['url']}: {info['status']}")
-    typer.echo(f"  version:   {info['version']}")
-    typer.echo(f"  companies: {info['companies'] or '(none open)'}")
+    report = asyncio.run(run_probe(wired.backend.client, config.live))
+    typer.echo(report.render())
+    if not report.ready:
+        raise typer.Exit(code=1)
 
 
 @app.command()

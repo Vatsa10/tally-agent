@@ -41,6 +41,9 @@ class ValidationContext:
     party_state_codes: dict[str, str] = field(default_factory=dict)
     recent_vouchers: list[PostedVoucher] = field(default_factory=list)
     duplicate_window_days: int = DUPLICATE_WINDOW_DAYS
+    #: True when the target Tally is a student/Educational install, which only
+    #: accepts vouchers dated on EDU_ALLOWED_DAYS.
+    edu_mode: bool = False
 
     def resolve(self, name: str) -> str | None:
         """Exact match, then a learned alias. Never a fuzzy guess - fuzzy
@@ -223,6 +226,35 @@ def not_duplicate(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
     return RuleResult("not_duplicate", True, "no matching voucher in the window")
 
 
+#: Days of the month a TallyPrime Educational (student) install will accept.
+#: Duplicated from tallyagent_tally.xml.quirks rather than imported: core must
+#: not depend on the adapter. The two are asserted equal in the tests.
+EDU_ALLOWED_DAYS = (1, 2, 31)
+
+
+def edu_date_allowed(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
+    """Educational mode only accepts the 1st, 2nd and 31st of a month.
+
+    Checked here so the failure is a readable report line naming the dates that
+    would work, rather than an opaque Tally rejection after the envelope has
+    gone. Inert when the target is a licensed install.
+    """
+    if not ctx.edu_mode:
+        return RuleResult("edu_date_allowed", True, "not an Educational install")
+    if voucher.date.day in EDU_ALLOWED_DAYS:
+        return RuleResult(
+            "edu_date_allowed", True, f"{voucher.date} is enterable in Educational mode"
+        )
+    allowed = ", ".join(str(day) for day in EDU_ALLOWED_DAYS)
+    return RuleResult(
+        "edu_date_allowed",
+        False,
+        f"TallyPrime Educational mode will not accept a voucher dated "
+        f"{voucher.date}; only the {allowed} of a month are enterable",
+        details={"allowed_days": list(EDU_ALLOWED_DAYS), "date": voucher.date.isoformat()},
+    )
+
+
 #: Run in this order; the report reads top-to-bottom in the approval UI.
 ALL_RULES = (
     ledgers_exist,
@@ -231,5 +263,6 @@ ALL_RULES = (
     gst_split_correct,
     gstin_valid,
     period_open,
+    edu_date_allowed,
     not_duplicate,
 )

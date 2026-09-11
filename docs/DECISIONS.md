@@ -303,3 +303,74 @@ These are the known gaps.
   the build script and the Dockerfile are present, documented, and asserted to
   exist and to be correctly shaped; an actual Windows build and an actual
   container build were not run as part of this session.
+
+## Stage 14 — live TallyPrime
+
+Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
+(student) mode**, `C:\Program Files\TallyPrime`, probed 2026-09-11.
+
+### What live Tally actually does (measured, not assumed)
+
+- **D-077 The request charset must match the bytes sent, and we were getting it
+  wrong.** `client.py` declared `Content-Type: text/xml; charset=utf-16` while
+  sending UTF-8. Live Tally answers *every* such request with
+  `<RESPONSE>Unknown Request, cannot be processed</RESPONSE>` — no error code,
+  no hint, HTTP 200. Declaring `charset=utf-8` makes everything work. The fake
+  server never caught this because it ignores headers. Pinned in
+  `quirks.REQUEST_CONTENT_TYPE`.
+- **D-078 Tally echoes the charset back.** Declare UTF-16 and the *response* is
+  UTF-16LE. `clean_response` now detects UTF-16 (BOM or NUL-interleaving) and
+  re-encodes to UTF-8, so one parser handles either. `tallyerr.log` is UTF-16LE
+  too.
+- **D-079 XML company creation is not supported on this build.** Every
+  `Import Data` resolves a current company first. With none loaded:
+  `<LINEERROR>Could not find Company ''</LINEERROR>`. With an empty
+  `SVCURRENTCOMPANY` element: `<LINEERROR>Could not set 'SVCurrentCompany' to
+  ''</LINEERROR>`. A `REPORTNAME` of `Create Company` hangs the request until it
+  times out. **Company creation therefore requires the Tier 3 keyboard path** —
+  which is what Stage 14.1 Attempt B exists for.
+- **D-080 `<CMPINFO>` is a free health signal.** Every export response carries
+  object counters (`COMPANY`, `LEDGER`, `VOUCHER`, ...). All zero means no
+  company is loaded, i.e. Tally is sitting on the Select Company screen. The
+  probe reads it instead of inferring from an empty collection.
+- **D-081 Malformed TDL crashes Tally outright.** A collection referencing an
+  undefined description killed the process (`tally1.dmp` written,
+  `tallyerr.log`: "Error in TDL. 'Collection:TACompanies' Could not find
+  description!"). Custom TDL is therefore treated as a loaded weapon: the
+  adapter sends none by default, and anything that does must be tested against a
+  disposable install first.
+- **D-082 Tally reports no version over XML.** The GET banner is exactly
+  `<RESPONSE>TallyPrime Server is Running</RESPONSE>`. Version comes from the
+  `tally.exe` file version instead; edition comes from config, since the banner
+  does not name it on 1.x.
+- **D-083 The window title carries the port** once server mode is on
+  (`TallyPrime:9000`). Used as a cross-check: `tally.ini` says what Tally will do
+  next start, the title says what the running process is doing now.
+
+### 14.0 — live-mode safety
+
+- **D-084 Write scope is a prefix check on the company name, and nothing
+  cleverer.** Live mode may only write to companies starting with `TA-`
+  (configurable). An allow-list or a regex would be a thing to get subtly wrong;
+  a prefix is auditable at a glance. Enforced in `livemode.LiveMode`, called at
+  the top of `tools.base.submit` and `tools.masters._submit_master` — before
+  validation, before the queue, before any XML is built.
+- **D-085 An empty `write_prefix` allows nothing, not everything.** Fail closed:
+  the misconfiguration that would otherwise mean "write anywhere" is the one
+  that must not.
+- **D-086 `--fake-tally` forces fake mode.** The guard is about protecting real
+  books; leaving it on against the fake would refuse to write to the fake's own
+  demo company.
+- **D-087 EDU mode defaults ON in live mode.** A student install is the common
+  case, and being wrong in that direction costs a warning rather than a voucher
+  Tally silently refuses. `tally.edu = false` turns it off for a licensed
+  install.
+- **D-088 `edu_date_allowed` is a validation rule, not a client-side filter.**
+  The failure then reads as a report line naming the dates that would work,
+  shown in the approval diff like every other rule.
+- **D-089 Date snapping never happens silently.** `snap_to_edu_date` returns
+  `(date, warning)` and the warning is always surfaced. A silently moved date is
+  a voucher in the wrong period — at a month boundary, the wrong GST return.
+- **D-090 `EDU_ALLOWED_DAYS` is duplicated in core and in the adapter** rather
+  than imported, because `core` must not depend on `tally`. A test pins the two
+  equal.

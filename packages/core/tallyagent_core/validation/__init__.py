@@ -9,6 +9,7 @@ from tallyagent_core.validation.report import (
 from tallyagent_core.validation.rules import (
     ALL_RULES,
     DUPLICATE_WINDOW_DAYS,
+    EDU_ALLOWED_DAYS,
     PostedVoucher,
     ValidationContext,
 )
@@ -16,6 +17,7 @@ from tallyagent_core.validation.rules import (
 __all__ = [
     "ALL_RULES",
     "DUPLICATE_WINDOW_DAYS",
+    "EDU_ALLOWED_DAYS",
     "PostedVoucher",
     "RuleResult",
     "Severity",

@@ -17,6 +17,7 @@ from typing import Any
 
 from tallyagent_agent.tiers import TierConfig
 from tallyagent_channels.whatsapp.meta import WhatsAppConfig, normalise_number
+from tallyagent_core.livemode import DEFAULT_WRITE_PREFIX, LiveMode
 from tallyagent_core.models import Company, Period
 from tallyagent_core.policy import Policy
 from tallyagent_llm.router import ModelConfig
@@ -49,6 +50,10 @@ class LoggingConfig:
 
 @dataclass(slots=True)
 class Config:
+    #: "fake" (default) or "live". Live mode turns on the write-scope guard and,
+    #: on a student install, the Educational date rule.
+    mode: str = "fake"
+    live: LiveMode = field(default_factory=LiveMode)
     tally: TallyConfig = field(default_factory=TallyConfig)
     company: Company = field(default_factory=lambda: Company(name="", state_code="27"))
     model: ModelConfig = field(default_factory=ModelConfig)
@@ -63,6 +68,10 @@ class Config:
     @property
     def tally_is_placeholder(self) -> bool:
         return self.tally.host in (PLACEHOLDER_HOST, "", "0.0.0.0")
+
+    @property
+    def is_live(self) -> bool:
+        return self.live.enabled
 
 
 def _date(raw: Any) -> date | None:
@@ -124,7 +133,19 @@ def from_dict(
         for number, company_name in (whatsapp_raw.get("allowlist") or {}).items()
     }
 
+    mode = str(data.get("mode") or "fake").strip().lower()
+    live_enabled = mode == "live"
+    # EDU defaults ON in live mode: a student install is the common case, and
+    # being wrong in that direction costs a warning, not a rejected voucher.
+    edu = bool(tally_raw.get("edu", live_enabled))
+
     return Config(
+        mode=mode,
+        live=LiveMode(
+            enabled=live_enabled,
+            write_prefix=str(tally_raw.get("write_prefix") or DEFAULT_WRITE_PREFIX),
+            edu=edu,
+        ),
         tally=TallyConfig(
             host=str(tally_raw.get("host") or PLACEHOLDER_HOST),
             port=int(tally_raw.get("port") or 9000),

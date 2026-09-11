@@ -1,6 +1,11 @@
 # tallyagent configuration. Copy to config/config.toml and edit.
 # Secrets are NEVER read from this file — see docs/SECURITY.md.
 
+# "fake" runs entirely against the in-process fake Tally and cannot touch a real
+# installation. "live" talks to TallyPrime on [tally] host/port and turns on the
+# write-scope guard below.
+mode = "fake"
+
 [tally]
 # Placeholder on purpose: tallyagent must not talk to a real Tally until you
 # set this. TallyPrime: F1 > Settings > Connectivity > Client/Server > Server.
@@ -11,6 +16,17 @@ company = ""               # blank = whichever company is open in Tally
 # Tally ODBC/HTTP user, if your Tally requires one. Password comes from
 # the OS keyring / TALLY_PASSWORD env var, never from here.
 username = ""
+
+# Live mode may only write to companies whose name starts with this. It is what
+# protects real books that appear on the same machine: a write aimed anywhere
+# else is refused before validation, before the approval queue, before anything
+# is built. Companies the agent creates are named with this prefix.
+write_prefix = "TA-"
+
+# TallyPrime Educational (student) mode only accepts vouchers dated on the 1st,
+# 2nd or 31st of a month. Leave unset to default to true in live mode; set
+# false on a licensed install to allow any date.
+# edu = true
 
 [company]
 # Used for GST CGST/SGST vs IGST determination and period validation.

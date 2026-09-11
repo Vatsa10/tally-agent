@@ -17,7 +17,7 @@ from lxml import etree
 
 from tallyagent_core.errors import ConnectionError_, TallyError
 from tallyagent_tally.xml import builders, parsers
-from tallyagent_tally.xml.quirks import to_tally_date
+from tallyagent_tally.xml.quirks import REQUEST_CONTENT_TYPE, to_tally_date
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class TallyClient:
                 response = await http.post(
                     self.config.url,
                     content=payload,
-                    headers={"Content-Type": "text/xml; charset=utf-16"},
+                    headers={"Content-Type": REQUEST_CONTENT_TYPE},
                 )
         except httpx.RequestError as exc:
             raise ConnectionError_(self.config.url, str(exc)) from exc
@@ -80,6 +80,20 @@ class TallyClient:
                 f"Tally returned HTTP {response.status_code}: {response.text[:200]}"
             )
         return response.content
+
+    async def banner(self) -> str:
+        """The bare GET response.
+
+        Tally answers ``<RESPONSE>TallyPrime Server is Running</RESPONSE>``. It
+        is the cheapest proof of life and the only thing that works before any
+        company is loaded.
+        """
+        try:
+            async with self._client() as http:
+                response = await http.get(self.config.url)
+        except httpx.RequestError as exc:
+            raise ConnectionError_(self.config.url, str(exc)) from exc
+        return response.content.decode("utf-8", errors="replace")
 
     # --- probe --------------------------------------------------------------
 

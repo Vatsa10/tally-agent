@@ -66,6 +66,7 @@ def build(
         backend=backend,
         company=config.company,
         policy=config.policy,
+        live=config.live,
         enqueue=queue.enqueue,
         ledger_aliases=queue.learned_aliases(config.company.name),
     )
