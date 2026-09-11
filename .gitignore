@@ -12,3 +12,7 @@ egress.jsonl
 build/
 dist/
 uv.lock
+.coverage
+htmlcov/
+config/config.toml
+config/policy.toml
