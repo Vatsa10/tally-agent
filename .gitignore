@@ -19,3 +19,5 @@ config/policy.toml
 
 reports/
 live.db
+
+live*.db
