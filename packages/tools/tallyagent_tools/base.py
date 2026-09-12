@@ -119,6 +119,7 @@ class ToolContext:
     ledger_aliases: dict[str, str] = field(default_factory=dict)
     source: str = "chat"
     _masters_cache: Any = None
+    _stock_cache: Any = None
 
     async def masters(self, refresh: bool = False):  # type: ignore[no-untyped-def]
         """Masters snapshot, cached for the life of one agent turn.
@@ -141,7 +142,28 @@ class ToolContext:
             },
             recent_vouchers=await self._recent_vouchers(),
             edu_mode=self.live.edu,
+            **(await self._stock_context()),
         )
+
+    async def _stock_context(self) -> dict[str, Any]:
+        """Stock masters and quantities on hand, when the company has any.
+
+        A services company has no stock items, and asking Tally for them on
+        every validation would be a wasted round trip, so an empty result means
+        the inventory rules are inert rather than failing.
+        """
+        from tallyagent_tools import stock
+
+        try:
+            items = await stock.stock_masters(self)
+        except Exception:  # noqa: BLE001 - inventory is optional; never block a write
+            return {}
+        if not items:
+            return {}
+        return {
+            "known_stock_items": {item.name for item in items},
+            "stock_on_hand": await stock.on_hand(self),
+        }
 
     async def _recent_vouchers(self) -> list[PostedVoucher]:
         """Day Book rows, folded back into duplicate-detection shape.

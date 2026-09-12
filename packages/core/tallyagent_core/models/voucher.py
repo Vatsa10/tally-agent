@@ -7,6 +7,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
+from tallyagent_core.models.inventory import QUANTITY, InventoryLine
+
 # GST rates notified under the CGST Act that we accept. Anything else is a typo
 # or an unsupported scheme and must not reach Tally.
 VALID_GST_RATES: frozenset[Decimal] = frozenset(
@@ -88,6 +90,10 @@ class Voucher(BaseModel):
     voucher_type: VoucherType
     date: date
     lines: list[VoucherLine] = Field(min_length=1)
+    #: Stock movements, for a company that tracks inventory. Empty on an
+    #: accounting-only voucher, which stays the default: adding inventory must
+    #: not change what a services firm posts.
+    inventory: list[InventoryLine] = Field(default_factory=list)
     party_name: str | None = None
     narration: str = ""
     reference: str = ""
@@ -100,6 +106,17 @@ class Voucher(BaseModel):
     #: TallyPrime 1.x - an Alter addressed by either silently creates a
     #: duplicate. Defaults to the idempotency key at post time.
     remote_id: str | None = None
+
+    @property
+    def has_inventory(self) -> bool:
+        return bool(self.inventory)
+
+    @property
+    def inventory_value(self) -> Decimal:
+        """What the stock on this voucher is worth."""
+        return sum((line.amount for line in self.inventory), Decimal("0")).quantize(
+            PAISA
+        )
 
     @property
     def total_debit(self) -> Decimal:
@@ -128,6 +145,11 @@ class Voucher(BaseModel):
         lines = sorted(
             f"{ln.ledger_name}|{ln.amount.quantize(PAISA)}" for ln in self.lines
         )
+        stock = sorted(
+            f"{item.stock_item}|{item.quantity.quantize(QUANTITY)}"
+            f"|{item.rate.quantize(PAISA)}"
+            for item in self.inventory
+        )
         payload = "|".join(
             [
                 self.voucher_type.value,
@@ -135,6 +157,7 @@ class Voucher(BaseModel):
                 self.party_name or "",
                 self.reference or "",
                 *lines,
+                *stock,
             ]
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()

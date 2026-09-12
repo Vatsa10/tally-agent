@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from tallyagent_tools import ingest, masters, reconcile, reports, vouchers
+from tallyagent_tools import ingest, masters, reconcile, reports, stock, vouchers
 from tallyagent_tools.base import ToolContext, ToolResult
 
 ToolFn = Callable[..., Awaitable[ToolResult]]
@@ -209,8 +209,26 @@ TOOLS: tuple[Tool, ...] = (
                 "narration": _STRING,
                 "sales_ledger": _STRING,
                 "place_of_supply": {**_STRING, "description": "Two-digit GST state code"},
+                "items": {
+                    "type": "array",
+                    "description": (
+                        "Stock moved by this voucher. Give a positive quantity; "
+                        "the direction comes from the voucher type. When present "
+                        "the taxable value is computed from the goods."
+                    ),
+                    "items": _object(
+                        {
+                            "stock_item": _STRING,
+                            "quantity": _NUMBER,
+                            "rate": _NUMBER,
+                            "unit": _STRING,
+                            "godown": _STRING,
+                        },
+                        ["stock_item", "quantity", "rate"],
+                    ),
+                },
             },
-            ["party_name", "taxable_value"],
+            ["party_name"],
         ),
         vouchers.create_sales_voucher,
         mutating=True,
@@ -228,8 +246,26 @@ TOOLS: tuple[Tool, ...] = (
                 "narration": _STRING,
                 "purchase_ledger": _STRING,
                 "place_of_supply": _STRING,
+                "items": {
+                    "type": "array",
+                    "description": (
+                        "Stock moved by this voucher. Give a positive quantity; "
+                        "the direction comes from the voucher type. When present "
+                        "the taxable value is computed from the goods."
+                    ),
+                    "items": _object(
+                        {
+                            "stock_item": _STRING,
+                            "quantity": _NUMBER,
+                            "rate": _NUMBER,
+                            "unit": _STRING,
+                            "godown": _STRING,
+                        },
+                        ["stock_item", "quantity", "rate"],
+                    ),
+                },
             },
-            ["party_name", "taxable_value"],
+            ["party_name"],
         ),
         vouchers.create_purchase_voucher,
         mutating=True,
@@ -290,20 +326,6 @@ TOOLS: tuple[Tool, ...] = (
         mutating=True,
     ),
     Tool(
-        "find_voucher",
-        "Find a voucher and its REMOTEID - the identity needed to amend or "
-        "delete it. Always call this before alter_voucher or delete_voucher; "
-        "Tally's own MASTERID cannot be used to change a voucher.",
-        _object(
-            {
-                "reference": {**_STRING, "description": "Invoice or bill number"},
-                "party_name": _STRING,
-                "voucher_number": _STRING,
-            }
-        ),
-        vouchers.find_voucher,
-    ),
-    Tool(
         "alter_voucher",
         "Amend a voucher tallyagent posted, identified by the REMOTEID from "
         "find_voucher. Replaces the voucher's lines entirely, so send every "
@@ -347,6 +369,58 @@ TOOLS: tuple[Tool, ...] = (
             ["remote_id"],
         ),
         vouchers.delete_voucher,
+        mutating=True,
+    ),
+    Tool(
+        "list_stock_items",
+        "The stock item masters, with opening quantities.",
+        _object({"refresh": {"type": "boolean", "default": False}}),
+        stock.list_stock_items,
+    ),
+    Tool(
+        "stock_summary",
+        "Quantity and value of every stock item on hand, at weighted average "
+        "cost. Flags any item that has gone negative.",
+        _object({"as_on": _DATE}),
+        stock.stock_summary,
+    ),
+    Tool(
+        "stock_ledger",
+        "Every movement of one stock item, with a running balance.",
+        _object(
+            {"stock_item": _STRING, "from_date": _DATE, "to_date": _DATE},
+            ["stock_item"],
+        ),
+        stock.stock_ledger,
+    ),
+    Tool(
+        "create_stock_masters",
+        "Create stock items, units, stock groups and godowns as one batch. "
+        "Stock items must exist before a voucher can move them; nothing is "
+        "created implicitly.",
+        _object(
+            {
+                "items": {
+                    "type": "array",
+                    "items": _object(
+                        {
+                            "name": _STRING,
+                            "group": _STRING,
+                            "unit": _STRING,
+                            "hsn": _STRING,
+                            "gst_rate": _NUMBER,
+                            "opening_quantity": _NUMBER,
+                            "opening_rate": _NUMBER,
+                        },
+                        ["name"],
+                    ),
+                },
+                "units": {"type": "array", "items": _STRING},
+                "groups": {"type": "array", "items": _STRING},
+                "godowns": {"type": "array", "items": _STRING},
+            }
+        ),
+        stock.create_stock_masters,
         mutating=True,
     ),
     Tool(
@@ -402,6 +476,13 @@ TOOLS: tuple[Tool, ...] = (
 )
 
 BY_NAME: dict[str, Tool] = {tool.name: tool for tool in TOOLS}
+
+if len(BY_NAME) != len(TOOLS):
+    # A duplicate name silently shadows one definition and the model gets a
+    # schema that does not match the function it reaches.
+    _seen: set[str] = set()
+    _dupes = sorted({t.name for t in TOOLS if t.name in _seen or _seen.add(t.name)})
+    raise RuntimeError(f"duplicate tool name(s) in the registry: {_dupes}")
 
 
 def get(name: str) -> Tool:

@@ -15,6 +15,7 @@ from typing import Any
 from tallyagent_core import idempotency
 from tallyagent_core.models import (
     GSTDetails,
+    InventoryLine,
     Voucher,
     VoucherLine,
     VoucherType,
@@ -62,6 +63,33 @@ async def _party_state(ctx: ToolContext, party_name: str) -> str | None:
     return None
 
 
+def _inventory_lines(
+    items: list[dict[str, Any]], outward: bool
+) -> list[InventoryLine]:
+    """Turn plain item dicts into stock movements.
+
+    Quantity is signed here, once: outward on a sale, inward on a purchase. The
+    caller passes a positive quantity and says what kind of voucher it is,
+    because asking a model to get a sign right is asking for a reversed entry.
+    """
+    lines: list[InventoryLine] = []
+    for item in items:
+        quantity = abs(Decimal(str(item["quantity"])))
+        lines.append(
+            InventoryLine(
+                stock_item=str(item["stock_item"]),
+                quantity=-quantity if outward else quantity,
+                rate=Decimal(str(item["rate"])),
+                unit=str(item.get("unit") or ""),
+                godown=str(item.get("godown") or ""),
+                amount_override=(
+                    Decimal(str(item["amount"])) if item.get("amount") is not None else None
+                ),
+            )
+        )
+    return lines
+
+
 async def _gst_voucher(
     ctx: ToolContext,
     *,
@@ -74,6 +102,7 @@ async def _gst_voucher(
     reference: str,
     narration: str,
     place_of_supply: str | None,
+    inventory: list[InventoryLine] | None = None,
 ) -> Voucher:
     state = place_of_supply or await _party_state(ctx, party_name)
     interstate = bool(state) and state != ctx.company.state_code
@@ -126,6 +155,7 @@ async def _gst_voucher(
         reference=reference,
         narration=narration,
         lines=lines,
+        inventory=inventory or [],
         gst=GSTDetails(
             rate=gst_rate,
             taxable_value=taxable_value,
@@ -147,13 +177,24 @@ async def create_sales_voucher(
     narration: str = "",
     sales_ledger: str = "Sales - GST 18%",
     place_of_supply: str | None = None,
+    items: list[dict[str, Any]] | None = None,
 ) -> ToolResult:
-    """Raise a sales invoice against a customer."""
+    """Raise a sales invoice against a customer.
+
+    With ``items`` the voucher also moves stock, and the taxable value is
+    computed from the goods rather than taken on trust - the two cannot then
+    disagree.
+    """
+    inventory = _inventory_lines(items or [], outward=True)
+    if inventory:
+        taxable_value = sum((line.amount for line in inventory), Decimal("0"))
+
     voucher = await _gst_voucher(
         ctx,
         voucher_type=VoucherType.SALES,
         party_name=party_name,
         taxable_value=Decimal(str(taxable_value)),
+        inventory=inventory,
         gst_rate=Decimal(str(gst_rate)),
         revenue_ledger=sales_ledger,
         voucher_date=voucher_date or date.today(),
@@ -178,13 +219,19 @@ async def create_purchase_voucher(
     narration: str = "",
     purchase_ledger: str = "Purchase - GST 18%",
     place_of_supply: str | None = None,
+    items: list[dict[str, Any]] | None = None,
 ) -> ToolResult:
-    """Book a supplier bill."""
+    """Book a supplier bill, optionally bringing stock in."""
+    inventory = _inventory_lines(items or [], outward=False)
+    if inventory:
+        taxable_value = sum((line.amount for line in inventory), Decimal("0"))
+
     voucher = await _gst_voucher(
         ctx,
         voucher_type=VoucherType.PURCHASE,
         party_name=party_name,
         taxable_value=Decimal(str(taxable_value)),
+        inventory=inventory,
         gst_rate=Decimal(str(gst_rate)),
         revenue_ledger=purchase_ledger,
         voucher_date=voucher_date or date.today(),

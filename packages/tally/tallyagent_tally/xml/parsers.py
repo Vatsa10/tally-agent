@@ -124,6 +124,45 @@ def parse_voucher_rows(xml_bytes: bytes) -> list[dict[str, object]]:
     return rows
 
 
+def parse_stock_rows(xml_bytes: bytes) -> list[dict[str, object]]:
+    """Flatten a voucher collection into one row per *inventory* entry.
+
+    The accounting flattening (``parse_voucher_rows``) walks
+    ALLLEDGERENTRIES; this walks ALLINVENTORYENTRIES, which is a separate
+    dimension of the same voucher. Quantities and amounts stay in Tally's
+    convention and are flipped at the backend boundary like everything else.
+    """
+    root = parse(xml_bytes)
+    collection = root.find(".//COLLECTION")
+    if collection is None:
+        return []
+
+    rows: list[dict[str, object]] = []
+    for voucher in collection.iter("VOUCHER"):
+        shared: dict[str, object] = {
+            field: (voucher.findtext(field) or "").strip()
+            for field in _VOUCHER_FIELDS
+        }
+        if not shared.get("VOUCHERTYPENAME"):
+            shared["VOUCHERTYPENAME"] = voucher.get("VCHTYPE", "")
+
+        for entry in voucher.iter("ALLINVENTORYENTRIES.LIST"):
+            row = dict(shared)
+            row["STOCKITEMNAME"] = (entry.findtext("STOCKITEMNAME") or "").strip()
+            row["ACTUALQTY"] = (entry.findtext("ACTUALQTY") or "").strip()
+            row["BILLEDQTY"] = (entry.findtext("BILLEDQTY") or "").strip()
+            row["RATE"] = (entry.findtext("RATE") or "").strip()
+            row["AMOUNT"] = (entry.findtext("AMOUNT") or "").strip()
+            row["GODOWNNAME"] = ""
+            for batch in entry.iter("BATCHALLOCATIONS.LIST"):
+                godown = (batch.findtext("GODOWNNAME") or "").strip()
+                if godown:
+                    row["GODOWNNAME"] = godown
+                    break
+            rows.append(row)
+    return rows
+
+
 def _bill_allocations(entry: etree._Element) -> list[dict[str, str]]:
     """Bill-wise allocations hanging off one ledger entry.
 

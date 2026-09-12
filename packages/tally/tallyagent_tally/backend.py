@@ -712,6 +712,48 @@ class TallyBackend:
             raw_request=payload.decode("utf-8"),
         )
 
+    #: Vouchers with their stock movements. A separate fetch from the ledger
+    #: one: asking for both dimensions at once makes the response very large on
+    #: a real company, and most reads only need one of them.
+    STOCK_TDL = (
+        '<COLLECTION NAME="TAStock" ISMODIFY="No">'
+        "<TYPE>Voucher</TYPE>"
+        "<FETCH>DATE,VOUCHERTYPENAME,VOUCHERNUMBER,PARTYLEDGERNAME,REFERENCE,"
+        "MASTERID,ALLINVENTORYENTRIES.LIST</FETCH>"
+        "</COLLECTION>"
+    )
+
+    async def stock_rows(
+        self,
+        company: str | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[dict[str, object]]:
+        """Stock movements, one row per inventory line, in *our* convention.
+
+        Quantity positive means stock coming in. Tally negates the amount the
+        same way it does for ledger entries, so both are flipped here.
+        """
+        payload = builders.build_export_collection(
+            collection_name="TAStock",
+            company=self.client.company_or_default(company),
+            username=self.client.config.username,
+            password=self.client.config.password,
+            from_date=to_tally_date(from_date) if from_date else "",
+            to_date=to_tally_date(to_date) if to_date else "",
+            tdl=self.STOCK_TDL,
+        )
+        rows = parsers.parse_stock_rows(await self.client.post(payload))
+        for row in rows:
+            if row.get("AMOUNT") not in (None, ""):
+                row["AMOUNT"] = format(-parsers.to_decimal(row["AMOUNT"]), "f")
+            # Tally reports quantity unsigned with the direction in the sign of
+            # the amount; restore the sign so inward is positive.
+            quantity = str(row.get("ACTUALQTY") or "")
+            if quantity and parsers.to_decimal(row.get("AMOUNT")) < 0:
+                row["ACTUALQTY"] = f"-{quantity.lstrip('-')}"
+        return rows
+
     async def _voucher_master_ids(self, company: str | None = None) -> set[str]:
         """Every voucher currently in the company, by Tally's own id."""
         return {

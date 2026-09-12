@@ -148,9 +148,37 @@ REPORT_NAME_ALIASES = {"Profit and Loss A/c": "Profit and Loss"}
 NEVER_EMIT_ATTRIBUTES = frozenset({"OBJVIEW"})
 
 
+#: Unit symbols TallyPrime 1.1.7.1 will neither create nor resolve. Creating one
+#: answers "DUPLICATE ORIGINAL NAME" (the name is taken internally), and a stock
+#: item naming it answers "Unit 'Nos' does not exist!" - so it is simultaneously
+#: taken and absent. Measured on 1.1.7.1; "Pcs", "Box", "Dzn" and "Kgs" are fine.
+RESERVED_UNIT_NAMES = frozenset({"Nos"})
+
+
+def unit_is_usable(symbol: str) -> bool:
+    """Can a stock item be based on this unit symbol?"""
+    return symbol not in RESERVED_UNIT_NAMES
+
+
 #: TallyPrime in Educational (student) mode accepts vouchers dated only on
 #: these days of the month. Everything else is refused at entry.
 EDU_ALLOWED_DAYS = (1, 2, 31)
+
+
+def tally_rate(rate: Decimal, unit: str) -> str:
+    """Tally writes a rate as ``2500.00/Nos`` - value, slash, unit.
+
+    A bare number is accepted but loses the unit, and Tally then re-derives the
+    rate from amount/quantity, which drifts by a paisa on anything that does
+    not divide cleanly.
+    """
+    return f"{format(rate, 'f')}/{unit}" if unit else format(rate, "f")
+
+
+def tally_quantity(quantity: Decimal, unit: str) -> str:
+    """Quantities carry their unit too: ``20 Nos``."""
+    text = format(abs(quantity).normalize(), "f")
+    return f"{text} {unit}" if unit else text
 
 
 def educational_mode_blocks(when: date) -> bool:

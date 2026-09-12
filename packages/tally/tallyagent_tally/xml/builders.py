@@ -14,10 +14,23 @@ from decimal import Decimal
 
 from lxml import etree
 
-from tallyagent_core.models import Ledger, Party, Voucher, VoucherType
+from tallyagent_core.models import (
+    Godown,
+    InventoryLine,
+    Ledger,
+    Party,
+    StockGroup,
+    StockItem,
+    Unit,
+    Voucher,
+    VoucherLine,
+    VoucherType,
+)
 from tallyagent_tally.xml.quirks import (
     REPORT_NAME_ALIASES,
     tally_amount,
+    tally_quantity,
+    tally_rate,
     to_tally_date,
 )
 
@@ -180,6 +193,8 @@ def build_voucher_element(
         etree.SubElement(element, "NARRATION").text = voucher.narration
     if voucher.reference:
         etree.SubElement(element, "REFERENCE").text = voucher.reference
+    stock_line = _stock_bearing_line(voucher)
+
     for line in voucher.lines:
         entry = etree.SubElement(element, "ALLLEDGERENTRIES.LIST")
         etree.SubElement(entry, "LEDGERNAME").text = line.ledger_name
@@ -205,7 +220,78 @@ def build_voucher_element(
             cc = etree.SubElement(cat, "COSTCENTREALLOCATIONS.LIST")
             etree.SubElement(cc, "NAME").text = line.cost_centre
             etree.SubElement(cc, "AMOUNT").text = amount_text
+
+        if line is stock_line:
+            for item in voucher.inventory:
+                _append_inventory_entry(entry, item, voucher.voucher_type)
+
     return element
+
+
+def _stock_bearing_line(voucher: Voucher) -> VoucherLine | None:
+    """Which ledger line the stock hangs off, if any.
+
+    TallyPrime 1.1.7.1 rejects the item-invoice shape - inventory entries at
+    voucher level - with a bare ``EXCEPTIONS 1`` and no message, whatever the
+    signs, units or batch blocks. What it accepts is the voucher-mode shape:
+    ``<INVENTORYALLOCATIONS.LIST>`` nested inside the *revenue* ledger entry,
+    the one whose value the goods make up. Measured across nine payload shapes.
+
+    The revenue line is found by value rather than by name, because "Sales - GST
+    18%" is a convention and the ledger could be called anything.
+    """
+    if not voucher.inventory:
+        return None
+    value = voucher.inventory_value
+    for line in voucher.lines:
+        if abs(line.amount) == value and line.ledger_name != voucher.party_name:
+            return line
+    for line in voucher.lines:
+        if line.ledger_name != voucher.party_name:
+            return line
+    return None
+
+
+def _append_inventory_entry(
+    element: etree._Element, item: InventoryLine, voucher_type: VoucherType
+) -> None:
+    """One ``<INVENTORYALLOCATIONS.LIST>``, nested in a ledger entry.
+
+    ``element`` is the revenue ledger's ``<ALLLEDGERENTRIES.LIST>``, not the
+    voucher - see ``_stock_bearing_line``. Amounts follow the same negation as
+    ledger entries: stock going out of a sale is a credit to the trading
+    account, so the sign is the mirror of the quantity's.
+    """
+    entry = etree.SubElement(element, "INVENTORYALLOCATIONS.LIST")
+    etree.SubElement(entry, "STOCKITEMNAME").text = item.stock_item
+    etree.SubElement(entry, "ISDEEMEDPOSITIVE").text = (
+        "Yes" if item.is_inward else "No"
+    )
+    etree.SubElement(entry, "RATE").text = tally_rate(item.rate, item.unit)
+
+    # Outward stock carries a positive amount in Tally's convention, inward a
+    # negative one - the opposite of the quantity, exactly like a ledger line.
+    signed = item.amount if not item.is_inward else -item.amount
+    etree.SubElement(entry, "AMOUNT").text = format(signed, "f")
+    etree.SubElement(entry, "ACTUALQTY").text = tally_quantity(
+        item.quantity, item.unit
+    )
+    etree.SubElement(entry, "BILLEDQTY").text = tally_quantity(
+        item.quantity, item.unit
+    )
+
+    if item.godown:
+        # Only when a godown was asked for: an unnecessary batch block is one
+        # more thing for Tally to reject silently.
+        batch = etree.SubElement(entry, "BATCHALLOCATIONS.LIST")
+        etree.SubElement(batch, "GODOWNNAME").text = item.godown
+        etree.SubElement(batch, "AMOUNT").text = format(signed, "f")
+        etree.SubElement(batch, "ACTUALQTY").text = tally_quantity(
+            item.quantity, item.unit
+        )
+        etree.SubElement(batch, "BILLEDQTY").text = tally_quantity(
+            item.quantity, item.unit
+        )
 
 
 def build_voucher_delete_element(
@@ -226,6 +312,72 @@ def build_voucher_delete_element(
     )
     etree.SubElement(element, "DATE").text = to_tally_date(when)
     etree.SubElement(element, "VOUCHERTYPENAME").text = voucher_type.value
+    return element
+
+
+def build_unit_element(unit: Unit, action: str = "Create") -> etree._Element:
+    """A unit of measure. Tally calls the symbol NAME and the long form
+    FORMALNAME.
+
+    No ORIGINALNAME: on a Create it makes TallyPrime 1.1.7.1 answer
+    "DUPLICATE ORIGINAL NAME" and write nothing. It is the *previous* name of a
+    unit being renamed, so it only belongs on an Alter.
+    """
+    element = etree.Element("UNIT", attrib={"NAME": unit.name, "ACTION": action})
+    etree.SubElement(element, "NAME").text = unit.name
+    if unit.formal_name and unit.formal_name != unit.name:
+        # A FORMALNAME equal to the symbol is also "DUPLICATE ORIGINAL NAME" to
+        # TallyPrime 1.1.7.1 - the two names must differ or be absent.
+        etree.SubElement(element, "FORMALNAME").text = unit.formal_name
+    etree.SubElement(element, "DECIMALPLACES").text = str(unit.decimal_places)
+    etree.SubElement(element, "ISSIMPLEUNIT").text = "Yes"
+    return element
+
+
+def build_stock_group_element(
+    group: StockGroup, action: str = "Create"
+) -> etree._Element:
+    element = etree.Element(
+        "STOCKGROUP", attrib={"NAME": group.name, "ACTION": action}
+    )
+    etree.SubElement(element, "NAME").text = group.name
+    if group.parent:
+        etree.SubElement(element, "PARENT").text = group.parent
+    return element
+
+
+def build_godown_element(godown: Godown, action: str = "Create") -> etree._Element:
+    element = etree.Element("GODOWN", attrib={"NAME": godown.name, "ACTION": action})
+    etree.SubElement(element, "NAME").text = godown.name
+    if godown.parent:
+        etree.SubElement(element, "PARENT").text = godown.parent
+    return element
+
+
+def build_stock_item_element(
+    item: StockItem, action: str = "Create"
+) -> etree._Element:
+    """A stock item, with its opening stock if it has any."""
+    element = etree.Element("STOCKITEM", attrib={"NAME": item.name, "ACTION": action})
+    etree.SubElement(element, "NAME").text = item.name
+    if item.parent:
+        etree.SubElement(element, "PARENT").text = item.parent
+    etree.SubElement(element, "BASEUNITS").text = item.base_units
+    if item.hsn_code:
+        etree.SubElement(element, "HSNCODE").text = item.hsn_code
+    if item.gst_rate is not None:
+        etree.SubElement(element, "GSTAPPLICABLE").text = "Applicable"
+        etree.SubElement(element, "RATEOFVAT").text = format(item.gst_rate, "f")
+    if item.opening_quantity:
+        etree.SubElement(element, "OPENINGBALANCE").text = tally_quantity(
+            item.opening_quantity, item.base_units
+        )
+        etree.SubElement(element, "OPENINGRATE").text = tally_rate(
+            item.opening_rate, item.base_units
+        )
+        etree.SubElement(element, "OPENINGVALUE").text = format(
+            item.opening_value, "f"
+        )
     return element
 
 

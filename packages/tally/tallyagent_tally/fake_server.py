@@ -32,6 +32,28 @@ class FakeLedger:
 
 
 @dataclass(slots=True)
+class FakeStockItem:
+    name: str
+    parent: str = ""
+    base_units: str = "Nos"
+    hsn_code: str = ""
+    opening_quantity: Decimal = Decimal("0")
+    opening_rate: Decimal = Decimal("0")
+    master_id: str = ""
+
+
+@dataclass(slots=True)
+class FakeStockMove:
+    """One inventory line on a voucher, in *our* convention (inward positive)."""
+
+    stock_item: str
+    quantity: Decimal
+    rate: Decimal
+    amount: Decimal
+    godown: str = ""
+
+
+@dataclass(slots=True)
 class FakeVoucher:
     master_id: str
     voucher_number: str
@@ -46,6 +68,8 @@ class FakeVoucher:
     remote_id: str = ""
     # (ledger_name, amount) in *our* convention: positive = debit
     lines: list[tuple[str, Decimal]] = field(default_factory=list)
+    #: Stock movements on this voucher, if any.
+    stock: list[FakeStockMove] = field(default_factory=list)
     #: ledger name -> [(bill reference, bill type, amount)], as imported. Real
     #: Tally echoes back the allocations it was given, so the fake must too:
     #: inventing "On Account" for everything hid the bill-wise path entirely.
@@ -74,6 +98,9 @@ class FakeTally:
         # off reproduces that refusal, so both paths are testable.
         self.supports_company_create = supports_company_create
         self.ledgers: dict[str, FakeLedger] = {}
+        self.stock_items: dict[str, FakeStockItem] = {}
+        self.units: dict[str, str] = {}
+        self.godowns: dict[str, str] = {}
         self.vouchers: list[FakeVoucher] = []
         self.requests: list[bytes] = []
         self._ids = itertools.count(1)
@@ -167,6 +194,43 @@ class FakeTally:
             return self._collection("LEDGER", self._ledger_rows(root))
         if self._is_tdl_over(root, "voucher"):
             return self._voucher_collection(root)
+        if self._is_tdl_over(root, "stockitem"):
+            return self._collection(
+                "STOCKITEM",
+                [
+                    {
+                        "@NAME": item.name,
+                        "NAME": item.name,
+                        "PARENT": item.parent,
+                        "BASEUNITS": item.base_units,
+                        "HSNCODE": item.hsn_code,
+                        "OPENINGBALANCE": (
+                            f"{item.opening_quantity} {item.base_units}"
+                            if item.opening_quantity
+                            else ""
+                        ),
+                        "OPENINGRATE": (
+                            f"{item.opening_rate}/{item.base_units}"
+                            if item.opening_rate
+                            else ""
+                        ),
+                        "MASTERID": item.master_id,
+                    }
+                    for item in self.stock_items.values()
+                ],
+            )
+        if self._is_tdl_over(root, "unit"):
+            return self._collection(
+                "UNIT",
+                [{"@NAME": name, "NAME": name, "FORMALNAME": formal}
+                 for name, formal in self.units.items()],
+            )
+        if self._is_tdl_over(root, "godown"):
+            return self._collection(
+                "GODOWN",
+                [{"@NAME": name, "NAME": name, "PARENT": parent}
+                 for name, parent in self.godowns.items()],
+            )
         if ident == "Trial Balance":
             return self._collection(
                 "LEDGER",
@@ -260,6 +324,29 @@ class FakeTally:
                 else:
                     bill = etree.SubElement(entry, "BILLALLOCATIONS.LIST")
                     etree.SubElement(bill, "BILLTYPE").text = "On Account"
+
+            for move in voucher.stock:
+                inv = etree.SubElement(element, "ALLINVENTORYENTRIES.LIST")
+                etree.SubElement(inv, "STOCKITEMNAME").text = move.stock_item
+                etree.SubElement(inv, "ISDEEMEDPOSITIVE").text = (
+                    "Yes" if move.quantity > 0 else "No"
+                )
+                unit = (
+                    self.stock_items[move.stock_item].base_units
+                    if move.stock_item in self.stock_items
+                    else ""
+                )
+                etree.SubElement(inv, "RATE").text = f"{move.rate}/{unit}"
+                # Tally's convention: outward positive, inward negative.
+                signed = move.amount if move.quantity < 0 else -move.amount
+                etree.SubElement(inv, "AMOUNT").text = format(signed, "f")
+                etree.SubElement(inv, "ACTUALQTY").text = f"{abs(move.quantity)} {unit}"
+                etree.SubElement(inv, "BILLEDQTY").text = f"{abs(move.quantity)} {unit}"
+                batch = etree.SubElement(inv, "BATCHALLOCATIONS.LIST")
+                etree.SubElement(batch, "GODOWNNAME").text = (
+                    move.godown or "Main Location"
+                )
+                etree.SubElement(batch, "AMOUNT").text = format(signed, "f")
         return etree.tostring(envelope, xml_declaration=False)
 
     def _ledger_rows(self, root: etree._Element) -> list[dict[str, str]]:
@@ -393,6 +480,38 @@ class FakeTally:
             last_master_id = ledger.master_id
             created += 1
 
+        for unit_el in root.iter("UNIT"):
+            name = unit_el.findtext("NAME") or unit_el.get("NAME") or ""
+            if name and name not in self.units:
+                self.units[name] = unit_el.findtext("FORMALNAME") or name
+                created += 1
+
+        for godown_el in root.iter("GODOWN"):
+            name = godown_el.findtext("NAME") or godown_el.get("NAME") or ""
+            if name and name not in self.godowns:
+                self.godowns[name] = godown_el.findtext("PARENT") or ""
+                created += 1
+
+        for item_el in root.iter("STOCKITEM"):
+            name = item_el.findtext("NAME") or item_el.get("NAME") or ""
+            if not name:
+                continue
+            if name in self.stock_items:
+                errors.append(f"Stock item \u0027{name}\u0027 already exists")
+                continue
+            item = FakeStockItem(
+                name=name,
+                parent=item_el.findtext("PARENT") or "",
+                base_units=item_el.findtext("BASEUNITS") or "Nos",
+                hsn_code=item_el.findtext("HSNCODE") or "",
+                opening_quantity=_quantity(item_el.findtext("OPENINGBALANCE")),
+                opening_rate=_rate(item_el.findtext("OPENINGRATE")),
+                master_id=str(next(self._ids)),
+            )
+            self.stock_items[name] = item
+            last_master_id = item.master_id
+            created += 1
+
         for voucher_el in root.iter("VOUCHER"):
             action = voucher_el.get("ACTION", "Create")
             lines: list[tuple[str, Decimal]] = []
@@ -417,9 +536,38 @@ class FakeTally:
                             -Decimal(allocation.findtext("AMOUNT") or "0"),
                         )
                     )
+            stock: list[FakeStockMove] = []
+            for inv in voucher_el.iter("INVENTORYALLOCATIONS.LIST"):
+                item_name = inv.findtext("STOCKITEMNAME") or ""
+                if item_name and item_name not in self.stock_items:
+                    unknown.append(f"stock item {item_name}")
+                    continue
+                # Tally negates inventory amounts like ledger ones, and reports
+                # quantity unsigned; undo both to get our convention back.
+                amount = -Decimal(inv.findtext("AMOUNT") or "0")
+                quantity = _quantity(inv.findtext("ACTUALQTY"))
+                stock.append(
+                    FakeStockMove(
+                        stock_item=item_name,
+                        quantity=quantity if amount > 0 else -quantity,
+                        rate=_rate(inv.findtext("RATE")),
+                        amount=abs(amount),
+                        godown=next(
+                            (
+                                b.findtext("GODOWNNAME") or ""
+                                for b in inv.iter("BATCHALLOCATIONS.LIST")
+                            ),
+                            "",
+                        ),
+                    )
+                )
+
             if unknown and voucher_el.get("ACTION", "Create") != "Delete":
                 errors.extend(
-                    f"Ledger '{name}' does not exist in the company" for name in unknown
+                    f"Ledger '{name}' does not exist in the company"
+                    if not name.startswith("stock item ")
+                    else f"Stock item '{name[11:]}' does not exist in the company"
+                    for name in unknown
                 )
                 continue
 
@@ -511,6 +659,7 @@ class FakeTally:
                 narration=voucher_el.findtext("NARRATION") or "",
                 lines=lines,
                 bills=bills,
+                stock=stock,
             )
             self.vouchers.append(voucher)
             last_voucher_id = voucher.master_id
@@ -580,6 +729,28 @@ class FakeTally:
         for message in errors:
             etree.SubElement(result, "LINEERROR").text = message
         return etree.tostring(envelope, xml_declaration=False)
+
+
+def _quantity(raw: object) -> Decimal:
+    """``20 Nos`` -> 20."""
+    text = str(raw or "").strip()
+    if not text:
+        return Decimal("0")
+    try:
+        return Decimal(text.split()[0].replace(",", ""))
+    except Exception:  # noqa: BLE001
+        return Decimal("0")
+
+
+def _rate(raw: object) -> Decimal:
+    """``2500.00/Nos`` -> 2500.00."""
+    text = str(raw or "").strip()
+    if not text:
+        return Decimal("0")
+    try:
+        return Decimal(text.split("/")[0].replace(",", "").strip())
+    except Exception:  # noqa: BLE001
+        return Decimal("0")
 
 
 def seeded_demo(company: str = "Demo Traders Pvt Ltd") -> FakeTally:

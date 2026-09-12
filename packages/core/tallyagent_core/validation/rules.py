@@ -45,6 +45,18 @@ class ValidationContext:
     #: True when the target Tally is a student/Educational install, which only
     #: accepts vouchers dated on EDU_ALLOWED_DAYS.
     edu_mode: bool = False
+    #: Stock item masters, for a company that tracks inventory.
+    known_stock_items: set[str] = field(default_factory=set)
+    #: Quantity on hand per item, for the negative-stock check.
+    stock_on_hand: dict[str, Decimal] = field(default_factory=dict)
+    #: Some traders deliberately allow stock to go negative. Tally permits it,
+    #: so we warn rather than block when this is on.
+    allow_negative_stock: bool = True
+
+    def suggest_stock(self, name: str, n: int = 3) -> list[str]:
+        return difflib.get_close_matches(
+            name, sorted(self.known_stock_items), n=n, cutoff=0.6
+        )
 
     def resolve(self, name: str) -> str | None:
         """Exact match, then a learned alias. Never a fuzzy guess - fuzzy
@@ -286,6 +298,104 @@ def edu_date_allowed(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
     )
 
 
+def stock_items_exist(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
+    """Every stock item must already be a master.
+
+    Same rule as ledgers, for the same reason: an invented stock item is a
+    silent hole in the stock summary that nobody notices until a physical count.
+    """
+    if not voucher.inventory:
+        return RuleResult("stock_items_exist", True, "no stock on this voucher")
+
+    missing: dict[str, list[str]] = {}
+    for item in voucher.inventory:
+        if item.stock_item not in ctx.known_stock_items:
+            missing[item.stock_item] = ctx.suggest_stock(item.stock_item)
+    if not missing:
+        return RuleResult("stock_items_exist", True, "all stock items resolve")
+
+    parts = []
+    for name, suggestions in missing.items():
+        hint = f" (did you mean: {', '.join(suggestions)}?)" if suggestions else ""
+        parts.append(f"{name!r}{hint}")
+    return RuleResult(
+        "stock_items_exist",
+        False,
+        "unknown stock item(s): " + "; ".join(parts),
+        details={"missing": missing},
+    )
+
+
+def inventory_matches_value(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
+    """The stock moved must be worth what the voucher booked.
+
+    This is the rule that catches the classic trading error: 20 boxes leave the
+    godown but the invoice bills for 200. Compared against the taxable value,
+    not the total, because tax is not part of the goods' value.
+    """
+    if not voucher.inventory:
+        return RuleResult("inventory_matches_value", True, "no stock on this voucher")
+
+    stock_value = voucher.inventory_value
+    taxable = (
+        voucher.gst.taxable_value
+        if voucher.gst is not None and voucher.gst.taxable_value
+        else voucher.amount
+    )
+    taxable = taxable.quantize(PAISA)
+
+    # A paisa either way is rounding on a split line, not a mismatch.
+    if abs(stock_value - taxable) <= PAISA:
+        return RuleResult(
+            "inventory_matches_value",
+            True,
+            f"stock value {stock_value} matches the taxable value",
+        )
+    return RuleResult(
+        "inventory_matches_value",
+        False,
+        f"the stock on this voucher is worth {stock_value} but it bills "
+        f"{taxable} before tax (difference {taxable - stock_value})",
+        details={"stock_value": str(stock_value), "taxable_value": str(taxable)},
+    )
+
+
+def stock_not_negative(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
+    """Warn when an outward movement takes an item below zero.
+
+    A warning, not a block: Tally itself permits negative stock and some traders
+    rely on it to invoice ahead of a delivery being booked in. But it is almost
+    always a missing purchase entry, and it silently wrecks valuation.
+    """
+    if not voucher.inventory or not ctx.stock_on_hand:
+        return RuleResult("stock_not_negative", True, "nothing to check")
+
+    shortfalls: dict[str, str] = {}
+    for item in voucher.inventory:
+        if item.is_inward:
+            continue
+        on_hand = ctx.stock_on_hand.get(item.stock_item)
+        if on_hand is None:
+            continue
+        after = on_hand + item.quantity
+        if after < 0:
+            shortfalls[item.stock_item] = (
+                f"{on_hand} on hand, {abs(item.quantity)} going out"
+            )
+    if not shortfalls:
+        return RuleResult("stock_not_negative", True, "enough stock on hand")
+
+    detail = "; ".join(f"{name}: {why}" for name, why in shortfalls.items())
+    return RuleResult(
+        "stock_not_negative",
+        False,
+        f"this takes stock negative - {detail}. Usually a purchase has not "
+        "been entered yet.",
+        severity=Severity.WARNING if ctx.allow_negative_stock else Severity.ERROR,
+        details={"shortfalls": shortfalls},
+    )
+
+
 #: Run in this order; the report reads top-to-bottom in the approval UI.
 ALL_RULES = (
     ledgers_exist,
@@ -295,5 +405,8 @@ ALL_RULES = (
     gstin_valid,
     period_open,
     edu_date_allowed,
+    stock_items_exist,
+    inventory_matches_value,
+    stock_not_negative,
     not_duplicate,
 )
