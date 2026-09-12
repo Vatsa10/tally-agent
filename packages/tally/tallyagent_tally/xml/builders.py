@@ -15,6 +15,8 @@ from decimal import Decimal
 from lxml import etree
 
 from tallyagent_core.models import (
+    CostCategory,
+    CostCentre,
     Godown,
     InventoryLine,
     Ledger,
@@ -26,6 +28,7 @@ from tallyagent_core.models import (
     VoucherLine,
     VoucherType,
 )
+from tallyagent_core.models.costing import PRIMARY_CATEGORY
 from tallyagent_tally.xml.quirks import (
     REPORT_NAME_ALIASES,
     tally_amount,
@@ -216,7 +219,10 @@ def build_voucher_element(
             etree.SubElement(bill, "AMOUNT").text = amount_text
         if line.cost_centre:
             cat = etree.SubElement(entry, "CATEGORYALLOCATIONS.LIST")
-            etree.SubElement(cat, "CATEGORY").text = "Primary Cost Category"
+            etree.SubElement(cat, "CATEGORY").text = (
+                line.cost_category or PRIMARY_CATEGORY
+            )
+            etree.SubElement(cat, "ISDEEMEDPOSITIVE").text = deemed_positive
             cc = etree.SubElement(cat, "COSTCENTREALLOCATIONS.LIST")
             etree.SubElement(cc, "NAME").text = line.cost_centre
             etree.SubElement(cc, "AMOUNT").text = amount_text
@@ -312,6 +318,34 @@ def build_voucher_delete_element(
     )
     etree.SubElement(element, "DATE").text = to_tally_date(when)
     etree.SubElement(element, "VOUCHERTYPENAME").text = voucher_type.value
+    return element
+
+
+def build_cost_category_element(
+    category: CostCategory, action: str = "Create"
+) -> etree._Element:
+    """A cost category. Tally ships "Primary Cost Category"; this makes more."""
+    element = etree.Element(
+        "COSTCATEGORY", attrib={"NAME": category.name, "ACTION": action}
+    )
+    etree.SubElement(element, "NAME").text = category.name
+    etree.SubElement(element, "ALLOCATEREVENUE").text = (
+        "Yes" if category.allocate_revenue else "No"
+    )
+    etree.SubElement(element, "ALLOCATENONREVENUE").text = (
+        "Yes" if category.allocate_non_revenue else "No"
+    )
+    return element
+
+
+def build_cost_centre_element(
+    centre: CostCentre, action: str = "Create"
+) -> etree._Element:
+    """A cost centre, inside a category that must already exist in the company."""
+    element = etree.Element("COSTCENTRE", attrib={"NAME": centre.name, "ACTION": action})
+    etree.SubElement(element, "NAME").text = centre.name
+    etree.SubElement(element, "PARENT").text = centre.parent
+    etree.SubElement(element, "CATEGORY").text = centre.category
     return element
 
 

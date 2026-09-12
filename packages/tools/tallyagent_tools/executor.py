@@ -44,6 +44,11 @@ async def execute(ctx: ToolContext, action: PendingAction) -> WriteResult:
             ctx.voucher_index.mark_deleted(remote_id)
         return result
 
+    if action.payload.get("kind") == "cost_centres":
+        from tallyagent_tools import cost_centres
+
+        return await cost_centres.execute_cost_centres(ctx, action)
+
     if action.payload.get("kind") == "stock_masters":
         from tallyagent_tools import stock
 

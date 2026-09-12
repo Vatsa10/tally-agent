@@ -47,6 +47,9 @@ class ValidationContext:
     edu_mode: bool = False
     #: Stock item masters, for a company that tracks inventory.
     known_stock_items: set[str] = field(default_factory=set)
+    #: Cost centre name -> its category. Empty when the company does not
+    #: track cost centres, which makes the cost centre rules inert.
+    known_cost_centres: dict[str, str] = field(default_factory=dict)
     #: Quantity on hand per item, for the negative-stock check.
     stock_on_hand: dict[str, Decimal] = field(default_factory=dict)
     #: Some traders deliberately allow stock to go negative. Tally permits it,
@@ -326,6 +329,35 @@ def stock_items_exist(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
     )
 
 
+def cost_centres_exist(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
+    """A line may only be allocated to a cost centre that already exists.
+
+    Inert for a company that tracks none: allocating to an invented centre is
+    an error, but so is refusing a voucher because the company has no cost
+    centres at all and none were asked for.
+    """
+    named = [line.cost_centre for line in voucher.lines if line.cost_centre]
+    if not named:
+        return RuleResult("cost_centres_exist", True, "no cost centre on this voucher")
+    if not ctx.known_cost_centres:
+        return RuleResult(
+            "cost_centres_exist",
+            False,
+            "this company tracks no cost centres, so "
+            + ", ".join(repr(n) for n in sorted(set(named)))
+            + " cannot be allocated",
+        )
+    missing = sorted({n for n in named if n not in ctx.known_cost_centres})
+    if missing:
+        return RuleResult(
+            "cost_centres_exist",
+            False,
+            "unknown cost centre(s): " + ", ".join(repr(n) for n in missing),
+            details={"missing": missing},
+        )
+    return RuleResult("cost_centres_exist", True, "all cost centres resolve")
+
+
 def inventory_matches_value(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
     """The stock moved must be worth what the voucher booked.
 
@@ -406,6 +438,7 @@ ALL_RULES = (
     period_open,
     edu_date_allowed,
     stock_items_exist,
+    cost_centres_exist,
     inventory_matches_value,
     stock_not_negative,
     not_duplicate,

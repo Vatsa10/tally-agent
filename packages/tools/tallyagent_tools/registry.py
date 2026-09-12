@@ -11,7 +11,15 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from tallyagent_tools import ingest, masters, reconcile, reports, stock, vouchers
+from tallyagent_tools import (
+    cost_centres,
+    ingest,
+    masters,
+    reconcile,
+    reports,
+    stock,
+    vouchers,
+)
 from tallyagent_tools.base import ToolContext, ToolResult
 
 ToolFn = Callable[..., Awaitable[ToolResult]]
@@ -313,7 +321,8 @@ TOOLS: tuple[Tool, ...] = (
                 "lines": {
                     "type": "array",
                     "items": _object(
-                        {"ledger": _STRING, "amount": _NUMBER}, ["ledger", "amount"]
+                        {"ledger": _STRING, "amount": _NUMBER, "cost_centre": _STRING},
+                        ["ledger", "amount"],
                     ),
                 },
                 "voucher_date": _DATE,
@@ -339,6 +348,7 @@ TOOLS: tuple[Tool, ...] = (
                         {
                             "ledger": _STRING,
                             "amount": _NUMBER,
+                            "cost_centre": _STRING,
                             "bill_reference": _STRING,
                         },
                         ["ledger", "amount"],
@@ -421,6 +431,37 @@ TOOLS: tuple[Tool, ...] = (
             }
         ),
         stock.create_stock_masters,
+        mutating=True,
+    ),
+    Tool(
+        "list_cost_centres",
+        "The cost centres this company tracks, with their categories.",
+        _object({}),
+        cost_centres.list_cost_centres,
+    ),
+    Tool(
+        "cost_centre_summary",
+        "Net amount posted to each cost centre.",
+        _object({}),
+        cost_centres.cost_centre_summary,
+    ),
+    Tool(
+        "create_cost_centres",
+        "Create cost categories and cost centres as one batch. A voucher can "
+        "only be allocated to a cost centre that already exists.",
+        _object(
+            {
+                "centres": {
+                    "type": "array",
+                    "items": _object(
+                        {"name": _STRING, "category": _STRING, "parent": _STRING},
+                        ["name"],
+                    ),
+                },
+                "categories": {"type": "array", "items": _STRING},
+            }
+        ),
+        cost_centres.create_cost_centres,
         mutating=True,
     ),
     Tool(

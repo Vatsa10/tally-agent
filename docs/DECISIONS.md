@@ -550,3 +550,37 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
   on a sale and a debit on a purchase, but a GST return states it positive
   either way. Portal floats were also rendering as `23600.0` beside book
   Decimals at `23600.00`.
+- **D-125 A voucher we created is amendable and deletable after all** - D-120
+  was wrong, and wrong in the expensive direction. The identity is the problem,
+  not the operation: Tally will not match an `ACTION="Alter"` against the
+  MASTERID or GUID *it* assigned, but it will match a `REMOTEID` we assigned at
+  creation. So `create_voucher` now sets `REMOTEID` to the idempotency key, and
+  Alter (altered=1, count unchanged) and Delete (count down by one) both work
+  over XML. Tally never echoes our REMOTEID back, so `VoucherIndex` keeps the
+  map, and a delete is confirmed by a before/after id-set diff rather than by
+  what the response claims.
+- **D-126 Inventory belongs inside the revenue ledger entry.** The item-invoice
+  shape - `ALLINVENTORYENTRIES.LIST` at voucher level, which is what every
+  example on the internet shows - is rejected by 1.1.7.1 with a bare
+  `EXCEPTIONS 1` and no message, under every combination of sign, unit suffix,
+  batch block and `ISINVOICE` we tried. `INVENTORYALLOCATIONS.LIST` nested in
+  the revenue line is accepted. Reads are the other way round: the export comes
+  back as `ALLINVENTORYENTRIES.LIST`, so the write shape and the read shape
+  differ and both are now handled.
+- **D-127 Masters resolve against the company, not against the envelope.** A
+  stock item naming a unit created two elements earlier fails with "Unit does
+  not exist!". Stock and cost-centre batches go out in dependency waves, one
+  request each, stopping at the first wave that errors.
+- **D-128 The unit symbol "Nos" is unusable on this build.** Creating it answers
+  "DUPLICATE ORIGINAL NAME"; an item that names it answers "Unit 'Nos' does not
+  exist!". Both at once. "Pcs", "Box", "Dzn" and "Kgs" are fine. Refused up
+  front with an explanation rather than passed through to a confusing failure.
+  `ORIGINALNAME` on a unit Create, and a FORMALNAME equal to the symbol, give
+  the same duplicate error and are no longer emitted.
+- **D-129 Cost centre allocations import but never come back.** Masters create
+  and read perfectly, and a voucher carrying `CATEGORYALLOCATIONS.LIST` is
+  accepted (a wrong category is rejected, so Tally does parse it) - but the
+  allocation is absent from every export afterwards, including `FETCH *`, with
+  cost centres enabled on both the company and the ledger. `cost_centre_summary`
+  therefore says so explicitly rather than reporting zeros as if they were
+  postings.

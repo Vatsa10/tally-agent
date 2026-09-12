@@ -1,6 +1,7 @@
 """Domain models. Money is ``Decimal`` everywhere — never float."""
 
 from tallyagent_core.models.company import Company, Period
+from tallyagent_core.models.costing import CostCategory, CostCentre
 from tallyagent_core.models.inventory import (
     Godown,
     InventoryLine,
@@ -18,6 +19,8 @@ from tallyagent_core.models.voucher import (
 
 __all__ = [
     "Company",
+    "CostCategory",
+    "CostCentre",
     "GSTDetails",
     "Godown",
     "InventoryLine",

@@ -120,6 +120,7 @@ def parse_voucher_rows(xml_bytes: bytes) -> list[dict[str, object]]:
                 entry.findtext("ISDEEMEDPOSITIVE") or ""
             ).strip()
             row["BILLS"] = _bill_allocations(entry)
+            row["COSTCENTREALLOCATIONS"] = _cost_centre_allocations(entry)
             rows.append(row)
     return rows
 
@@ -161,6 +162,29 @@ def parse_stock_rows(xml_bytes: bytes) -> list[dict[str, object]]:
                     break
             rows.append(row)
     return rows
+
+
+def _cost_centre_allocations(entry: etree._Element) -> list[dict[str, str]]:
+    """Cost centre splits on one ledger entry, in our sign convention.
+
+    Tally nests them one level deeper than bills: category, then centres. The
+    amount is negated on the way out like every other Tally amount.
+    """
+    allocations: list[dict[str, str]] = []
+    for category in entry.iter("CATEGORYALLOCATIONS.LIST"):
+        category_name = (category.findtext("CATEGORY") or "").strip()
+        for centre in category.iter("COSTCENTREALLOCATIONS.LIST"):
+            name = (centre.findtext("NAME") or "").strip()
+            if not name:
+                continue
+            allocations.append(
+                {
+                    "category": category_name,
+                    "name": name,
+                    "amount": format(-to_decimal(centre.findtext("AMOUNT")), "f"),
+                }
+            )
+    return allocations
 
 
 def _bill_allocations(entry: etree._Element) -> list[dict[str, str]]:

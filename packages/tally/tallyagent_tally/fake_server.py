@@ -68,6 +68,8 @@ class FakeVoucher:
     remote_id: str = ""
     # (ledger_name, amount) in *our* convention: positive = debit
     lines: list[tuple[str, Decimal]] = field(default_factory=list)
+    #: ledger name -> [(category, cost centre, amount)] in our convention.
+    costs: dict[str, list[tuple[str, str, Decimal]]] = field(default_factory=dict)
     #: Stock movements on this voucher, if any.
     stock: list[FakeStockMove] = field(default_factory=list)
     #: ledger name -> [(bill reference, bill type, amount)], as imported. Real
@@ -101,6 +103,8 @@ class FakeTally:
         self.stock_items: dict[str, FakeStockItem] = {}
         self.units: dict[str, str] = {}
         self.godowns: dict[str, str] = {}
+        self.cost_categories: set[str] = {"Primary Cost Category"}
+        self.cost_centres: dict[str, str] = {}
         self.vouchers: list[FakeVoucher] = []
         self.requests: list[bytes] = []
         self._ids = itertools.count(1)
@@ -225,6 +229,19 @@ class FakeTally:
                 [{"@NAME": name, "NAME": name, "FORMALNAME": formal}
                  for name, formal in self.units.items()],
             )
+        if self._is_tdl_over(root, "costcategory"):
+            return self._collection(
+                "COSTCATEGORY",
+                [{"@NAME": name, "NAME": name} for name in sorted(self.cost_categories)],
+            )
+        if self._is_tdl_over(root, "costcentre"):
+            return self._collection(
+                "COSTCENTRE",
+                [
+                    {"@NAME": name, "NAME": name, "PARENT": "", "CATEGORY": category}
+                    for name, category in sorted(self.cost_centres.items())
+                ],
+            )
         if self._is_tdl_over(root, "godown"):
             return self._collection(
                 "GODOWN",
@@ -311,6 +328,12 @@ class FakeTally:
                     "Yes" if amount > 0 else "No"
                 )
                 etree.SubElement(entry, "AMOUNT").text = format(-amount, "f")
+                for category, centre, cost_amount in voucher.costs.get(name, []):
+                    cat = etree.SubElement(entry, "CATEGORYALLOCATIONS.LIST")
+                    etree.SubElement(cat, "CATEGORY").text = category
+                    cc = etree.SubElement(cat, "COSTCENTREALLOCATIONS.LIST")
+                    etree.SubElement(cc, "NAME").text = centre
+                    etree.SubElement(cc, "AMOUNT").text = format(-cost_amount, "f")
                 # Real Tally nests further here; the parser must cope with it.
                 allocations = voucher.bills.get(name)
                 if allocations:
@@ -486,6 +509,25 @@ class FakeTally:
                 self.units[name] = unit_el.findtext("FORMALNAME") or name
                 created += 1
 
+        for category_el in root.iter("COSTCATEGORY"):
+            name = category_el.findtext("NAME") or category_el.get("NAME") or ""
+            if name and name not in self.cost_categories:
+                self.cost_categories.add(name)
+                created += 1
+
+        for centre_el in root.iter("COSTCENTRE"):
+            name = centre_el.findtext("NAME") or centre_el.get("NAME") or ""
+            category = centre_el.findtext("CATEGORY") or "Primary Cost Category"
+            if not name or name in self.cost_centres:
+                continue
+            if category not in self.cost_categories:
+                # Same refusal as the real thing: a category created in the same
+                # envelope is not yet resolvable.
+                errors.append(f"Cost Category '{category}' does not exist")
+                continue
+            self.cost_centres[name] = category
+            created += 1
+
         for godown_el in root.iter("GODOWN"):
             name = godown_el.findtext("NAME") or godown_el.get("NAME") or ""
             if name and name not in self.godowns:
@@ -517,6 +559,7 @@ class FakeTally:
             lines: list[tuple[str, Decimal]] = []
             unknown: list[str] = []
             bills: dict[str, list[tuple[str, str, Decimal]]] = {}
+            costs: dict[str, list[tuple[str, str, Decimal]]] = {}
             for entry in voucher_el.iter("ALLLEDGERENTRIES.LIST"):
                 name = entry.findtext("LEDGERNAME") or ""
                 if name not in self.ledgers:
@@ -536,6 +579,24 @@ class FakeTally:
                             -Decimal(allocation.findtext("AMOUNT") or "0"),
                         )
                     )
+                for category in entry.iter("CATEGORYALLOCATIONS.LIST"):
+                    category_name = (
+                        category.findtext("CATEGORY") or "Primary Cost Category"
+                    )
+                    for centre in category.iter("COSTCENTREALLOCATIONS.LIST"):
+                        centre_name = centre.findtext("NAME") or ""
+                        if not centre_name:
+                            continue
+                        if centre_name not in self.cost_centres:
+                            unknown.append(f"cost centre {centre_name}")
+                            continue
+                        costs.setdefault(name, []).append(
+                            (
+                                category_name,
+                                centre_name,
+                                -Decimal(centre.findtext("AMOUNT") or "0"),
+                            )
+                        )
             stock: list[FakeStockMove] = []
             for inv in voucher_el.iter("INVENTORYALLOCATIONS.LIST"):
                 item_name = inv.findtext("STOCKITEMNAME") or ""
@@ -617,6 +678,8 @@ class FakeTally:
                         remote_id=remote_id,
                         lines=lines,
                         bills=bills,
+                        costs=costs,
+                        stock=stock,
                     )
                     self.vouchers.append(voucher)
                     last_voucher_id = voucher.master_id
@@ -624,6 +687,8 @@ class FakeTally:
                     continue
                 existing.lines = lines
                 existing.bills = bills
+                existing.costs = costs
+                existing.stock = stock
                 existing.date = from_tally_date(voucher_el.findtext("DATE") or "")
                 existing.narration = voucher_el.findtext("NARRATION") or ""
                 existing.reference = voucher_el.findtext("REFERENCE") or ""
@@ -659,6 +724,7 @@ class FakeTally:
                 narration=voucher_el.findtext("NARRATION") or "",
                 lines=lines,
                 bills=bills,
+                costs=costs,
                 stock=stock,
             )
             self.vouchers.append(voucher)

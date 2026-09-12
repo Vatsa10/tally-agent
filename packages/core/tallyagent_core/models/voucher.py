@@ -69,6 +69,10 @@ class VoucherLine(BaseModel):
     amount: Decimal
     is_debit: bool | None = None
     cost_centre: str | None = None
+    #: Which cost category the centre belongs to. Tally rejects an allocation
+    #: filed under the wrong category, so this is resolved from the masters
+    #: rather than assumed to be the Primary one.
+    cost_category: str | None = None
     bill_reference: str | None = None
 
     def model_post_init(self, _ctx: object) -> None:

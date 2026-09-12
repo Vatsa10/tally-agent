@@ -310,7 +310,12 @@ async def create_journal(
     reference: str = "",
 ) -> ToolResult:
     """Free-form journal. ``lines`` is [{"ledger": str, "amount": Decimal}],
-    positive for debit, negative for credit."""
+    positive for debit, negative for credit.
+
+    A line may carry ``"cost_centre"``; its category is resolved from the
+    masters, because Tally rejects an allocation filed under the wrong one.
+    """
+    categories = await ctx._cost_centres()  # type: ignore[attr-defined]
     voucher = Voucher(
         voucher_type=VoucherType.JOURNAL,
         date=voucher_date or date.today(),
@@ -320,6 +325,8 @@ async def create_journal(
             VoucherLine(
                 ledger_name=str(line["ledger"]),
                 amount=Decimal(str(line["amount"])).quantize(PAISA),
+                cost_centre=str(line["cost_centre"]) if line.get("cost_centre") else None,
+                cost_category=categories.get(str(line.get("cost_centre") or "")),
             )
             for line in lines
         ],

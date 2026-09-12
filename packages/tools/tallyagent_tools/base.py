@@ -143,7 +143,17 @@ class ToolContext:
             recent_vouchers=await self._recent_vouchers(),
             edu_mode=self.live.edu,
             **(await self._stock_context()),
+            known_cost_centres=await self._cost_centres(),
         )
+
+    async def _cost_centres(self) -> dict[str, str]:
+        """Cost centre -> category, when the company tracks any."""
+        from tallyagent_tools import cost_centres
+
+        try:
+            return {c.name: c.category for c in await cost_centres.cost_centre_masters(self)}
+        except Exception:  # noqa: BLE001 - cost centres are optional
+            return {}
 
     async def _stock_context(self) -> dict[str, Any]:
         """Stock masters and quantities on hand, when the company has any.
