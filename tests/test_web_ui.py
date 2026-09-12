@@ -15,7 +15,8 @@ from tallyagent_channels.web.app import build_router
 from tallyagent_core.policy import Policy
 from tallyagent_llm import mock
 from tallyagent_llm.router import Router
-from tallyagent_tools.base import PendingAction, ToolContext
+from tallyagent_tools.base import ToolContext
+from tallyagent_tools.executor import build_executor
 
 
 @pytest.fixture
@@ -27,16 +28,12 @@ def engine():
 def services(engine, backend, company):
     audit = AuditLog(engine)
 
-    async def execute(action: PendingAction):
-        return await backend.create_voucher(
-            action.voucher, action.idempotency_key, company.name
-        )
-
-    queue = ApprovalQueue(engine, audit, execute)
+    queue = ApprovalQueue(engine, audit)
     tools = ToolContext(
         backend=backend, company=company, policy=Policy.default(), enqueue=queue.enqueue,
         source="web",
     )
+    queue.executor = build_executor(tools)
     return Services(
         company=company,
         tools=tools,

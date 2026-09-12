@@ -114,20 +114,53 @@ def test_special_characters_are_escaped_not_concatenated():
     assert root.findtext("NARRATION") == 'Smith & Co <"adjustment">'
 
 
-def test_alter_carries_the_master_id():
+def test_a_created_voucher_carries_our_own_remote_id():
+    """The identity we assign at creation is what makes the voucher amendable.
+
+    Tally's own MASTERID cannot be used to amend on TallyPrime 1.x - an Alter
+    addressed by it silently creates a duplicate.
+    """
     voucher = Voucher(
         voucher_type=VoucherType.JOURNAL,
         date=date(2026, 6, 15),
-        master_id="42",
         lines=[
             VoucherLine(ledger_name="Cash", amount=Decimal("1")),
             VoucherLine(ledger_name="Bank - HDFC 1234", amount=Decimal("-1")),
         ],
     )
-    element = builders.build_voucher_element(voucher, action="Alter", remote_id="42")
+    element = builders.build_voucher_element(
+        voucher, action="Create", remote_id="ta1_abc123"
+    )
+    assert element.get("ACTION") == "Create"
+    assert element.get("REMOTEID") == "ta1_abc123"
+    assert "MASTERID" not in element.attrib
+
+
+def test_alter_is_addressed_by_the_remote_id():
+    voucher = Voucher(
+        voucher_type=VoucherType.JOURNAL,
+        date=date(2026, 6, 15),
+        lines=[
+            VoucherLine(ledger_name="Cash", amount=Decimal("1")),
+            VoucherLine(ledger_name="Bank - HDFC 1234", amount=Decimal("-1")),
+        ],
+    )
+    element = builders.build_voucher_element(
+        voucher, action="Alter", remote_id="ta1_abc123"
+    )
     assert element.get("ACTION") == "Alter"
-    assert element.get("MASTERID") == "42"
-    assert element.findtext("MASTERID") == "42"
+    assert element.get("REMOTEID") == "ta1_abc123"
+
+
+def test_a_delete_element_names_the_voucher_and_its_type():
+    element = builders.build_voucher_delete_element(
+        "ta1_abc123", VoucherType.JOURNAL, date(2026, 6, 15)
+    )
+    assert element.get("ACTION") == "Delete"
+    assert element.get("REMOTEID") == "ta1_abc123"
+    # Without the type and date Tally answers "Cannot delete unnamed object".
+    assert element.findtext("VOUCHERTYPENAME") == "Journal"
+    assert element.findtext("DATE") == "20260615"
 
 
 def test_ledger_and_party_elements():
@@ -284,16 +317,76 @@ async def test_a_failed_write_may_be_retried_after_the_ledger_is_created(
     assert fake_tally.balance("Rent") == Decimal("100")
 
 
-async def test_alter_voucher_by_master_id(backend, fake_tally, sales_voucher):
+async def test_alter_voucher_by_our_remote_id(backend, fake_tally, sales_voucher):
+    """A real amendment: one voucher in, one voucher out, content changed."""
     created = await backend.create_voucher(
         sales_voucher, make_key("Demo", sales_voucher)
     )
+    assert created.remote_id, "a created voucher must come back addressable"
+
     amended = sales_voucher.model_copy(update={"narration": "Corrected narration"})
     result = await backend.alter_voucher(
-        amended, created.master_id, make_key("Demo", amended, salt="alter")
+        amended, created.remote_id, make_key("Demo", amended, salt="alter")
     )
     assert result.ok, result.errors
+    assert len(fake_tally.vouchers) == 1, "an amendment must not duplicate"
     assert fake_tally.vouchers[0].narration == "Corrected narration"
+
+
+async def test_amending_without_a_remote_id_is_refused(backend, fake_tally, sales_voucher):
+    """An empty id makes Tally create a duplicate, so it never leaves."""
+    await backend.create_voucher(sales_voucher, make_key("Demo", sales_voucher))
+    before = len(fake_tally.requests)
+
+    result = await backend.alter_voucher(
+        sales_voucher, "", make_key("Demo", sales_voucher, salt="empty")
+    )
+    assert not result.ok
+    assert "without the REMOTEID" in result.errors[0]
+    assert len(fake_tally.requests) == before, "nothing may be sent"
+    assert len(fake_tally.vouchers) == 1
+
+
+async def test_delete_voucher_by_our_remote_id(backend, fake_tally, sales_voucher):
+    created = await backend.create_voucher(
+        sales_voucher, make_key("Demo", sales_voucher)
+    )
+    assert len(fake_tally.vouchers) == 1
+
+    result = await backend.delete_voucher(
+        created.remote_id,
+        sales_voucher.voucher_type,
+        sales_voucher.date,
+        make_key("Demo", sales_voucher, salt="delete"),
+    )
+    assert result.ok, result.errors
+    assert fake_tally.vouchers == []
+    assert not await backend.voucher_exists(created.remote_id)
+
+
+async def test_deleting_something_that_is_not_there_fails(backend, fake_tally):
+    from datetime import date as _date
+
+    result = await backend.delete_voucher(
+        "ta1_nothing_like_this",
+        VoucherType.JOURNAL,
+        _date(2026, 6, 15),
+        make_key("Demo", _sales(), salt="ghost"),
+        master_id="99999",
+    )
+    assert not result.ok
+    assert "nothing to delete" in " ".join(result.errors).lower()
+
+
+def _sales() -> Voucher:
+    return Voucher(
+        voucher_type=VoucherType.JOURNAL,
+        date=date(2026, 6, 15),
+        lines=[
+            VoucherLine(ledger_name="Cash", amount=Decimal("1")),
+            VoucherLine(ledger_name="Bank - HDFC 1234", amount=Decimal("-1")),
+        ],
+    )
 
 
 async def test_alter_with_an_unknown_master_id_fails_loudly(backend, sales_voucher):

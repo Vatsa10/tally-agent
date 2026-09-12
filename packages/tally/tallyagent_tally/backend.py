@@ -20,7 +20,7 @@ from tallyagent_backends.accounting_backend import (
 )
 from tallyagent_core import idempotency
 from tallyagent_core.idempotency import IdempotencyStore, InMemoryIdempotencyStore
-from tallyagent_core.models import Ledger, Party, Voucher
+from tallyagent_core.models import Ledger, Party, Voucher, VoucherType
 from tallyagent_core.models.voucher import PAISA
 from tallyagent_tally.client import TallyClient
 from tallyagent_tally.xml import builders, parsers
@@ -474,6 +474,7 @@ class TallyBackend:
         idempotency_key: str,
         company: str | None,
         expect_altered: bool = False,
+        remote_id: str | None = None,
     ) -> WriteResult:
         """Idempotency gate + import + result recording, shared by every write."""
         target = self.client.company_or_default(company)
@@ -485,6 +486,7 @@ class TallyBackend:
                 ok=existing is not None and existing.status == "succeeded",
                 voucher_number=(existing.result.get("voucher_number", "") if existing else ""),
                 master_id=(existing.result.get("master_id", "") if existing else ""),
+                remote_id=(existing.result.get("remote_id", "") if existing else ""),
                 idempotency_key=idempotency_key,
                 replayed=True,
                 errors=[] if (existing and existing.status == "succeeded") else [decision.reason],
@@ -524,12 +526,14 @@ class TallyBackend:
         payload = {
             "voucher_number": result.last_voucher_id,
             "master_id": result.last_master_id or result.last_voucher_id,
+            "remote_id": remote_id or "",
         }
         idempotency.record_success(self.store, idempotency_key, payload)
         return WriteResult(
             ok=True,
             voucher_number=result.last_voucher_id,
             master_id=payload["master_id"],
+            remote_id=remote_id or "",
             idempotency_key=idempotency_key,
             raw_request=raw,
         )
@@ -540,48 +544,188 @@ class TallyBackend:
         idempotency_key: str,
         company: str | None = None,
     ) -> WriteResult:
-        element = builders.build_voucher_element(voucher, action="Create")
-        return await self._import_once([element], "Vouchers", idempotency_key, company)
+        """Post a voucher, addressable for life.
+
+        The idempotency key doubles as the voucher's REMOTEID. It is already
+        unique per company and voucher content, it is already persisted, and
+        giving Tally an identity we chose is the only way to amend or delete
+        the voucher afterwards on TallyPrime 1.x.
+        """
+        remote_id = voucher.remote_id or idempotency_key
+        element = builders.build_voucher_element(
+            voucher, action="Create", remote_id=remote_id
+        )
+        return await self._import_once(
+            [element], "Vouchers", idempotency_key, company, remote_id=remote_id
+        )
 
     async def alter_voucher(
         self,
         voucher: Voucher,
-        master_id: str,
+        remote_id: str,
         idempotency_key: str,
         company: str | None = None,
     ) -> WriteResult:
+        """Amend a voucher we created, addressed by the REMOTEID we gave it.
+
+        Refuses an empty id rather than sending one: Tally treats an unmatched
+        Alter as a Create, so a blank id silently duplicates the voucher
+        instead of amending it.
+        """
+        if not str(remote_id).strip():
+            return WriteResult(
+                ok=False,
+                idempotency_key=idempotency_key,
+                errors=[
+                    "cannot amend a voucher without the REMOTEID it was created "
+                    "with. Look it up with find_voucher; amending by Tally's own "
+                    "MASTERID or GUID creates a duplicate instead."
+                ],
+            )
         if not self.client.config.supports_voucher_alter:
             return WriteResult(
                 ok=False,
                 idempotency_key=idempotency_key,
                 errors=[
-                    "this TallyPrime does not support amending a voucher over XML. "
-                    "Its import is create-only: an Alter is not matched against the "
-                    "existing voucher, it silently creates a duplicate (verified "
-                    "against REMOTEID, VCHKEY, GUID and MASTERID on 1.1.7.1). "
-                    "Amend it in Tally, or set [tally] supports_voucher_alter = true "
-                    "if your version handles it."
+                    "amending vouchers over XML is disabled for this Tally "
+                    "([tally] supports_voucher_alter = false). Amend it in Tally."
                 ],
             )
-        if not str(master_id).strip() or str(master_id).strip() == "0":
-            # Sending a blank or zero id makes Tally create a duplicate rather
-            # than amend anything. Refuse before it leaves.
+        amended = voucher.model_copy(update={"remote_id": remote_id})
+        element = builders.build_voucher_element(
+            amended, action="Alter", remote_id=remote_id
+        )
+        return await self._import_once(
+            [element],
+            "Vouchers",
+            idempotency_key,
+            company,
+            expect_altered=True,
+            remote_id=remote_id,
+        )
+
+    async def delete_voucher(
+        self,
+        remote_id: str,
+        voucher_type: VoucherType,
+        when: date,
+        idempotency_key: str,
+        company: str | None = None,
+        master_id: str = "",
+    ) -> WriteResult:
+        """Delete a voucher we created, addressed by the REMOTEID we gave it.
+
+        Verification cannot use that REMOTEID: Tally honours it on the way in
+        but reports its own GUID on the way out, so "is it still there?" has to
+        be answered by watching which vouchers actually disappeared. A delete
+        that silently changed nothing is the worst outcome available here, so a
+        deletion is only reported successful once a voucher is demonstrably
+        gone.
+        """
+        if not str(remote_id).strip():
             return WriteResult(
                 ok=False,
                 idempotency_key=idempotency_key,
                 errors=[
-                    "cannot amend a voucher without its Tally id. Look it up with "
-                    "find_voucher first - an empty id makes Tally create a "
-                    "duplicate instead of amending."
+                    "cannot delete a voucher without the REMOTEID it was created with"
                 ],
             )
-        amended = voucher.model_copy(update={"master_id": master_id})
-        element = builders.build_voucher_element(
-            amended, action="Alter", remote_id=master_id
+
+        target = self.client.company_or_default(company)
+        decision = idempotency.check(self.store, idempotency_key, target)
+        if not decision.should_execute:
+            existing = decision.existing
+            return WriteResult(
+                ok=existing is not None and existing.status == "succeeded",
+                remote_id=remote_id,
+                idempotency_key=idempotency_key,
+                replayed=True,
+            )
+
+        before = await self._voucher_master_ids(company)
+        if master_id and master_id not in before:
+            idempotency.record_failure(
+                self.store, idempotency_key, "voucher already absent"
+            )
+            return WriteResult(
+                ok=False,
+                remote_id=remote_id,
+                idempotency_key=idempotency_key,
+                errors=[
+                    f"voucher {master_id} is not in this company, so there is "
+                    "nothing to delete"
+                ],
+            )
+
+        element = builders.build_voucher_delete_element(remote_id, voucher_type, when)
+        payload = builders.build_import(
+            [element], "Vouchers", company=self.client.company_or_default(company)
         )
-        return await self._import_once(
-            [element], "Vouchers", idempotency_key, company, expect_altered=True
+        try:
+            raw = await self.client.post(payload)
+        except Exception as exc:
+            idempotency.record_failure(self.store, idempotency_key, str(exc))
+            raise
+
+        result = parsers.parse_import_result(raw)
+        after = await self._voucher_master_ids(company)
+        removed = before - after
+
+        if not removed:
+            problems = result.messages or [
+                "Tally accepted the delete but no voucher was removed"
+            ]
+            idempotency.record_failure(self.store, idempotency_key, "; ".join(problems))
+            return WriteResult(
+                ok=False,
+                remote_id=remote_id,
+                idempotency_key=idempotency_key,
+                errors=problems,
+                raw_request=payload.decode("utf-8"),
+            )
+        if master_id and master_id not in removed:
+            # It deleted *something else*. Say so loudly; this is the one
+            # failure mode that quietly destroys the wrong record.
+            problems = [
+                f"the delete removed voucher(s) {sorted(removed)} but the target "
+                f"was {master_id}. Check the Day Book before doing anything else."
+            ]
+            idempotency.record_failure(self.store, idempotency_key, "; ".join(problems))
+            return WriteResult(
+                ok=False,
+                remote_id=remote_id,
+                idempotency_key=idempotency_key,
+                errors=problems,
+                raw_request=payload.decode("utf-8"),
+            )
+
+        idempotency.record_success(
+            self.store,
+            idempotency_key,
+            {"remote_id": remote_id, "master_id": master_id},
         )
+        return WriteResult(
+            ok=True,
+            master_id=master_id,
+            remote_id=remote_id,
+            idempotency_key=idempotency_key,
+            raw_request=payload.decode("utf-8"),
+        )
+
+    async def _voucher_master_ids(self, company: str | None = None) -> set[str]:
+        """Every voucher currently in the company, by Tally's own id."""
+        return {
+            str(row.get("MASTERID") or "")
+            for row in await self.get_vouchers(company=company)
+            if row.get("MASTERID")
+        }
+
+    async def voucher_exists(self, remote_id: str, company: str | None = None) -> bool:
+        """Is a voucher with this REMOTEID still in the books?"""
+        for row in await self.get_vouchers(company=company):
+            if str(row.get("REMOTEID") or "") == remote_id:
+                return True
+        return False
 
     async def create_ledger(
         self,

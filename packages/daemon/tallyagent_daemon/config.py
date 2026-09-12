@@ -155,7 +155,7 @@ def from_dict(
             password=os.environ.get("TALLY_PASSWORD", ""),
             timeout_seconds=float(tally_raw.get("timeout_seconds") or 60),
             supports_voucher_alter=bool(
-                tally_raw.get("supports_voucher_alter", False)
+                tally_raw.get("supports_voucher_alter", True)
             ),
         ),
         company=company,

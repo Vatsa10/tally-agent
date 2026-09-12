@@ -26,7 +26,11 @@ write_prefix = "TA-"
 # TallyPrime 1.1.7.1's XML import is create-only: amending a voucher does not
 # match the original, it silently creates a duplicate. Leave this off unless
 # your Tally genuinely supports Alter over XML.
-supports_voucher_alter = false
+# Amending and deleting vouchers works on TallyPrime 1.x, but only for vouchers
+# tallyagent posted: it supplies its own REMOTEID at creation, which Tally
+# honours for Alter and Delete even though it never reports it back. Set false
+# if a Tally version starts creating duplicates instead of amending.
+supports_voucher_alter = true
 
 # TallyPrime Educational (student) mode only accepts vouchers dated on the 1st,
 # 2nd or 31st of a month. Leave unset to default to true in live mode; set

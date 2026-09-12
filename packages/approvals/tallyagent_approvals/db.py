@@ -73,6 +73,31 @@ class IdempotencyRow(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class VoucherIndexRow(SQLModel, table=True):
+    """Which REMOTEID we gave each voucher we posted.
+
+    Tally accepts a REMOTEID on create and honours it for later Alter and
+    Delete, but it does not report it back - every export shows Tally's own
+    GUID instead. So the identity that makes a voucher amendable exists only
+    here. Losing this table means losing the ability to amend or delete
+    anything already posted (the books are untouched; only the handle is lost).
+    """
+
+    __tablename__ = "voucher_index"
+
+    id: int | None = Field(default=None, primary_key=True)
+    company: str = Field(index=True)
+    remote_id: str = Field(index=True)
+    master_id: str = Field(default="", index=True)
+    voucher_number: str = ""
+    voucher_type: str = ""
+    reference: str = ""
+    voucher_date: str = ""
+    amount: str = "0"
+    deleted: bool = Field(default=False, index=True)
+    created_at: datetime = Field(default_factory=_now)
+
+
 class MemoryRow(SQLModel, table=True):
     """Per-company learned facts: ledger aliases, party aliases, corrections."""
 

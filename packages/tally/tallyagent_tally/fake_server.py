@@ -40,6 +40,10 @@ class FakeVoucher:
     party_name: str
     reference: str
     narration: str
+    #: The identity the caller assigned via REMOTEID, if any. Real Tally will
+    #: only amend or delete a voucher addressed by one of these; addressing it
+    #: by the MASTERID *it* assigned silently creates a duplicate instead.
+    remote_id: str = ""
     # (ledger_name, amount) in *our* convention: positive = debit
     lines: list[tuple[str, Decimal]] = field(default_factory=list)
     #: ledger name -> [(bill reference, bill type, amount)], as imported. Real
@@ -221,7 +225,7 @@ class FakeTally:
                 "VOUCHER",
                 attrib={
                     "VCHTYPE": voucher.voucher_type,
-                    "REMOTEID": f"fake-guid-{voucher.master_id}",
+                    "REMOTEID": voucher.remote_id or f"fake-guid-{voucher.master_id}",
                 },
             )
             etree.SubElement(element, "DATE").text = (
@@ -233,6 +237,9 @@ class FakeTally:
             etree.SubElement(element, "REFERENCE").text = voucher.reference
             etree.SubElement(element, "NARRATION").text = voucher.narration
             etree.SubElement(element, "MASTERID").text = voucher.master_id
+            if voucher.remote_id:
+                element.set("REMOTEID", voucher.remote_id)
+                etree.SubElement(element, "REMOTEID").text = voucher.remote_id
             for name, amount in voucher.lines:
                 entry = etree.SubElement(element, "ALLLEDGERENTRIES.LIST")
                 etree.SubElement(entry, "LEDGERNAME").text = name
@@ -311,6 +318,7 @@ class FakeTally:
                         "NARRATION": voucher.narration,
                         "REFERENCE": voucher.reference,
                         "MASTERID": voucher.master_id,
+                        "REMOTEID": voucher.remote_id,
                     }
                 )
         return rows
@@ -409,7 +417,7 @@ class FakeTally:
                             -Decimal(allocation.findtext("AMOUNT") or "0"),
                         )
                     )
-            if unknown:
+            if unknown and voucher_el.get("ACTION", "Create") != "Delete":
                 errors.extend(
                     f"Ledger '{name}' does not exist in the company" for name in unknown
                 )
@@ -418,21 +426,37 @@ class FakeTally:
             voucher_type = voucher_el.get("VCHTYPE") or (
                 voucher_el.findtext("VOUCHERTYPENAME") or "Journal"
             )
-            if action == "Alter":
-                master_id = voucher_el.get("MASTERID") or (
-                    voucher_el.findtext("MASTERID") or ""
+            # Real Tally only honours an identity the caller supplied. The
+            # MASTERID it assigned itself is not usable for Alter or Delete on
+            # TallyPrime 1.x, so the fake matches on REMOTEID and nothing else.
+            remote_id = voucher_el.get("REMOTEID") or (
+                voucher_el.findtext("REMOTEID") or ""
+            )
+
+            if action == "Delete":
+                target = next(
+                    (v for v in self.vouchers if remote_id and v.remote_id == remote_id),
+                    None,
                 )
+                if target is None:
+                    errors.append(
+                        "Voucher does not exist!"
+                        if remote_id
+                        else "Cannot delete unnamed object: VOUCHER!"
+                    )
+                    continue
+                self.vouchers.remove(target)
+                continue
+
+            if action == "Alter":
                 existing = next(
-                    (
-                        v
-                        for v in self.vouchers
-                        if master_id and v.master_id == master_id
-                    ),
+                    (v for v in self.vouchers if remote_id and v.remote_id == remote_id),
                     None,
                 )
                 if existing is None:
-                    # What real Tally does: an unmatched id is not an error, it
-                    # silently creates a NEW voucher. Reproduced here so the
+                    # What real Tally does, and why it is dangerous: an Alter
+                    # that matches nothing is not an error, it silently creates
+                    # a NEW voucher. Reproduced so the adapter's expect_altered
                     # guard against it is actually exercised.
                     voucher = FakeVoucher(
                         master_id=str(next(self._ids)),
@@ -442,6 +466,7 @@ class FakeTally:
                         party_name=voucher_el.findtext("PARTYLEDGERNAME") or "",
                         reference=voucher_el.findtext("REFERENCE") or "",
                         narration=voucher_el.findtext("NARRATION") or "",
+                        remote_id=remote_id,
                         lines=lines,
                         bills=bills,
                     )
@@ -450,8 +475,10 @@ class FakeTally:
                     created += 1
                     continue
                 existing.lines = lines
+                existing.bills = bills
                 existing.date = from_tally_date(voucher_el.findtext("DATE") or "")
                 existing.narration = voucher_el.findtext("NARRATION") or ""
+                existing.reference = voucher_el.findtext("REFERENCE") or ""
                 last_voucher_id = existing.master_id
                 altered += 1
                 continue
@@ -475,6 +502,7 @@ class FakeTally:
                 continue
             voucher = FakeVoucher(
                 master_id=str(next(self._ids)),
+                remote_id=remote_id,
                 voucher_number=number,
                 voucher_type=voucher_type,
                 date=from_tally_date(voucher_el.findtext("DATE") or ""),

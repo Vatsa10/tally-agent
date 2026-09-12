@@ -29,8 +29,8 @@ from tallyagent_tally.backend import TallyBackend
 from tallyagent_tally.client import TallyClient, TallyConfig
 from tallyagent_tally.fake_server import FakeTally
 from tallyagent_tools import company as company_tools
-from tallyagent_tools import masters as master_tools
-from tallyagent_tools.base import PendingAction, ToolContext
+from tallyagent_tools.base import ToolContext
+from tallyagent_tools.executor import build_executor
 
 ROOT = Path(__file__).resolve().parents[2]
 SCENARIO = ROOT / "scenarios" / "e2e_edu_bootstrap.yaml"
@@ -65,14 +65,7 @@ def wire(tally: FakeTally, live: LiveMode = LIVE_EDU) -> Services:
         enqueue=queue.enqueue, source="script",
     )
 
-    async def execute(action: PendingAction):
-        if action.voucher is None:
-            return await master_tools._execute_master(tools, action)
-        return await backend.create_voucher(
-            action.voucher, action.idempotency_key, tools.company.name
-        )
-
-    queue.executor = execute
+    queue.executor = build_executor(tools)
     return Services(
         company=company,
         tools=tools,

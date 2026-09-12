@@ -111,6 +111,10 @@ class ToolContext:
     #: Optional Tier 3 runner, wired only when the fallback is enabled. Typed as
     #: Any so the tools package does not depend on the agent package.
     fallback: Any = None
+    #: Where the REMOTEIDs we assigned are remembered. Tally never reports them
+    #: back, so without this a posted voucher cannot be amended or deleted.
+    #: Typed as Any to keep tools independent of the approvals package.
+    voucher_index: Any = None
     # alias -> canonical ledger, learned from approver edits (agent memory)
     ledger_aliases: dict[str, str] = field(default_factory=dict)
     source: str = "chat"

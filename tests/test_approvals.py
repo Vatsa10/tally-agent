@@ -17,6 +17,7 @@ from tallyagent_core.policy import Policy
 from tallyagent_tally.backend import TallyBackend
 from tallyagent_tools import masters, vouchers
 from tallyagent_tools.base import PendingAction, ToolContext
+from tallyagent_tools.executor import build_executor
 
 
 @pytest.fixture
@@ -34,21 +35,7 @@ def executor(backend, company):
     """Performs approved writes, exactly as the daemon wires it."""
     ctx = ToolContext(backend=backend, company=company)
 
-    async def execute(action: PendingAction):
-        if action.voucher is None:
-            return await masters._execute_master(ctx, action)
-        if action.action_type == "alter_voucher":
-            return await backend.alter_voucher(
-                action.voucher,
-                str(action.payload["master_id"]),
-                action.idempotency_key,
-                company.name,
-            )
-        return await backend.create_voucher(
-            action.voucher, action.idempotency_key, company.name
-        )
-
-    return execute
+    return build_executor(ctx)
 
 
 @pytest.fixture

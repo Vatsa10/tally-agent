@@ -22,6 +22,10 @@ class WriteResult:
     ok: bool
     voucher_number: str = ""
     master_id: str = ""
+    #: The identity *we* assigned at creation. Tally's own MASTERID/GUID cannot
+    #: be used to amend or delete on TallyPrime 1.x, ours can - so this is what
+    #: callers keep if they ever want to change the voucher again.
+    remote_id: str = ""
     idempotency_key: str = ""
     replayed: bool = False
     errors: list[str] = field(default_factory=list)

@@ -19,14 +19,13 @@ from tallyagent_agent.memory import Memory
 from tallyagent_approvals.audit import AuditLog
 from tallyagent_approvals.db import EgressRow, SqlIdempotencyStore, make_engine
 from tallyagent_approvals.queue import ApprovalQueue
-from tallyagent_backends.accounting_backend import WriteResult
+from tallyagent_approvals.voucher_index import VoucherIndex
 from tallyagent_channels.services import Services
 from tallyagent_daemon.config import Config
 from tallyagent_llm.router import EgressRecord, Router, build_provider
 from tallyagent_tally.backend import TallyBackend
 from tallyagent_tally.client import TallyClient
-from tallyagent_tools import masters
-from tallyagent_tools.base import PendingAction, ToolContext
+from tallyagent_tools.base import ToolContext
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +61,7 @@ def build(
     router = Router(provider, on_egress=_egress_writer(engine, config))
 
     queue = ApprovalQueue(engine, audit)
+    index = VoucherIndex(engine, config.company.name)
     tools = ToolContext(
         backend=backend,
         company=config.company,
@@ -69,6 +69,7 @@ def build(
         live=config.live,
         enqueue=queue.enqueue,
         ledger_aliases=queue.learned_aliases(config.company.name),
+        voucher_index=index,
     )
     queue.executor = _executor(backend, tools, config)
 
@@ -102,23 +103,15 @@ def _provider_or_mock(config: Config):  # type: ignore[no-untyped-def]
 
 
 def _executor(backend: TallyBackend, tools: ToolContext, config: Config):  # type: ignore[no-untyped-def]
-    """The single function that turns an approved action into a Tally write."""
+    """The single function that turns an approved action into a Tally write.
 
-    async def execute(action: PendingAction) -> WriteResult:
-        if action.voucher is None:
-            return await masters._execute_master(tools, action)
-        if action.action_type == "alter_voucher":
-            return await backend.alter_voucher(
-                action.voucher,
-                str(action.payload.get("master_id", "")),
-                action.idempotency_key,
-                config.company.name,
-            )
-        return await backend.create_voucher(
-            action.voucher, action.idempotency_key, config.company.name
-        )
+    It lives in the tools package so the daemon, the TUI, the web UI and every
+    test share it rather than each keeping a near-copy that quietly misses a
+    new action type.
+    """
+    from tallyagent_tools.executor import build_executor
 
-    return execute
+    return build_executor(tools)
 
 
 def _egress_writer(engine, config: Config):  # type: ignore[no-untyped-def]

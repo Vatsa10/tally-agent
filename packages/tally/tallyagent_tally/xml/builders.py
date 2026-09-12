@@ -9,6 +9,7 @@ a malformed request.
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 from lxml import etree
@@ -154,13 +155,19 @@ def build_voucher_element(
 ) -> etree._Element:
     """One ``<VOUCHER>`` element.
 
-    ``action="Alter"`` plus ``remote_id`` (a MASTERID or GUID) is how an
-    existing voucher is amended; Tally matches on the id, not on content.
+    ``remote_id`` is the voucher's identity **for the life of the voucher**, and
+    it is set on Create, not just on Alter. That is the whole trick: TallyPrime
+    1.1.7.1 will not amend or delete a voucher addressed by the MASTERID or GUID
+    *it* assigned - ``ACTION="Alter"`` silently creates a duplicate instead,
+    which is worse than failing. Address it by a REMOTEID we chose at creation
+    and both work properly (measured: Alter gives altered=1 with the voucher
+    count unchanged; Delete removes it).
+
     Deliberately emits no OBJVIEW attribute - see quirks.NEVER_EMIT_ATTRIBUTES.
     """
     attrib = {"VCHTYPE": voucher.voucher_type.value, "ACTION": action}
     if remote_id:
-        attrib["REMOTEID" if len(remote_id) > 12 else "MASTERID"] = remote_id
+        attrib["REMOTEID"] = remote_id
     element = etree.Element("VOUCHER", attrib=attrib)
 
     etree.SubElement(element, "DATE").text = to_tally_date(voucher.date)
@@ -173,11 +180,6 @@ def build_voucher_element(
         etree.SubElement(element, "NARRATION").text = voucher.narration
     if voucher.reference:
         etree.SubElement(element, "REFERENCE").text = voucher.reference
-    if action == "Alter" and voucher.master_id:
-        etree.SubElement(element, "MASTERID").text = voucher.master_id
-    if action == "Alter" and voucher.guid:
-        etree.SubElement(element, "GUID").text = voucher.guid
-
     for line in voucher.lines:
         entry = etree.SubElement(element, "ALLLEDGERENTRIES.LIST")
         etree.SubElement(entry, "LEDGERNAME").text = line.ledger_name
@@ -203,6 +205,27 @@ def build_voucher_element(
             cc = etree.SubElement(cat, "COSTCENTREALLOCATIONS.LIST")
             etree.SubElement(cc, "NAME").text = line.cost_centre
             etree.SubElement(cc, "AMOUNT").text = amount_text
+    return element
+
+
+def build_voucher_delete_element(
+    remote_id: str, voucher_type: VoucherType, when: date
+) -> etree._Element:
+    """A ``<VOUCHER ACTION="Delete">`` addressed by our own REMOTEID.
+
+    Tally needs the type and date alongside the identity; without them it
+    answers "Cannot delete unnamed object: VOUCHER!" and changes nothing.
+    """
+    element = etree.Element(
+        "VOUCHER",
+        attrib={
+            "VCHTYPE": voucher_type.value,
+            "ACTION": "Delete",
+            "REMOTEID": remote_id,
+        },
+    )
+    etree.SubElement(element, "DATE").text = to_tally_date(when)
+    etree.SubElement(element, "VOUCHERTYPENAME").text = voucher_type.value
     return element
 
 

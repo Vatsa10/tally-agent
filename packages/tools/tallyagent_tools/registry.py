@@ -290,25 +290,63 @@ TOOLS: tuple[Tool, ...] = (
         mutating=True,
     ),
     Tool(
-        "alter_voucher",
-        "Amend an existing voucher. The master_id must come from find_voucher: "
-        "Tally does not reject an unmatched id, it silently creates a duplicate.",
+        "find_voucher",
+        "Find a voucher and its REMOTEID - the identity needed to amend or "
+        "delete it. Always call this before alter_voucher or delete_voucher; "
+        "Tally's own MASTERID cannot be used to change a voucher.",
         _object(
             {
-                "master_id": _STRING,
+                "reference": {**_STRING, "description": "Invoice or bill number"},
+                "party_name": _STRING,
+                "voucher_number": _STRING,
+            }
+        ),
+        vouchers.find_voucher,
+    ),
+    Tool(
+        "alter_voucher",
+        "Amend a voucher tallyagent posted, identified by the REMOTEID from "
+        "find_voucher. Replaces the voucher's lines entirely, so send every "
+        "line, not only the changed one.",
+        _object(
+            {
+                "remote_id": _STRING,
                 "lines": {
                     "type": "array",
                     "items": _object(
-                        {"ledger": _STRING, "amount": _NUMBER}, ["ledger", "amount"]
+                        {
+                            "ledger": _STRING,
+                            "amount": _NUMBER,
+                            "bill_reference": _STRING,
+                        },
+                        ["ledger", "amount"],
                     ),
                 },
                 "voucher_type": _STRING,
                 "voucher_date": _DATE,
                 "narration": _STRING,
+                "reference": _STRING,
+                "party_name": _STRING,
             },
-            ["master_id", "lines"],
+            ["remote_id", "lines"],
         ),
         vouchers.alter_voucher,
+        mutating=True,
+    ),
+    Tool(
+        "delete_voucher",
+        "Delete a voucher tallyagent posted, identified by the REMOTEID from "
+        "find_voucher. Queued for approval showing what will disappear.",
+        _object(
+            {
+                "remote_id": _STRING,
+                "voucher_type": _STRING,
+                "voucher_date": _DATE,
+                "reason": {**_STRING, "description": "Why it is being deleted"},
+            },
+            ["remote_id"],
+        ),
+        vouchers.delete_voucher,
         mutating=True,
     ),
     Tool(

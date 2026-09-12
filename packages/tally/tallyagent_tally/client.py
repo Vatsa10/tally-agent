@@ -39,7 +39,7 @@ class TallyConfig:
     #: voucher instead - verified against REMOTEID, VCHKEY, GUID and MASTERID.
     #: Off by default in live mode, because "amend" that silently duplicates is
     #: worse than "amend" that refuses. Turn on for a Tally that supports it.
-    supports_voucher_alter: bool = False
+    supports_voucher_alter: bool = True
 
     @property
     def url(self) -> str:

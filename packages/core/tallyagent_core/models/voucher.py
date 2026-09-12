@@ -95,6 +95,11 @@ class Voucher(BaseModel):
     voucher_number: str | None = None
     master_id: str | None = None
     guid: str | None = None
+    #: The identity we assign at creation so the voucher stays addressable.
+    #: Tally's own MASTERID and GUID cannot be used to amend or delete on
+    #: TallyPrime 1.x - an Alter addressed by either silently creates a
+    #: duplicate. Defaults to the idempotency key at post time.
+    remote_id: str | None = None
 
     @property
     def total_debit(self) -> Decimal:
