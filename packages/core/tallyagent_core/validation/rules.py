@@ -12,6 +12,7 @@ from decimal import Decimal
 from tallyagent_core.models import Company, Voucher
 from tallyagent_core.models.voucher import PAISA, VALID_GST_RATES
 from tallyagent_core.validation import gstin as gstin_mod
+from tallyagent_core.validation import place_names
 from tallyagent_core.validation.report import RuleResult, Severity
 
 # Two invoices from the same party for the same amount inside this many days is
@@ -56,6 +57,23 @@ class ValidationContext:
     #: so we warn rather than block when this is on.
     allow_negative_stock: bool = True
 
+    def suggest_cost_centre(self, name: str, n: int = 3) -> list[str]:
+        """Near matches for a cost centre, other names for the place first.
+
+        A branch booked as "Baroda" when the master says "Vadodara" shares
+        almost no characters with it, so fuzzy matching alone returns nothing
+        and the agent is told only that the centre is unknown. Knowing the two
+        are one city is what lets it pick the right one.
+        """
+        known = set(self.known_cost_centres)
+        renamed = place_names.matches_known(name, known)
+        close = [
+            match
+            for match in difflib.get_close_matches(name, sorted(known), n=n, cutoff=0.6)
+            if match not in renamed
+        ]
+        return (renamed + close)[:n]
+
     def suggest_stock(self, name: str, n: int = 3) -> list[str]:
         return difflib.get_close_matches(
             name, sorted(self.known_stock_items), n=n, cutoff=0.6
@@ -72,7 +90,33 @@ class ValidationContext:
         return None
 
     def suggest(self, name: str, n: int = 3) -> list[str]:
-        return difflib.get_close_matches(name, sorted(self.known_ledgers), n=n, cutoff=0.6)
+        """Near matches for a ledger, other names for the same place first.
+
+        "Baroda Branch" against a master called "Vadodara Branch" is not a
+        fuzzy match in any useful sense, so renamed places are checked
+        word by word before difflib gets a turn.
+        """
+        renamed = _renamed_place_matches(name, self.known_ledgers)
+        close = [
+            match
+            for match in difflib.get_close_matches(
+                name, sorted(self.known_ledgers), n=n, cutoff=0.6
+            )
+            if match not in renamed
+        ]
+        return (renamed + close)[:n]
+
+
+def _renamed_place_matches(name: str, known: set[str]) -> list[str]:
+    """Known names that are ``name`` with one word swapped for the place's
+    other name - "Baroda Branch" finding "Vadodara Branch"."""
+    words = name.split()
+    candidates: set[str] = set()
+    for index, word in enumerate(words):
+        for alias in place_names.other_names(word):
+            candidates.add(" ".join(words[:index] + [alias] + words[index + 1 :]))
+    lowered = {k.lower(): k for k in known}
+    return [lowered[c.lower()] for c in sorted(candidates) if c.lower() in lowered]
 
 
 def ledgers_exist(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
@@ -349,11 +393,19 @@ def cost_centres_exist(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
         )
     missing = sorted({n for n in named if n not in ctx.known_cost_centres})
     if missing:
+        parts = []
+        suggestions: dict[str, list[str]] = {}
+        for name in missing:
+            hints = ctx.suggest_cost_centre(name)
+            suggestions[name] = hints
+            parts.append(
+                f"{name!r}" + (f" (did you mean: {', '.join(hints)}?)" if hints else "")
+            )
         return RuleResult(
             "cost_centres_exist",
             False,
-            "unknown cost centre(s): " + ", ".join(repr(n) for n in missing),
-            details={"missing": missing},
+            "unknown cost centre(s): " + "; ".join(parts),
+            details={"missing": missing, "suggestions": suggestions},
         )
     return RuleResult("cost_centres_exist", True, "all cost centres resolve")
 

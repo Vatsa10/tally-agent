@@ -221,3 +221,53 @@ async def test_a_company_with_no_cost_centres_says_so(ctx):
     summary = await cost_centres.cost_centre_summary(ctx)
     assert "tracks no cost centres" in summary.message
     assert summary.data == []
+
+
+# --- a place with two names -------------------------------------------------
+
+
+def test_baroda_is_suggested_as_vadodara(company):
+    """Fuzzy matching cannot find this one: the strings barely overlap."""
+    report = validate(
+        _voucher("Baroda"),
+        ValidationContext(
+            company=company,
+            known_ledgers={"Purchase - GST 18%", "Cash"},
+            known_cost_centres={"Vadodara": "Branches", "Surat": "Branches"},
+        ),
+    )
+    rule = next(r for r in report.results if r.rule == "cost_centres_exist")
+    assert not rule.passed
+    assert "Vadodara" in rule.message
+    assert rule.details["suggestions"]["Baroda"] == ["Vadodara"]
+
+
+def test_a_renamed_place_is_suggested_for_a_ledger_too(company):
+    voucher = Voucher(
+        voucher_type=VoucherType.JOURNAL,
+        date=date(2026, 6, 1),
+        lines=[
+            VoucherLine(ledger_name="Bombay Branch", amount=Decimal("100.00")),
+            VoucherLine(ledger_name="Cash", amount=Decimal("-100.00")),
+        ],
+    )
+    report = validate(
+        voucher,
+        ValidationContext(company=company, known_ledgers={"Mumbai Branch", "Cash"}),
+    )
+    rule = next(r for r in report.results if r.rule == "ledgers_exist")
+    assert not rule.passed
+    assert "Mumbai Branch" in rule.message
+
+
+def test_a_renamed_place_is_never_substituted_silently(company):
+    """Both names can legitimately exist; the agent is told, not overruled."""
+    report = validate(
+        _voucher("Baroda"),
+        ValidationContext(
+            company=company,
+            known_ledgers={"Purchase - GST 18%", "Cash"},
+            known_cost_centres={"Vadodara": "Branches"},
+        ),
+    )
+    assert report.blocks_enqueue
