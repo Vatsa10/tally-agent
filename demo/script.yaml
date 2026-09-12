@@ -1,0 +1,188 @@
+# The demo script. This file is the source of truth for the video.
+#
+# Copy is written the way the codebase talks: declarative, no adjectives doing
+# sales work. Numbers are spelled the way a voice should read them, and
+# abbreviations are spelled phonetically where a TTS engine would otherwise
+# guess - "G-S-T-R two B", "T-A". The ASR check will fail the build if the
+# audio and this text disagree, which is how a mispronunciation gets caught.
+title: tallyagent
+
+voice:
+  # Pinned here, not in code. `make_demo.py voices --locale en-IN` lists the
+  # alternatives with their supported styles.
+  voice_id: en-IN-eashwar
+  style: Narration
+  rate: -4
+
+asr_model: nova-3
+company: TA-Demo Traders
+
+chapters:
+  - id: ch1-problem
+    title: The problem
+    beats:
+      - id: b01-title
+        action: title_card
+        say: >-
+          TallyPrime runs the books at most Indian accounting firms. It has a
+          full X M L interface, and almost nobody uses it. The work is done by
+          hand, screen by screen, voucher by voucher.
+        tail_pad: 0.8
+
+      - id: b02-tally
+        action: show_tally
+        say: >-
+          This is a real TallyPrime instance, with a real company loaded.
+          Everything after this point is live.
+
+  - id: ch2-draft
+    title: Chat drafts a voucher
+    beats:
+      - id: b03-tui
+        action: open_tui
+        say: >-
+          The agent comes up beside it. The status line states the scope it is
+          allowed to write in: companies named T-A, and nothing else.
+
+      - id: b04-ask
+        action: say_to_agent
+        args:
+          text: raise a sale of 2 widgets to Acme at 3200
+        say: A sale, in plain words.
+        tail_pad: 0.6
+
+      - id: b05-draft
+        action: show_draft
+        say: >-
+          The model does not write the voucher. It calls a typed tool, and the
+          tool builds it: two widgets at thirty two hundred, taxable value six
+          thousand four hundred, tax split nine and nine, on a date this
+          Educational licence will actually accept.
+        tail_pad: 0.8
+
+  - id: ch3-refusal
+    title: Validation refuses
+    beats:
+      - id: b06-bad-ask
+        action: say_to_agent
+        args:
+          text: book 100 rent to the Baroda branch
+        say: Now something that should not go through.
+        tail_pad: 0.6
+
+      - id: b07-refused
+        action: show_refusal
+        say: >-
+          There is no Baroda cost centre in this company. There is a Vadodara,
+          which is the same city under its other name, and the agent says so
+          rather than guessing. Validation runs before the approval queue, not
+          after, so this never became a ticket and nothing reached Tally.
+        tail_pad: 0.8
+
+  - id: ch4-approval
+    title: The approval gate
+    beats:
+      - id: b08-queue
+        action: show_approvals
+        say: >-
+          Every write stops here. One queue, whichever way the request arrived.
+
+      - id: b09-diff
+        action: show_ticket
+        say: >-
+          The ticket carries the exact voucher and the exact ledger effects,
+          to the paisa, before anything is committed.
+
+      - id: b10-approve
+        action: approve_pending
+        say: A person decides. Nothing posts without that.
+        tail_pad: 0.8
+
+  - id: ch5-write
+    title: The write lands
+    beats:
+      - id: b11-daybook
+        action: show_day_book
+        say: >-
+          That approval sends X M L to Tally. This is the Tally window itself,
+          and the voucher is in it.
+
+      - id: b12-stock
+        action: say_to_agent
+        args:
+          text: what stock do we hold?
+        say: >-
+          Read back out of Tally, not out of the model's memory. The stock is
+          down by two.
+        tail_pad: 0.8
+
+  - id: ch6-reports
+    title: Reports
+    beats:
+      - id: b13-tb
+        action: say_to_agent
+        args:
+          text: trial balance please
+        say: >-
+          Reports come through the same tools. Trial balance, outstanding,
+          stock summary, all read live.
+
+      - id: b14-outstanding
+        action: say_to_agent
+        args:
+          text: who owes us money?
+        say: >-
+          The debits and the credits agree, because they are Tally's own.
+        tail_pad: 0.8
+
+  - id: ch7-reco
+    title: Reconciliation
+    beats:
+      - id: b15-bank
+        action: run_command
+        args:
+          command: /reco bank tests/fixtures/live_bank_statement.csv
+        say: >-
+          A bank statement goes in. The agent matches what it can against the
+          ledger and proposes entries for the rest.
+
+      - id: b16-gstr
+        action: run_command
+        args:
+          command: /reco gstr2b tests/fixtures/live_gstr2b.json
+        say: >-
+          The same for G-S-T-R two B. Matched, value mismatches, and invoices
+          missing from the books: listed, not quietly adjusted. Every proposal
+          is still a ticket somebody has to approve.
+        tail_pad: 0.8
+
+  - id: ch8-tier3
+    title: Tier three, visible
+    beats:
+      - id: b17-cursor
+        action: tier3_cursor
+        say: >-
+          Some things Tally's interface will not do over X M L. For those there
+          is a third tier that drives the keyboard directly. It is off by
+          default, behind the same approval, and visible while it runs. The ring
+          shows where it is going, and the caption says what it is about to
+          press, before it presses it.
+        tail_pad: 1.0
+
+  - id: ch9-audit
+    title: Audit and close
+    beats:
+      - id: b18-audit
+        action: run_command
+        args:
+          command: /egress
+        say: >-
+          Every tool call, every approval, and every byte that left this machine
+          is on a hash chained log. It verifies, so you can tell whether it has
+          been altered.
+
+      - id: b19-close
+        action: closing_card
+        say: >-
+          The firm's people stay in the approval loop. The typing stops.
+        tail_pad: 1.2

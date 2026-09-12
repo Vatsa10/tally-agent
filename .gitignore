@@ -21,3 +21,6 @@ reports/
 live.db
 
 live*.db
+
+demo/build/
+demo/out/
