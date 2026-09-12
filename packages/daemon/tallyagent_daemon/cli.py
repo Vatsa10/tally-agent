@@ -73,7 +73,9 @@ def _wire_fallback(wired: wiring.Wired) -> None:
     """Attach the Tier 3 runner when policy allows it.
 
     Wired here rather than in ``wiring.build`` so the fallback only exists in
-    the surfaces that can actually ask a human to approve a keystroke.
+    the surfaces that can actually ask a human to approve a keystroke - which
+    is every one of them that carries the approval queue: the TUI, the chat
+    REPL, the daemon's web UI, and MCP.
     """
     config = wired.config
     if not config.tiers.fallback_enabled:
@@ -134,6 +136,7 @@ def chat(
     """A REPL. Type a question; 'quit' to leave. --script runs a scenario."""
     config = _load(config_path, policy_path)
     wired = _wire(config, fake)
+    _wire_fallback(wired)
     services = wired.services
 
     if script:
@@ -232,6 +235,7 @@ def serve(
 
     config = _load(config_path, policy_path)
     wired = _wire(config, fake)
+    _wire_fallback(wired)
     url = f"http://{config.daemon.host}:{config.daemon.port}/"
 
     if config.daemon.tray:
@@ -261,6 +265,10 @@ def mcp(
 
     config = _load(config_path, policy_path)
     wired = _wire(config, fake)
+    # A request arriving over MCP - from Claude Code, say - reaches the same
+    # fallback the TUI has, so Tally comes to the front and the red cursor
+    # shows what is being done.
+    _wire_fallback(wired)
     kind = transport or config.mcp.transport
     only_reads = read_only or config.mcp.read_only
 
