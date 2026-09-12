@@ -584,3 +584,18 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
   cost centres enabled on both the company and the ledger. `cost_centre_summary`
   therefore says so explicitly rather than reporting zeros as if they were
   postings.
+- **D-130 A `<CURRENCY>` import terminates TallyPrime 1.1.7.1.** Not an
+  exception, not an error count - the process dies mid-request, the port stops
+  answering, and the company has to be reopened through the licence screen.
+  Reproduced twice; not tried a third time. Enabling multi-currency on the
+  company over XML (`ISMULTICURRENCYON`) killed it the same way. So foreign
+  currency is built end to end - model, XML, validation, tools - and gated
+  behind `[tally] supports_multi_currency`, default off, checked both when a
+  write is proposed and again in the executor, because the executor is the call
+  that would do the killing.
+- **D-131 "Baroda" and "Vadodara" are the same city, and difflib cannot know
+  it.** An agent asked to book to the Baroda branch was told only that the cost
+  centre was unknown. A table of Indian places that answer to two names now
+  feeds ledger and cost-centre suggestions, the ledger one word by word so
+  "Bombay Branch" finds "Mumbai Branch". Suggestions only - both names can
+  legitimately be separate masters, so nothing is substituted silently.

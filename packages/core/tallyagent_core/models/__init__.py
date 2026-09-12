@@ -2,6 +2,7 @@
 
 from tallyagent_core.models.company import Company, Period
 from tallyagent_core.models.costing import CostCategory, CostCentre
+from tallyagent_core.models.currency import Currency
 from tallyagent_core.models.inventory import (
     Godown,
     InventoryLine,
@@ -21,6 +22,7 @@ __all__ = [
     "Company",
     "CostCategory",
     "CostCentre",
+    "Currency",
     "GSTDetails",
     "Godown",
     "InventoryLine",

@@ -44,6 +44,11 @@ async def execute(ctx: ToolContext, action: PendingAction) -> WriteResult:
             ctx.voucher_index.mark_deleted(remote_id)
         return result
 
+    if action.payload.get("kind") == "currencies":
+        from tallyagent_tools import currencies
+
+        return await currencies.execute_currencies(ctx, action)
+
     if action.payload.get("kind") == "cost_centres":
         from tallyagent_tools import cost_centres
 

@@ -103,6 +103,7 @@ class FakeTally:
         self.stock_items: dict[str, FakeStockItem] = {}
         self.units: dict[str, str] = {}
         self.godowns: dict[str, str] = {}
+        self.currencies: dict[str, str] = {}
         self.cost_categories: set[str] = {"Primary Cost Category"}
         self.cost_centres: dict[str, str] = {}
         self.vouchers: list[FakeVoucher] = []
@@ -228,6 +229,15 @@ class FakeTally:
                 "UNIT",
                 [{"@NAME": name, "NAME": name, "FORMALNAME": formal}
                  for name, formal in self.units.items()],
+            )
+        if self._is_tdl_over(root, "currency"):
+            return self._collection(
+                "CURRENCY",
+                [
+                    {"@NAME": name, "NAME": name, "MAILINGNAME": formal,
+                     "DECIMALPLACES": "2"}
+                    for name, formal in sorted(self.currencies.items())
+                ],
             )
         if self._is_tdl_over(root, "costcategory"):
             return self._collection(
@@ -507,6 +517,12 @@ class FakeTally:
             name = unit_el.findtext("NAME") or unit_el.get("NAME") or ""
             if name and name not in self.units:
                 self.units[name] = unit_el.findtext("FORMALNAME") or name
+                created += 1
+
+        for currency_el in root.iter("CURRENCY"):
+            name = currency_el.findtext("NAME") or currency_el.get("NAME") or ""
+            if name and name not in self.currencies:
+                self.currencies[name] = currency_el.findtext("MAILINGNAME") or name
                 created += 1
 
         for category_el in root.iter("COSTCATEGORY"):

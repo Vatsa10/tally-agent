@@ -144,7 +144,22 @@ class ToolContext:
             edu_mode=self.live.edu,
             **(await self._stock_context()),
             known_cost_centres=await self._cost_centres(),
+            multi_currency_supported=getattr(
+                self.backend.client.config, "supports_multi_currency", False
+            ),
+            known_currencies=await self._currencies(),
         )
+
+    async def _currencies(self) -> set[str]:
+        """Currency masters, only asked for when this Tally can use them."""
+        if not getattr(self.backend.client.config, "supports_multi_currency", False):
+            return set()
+        from tallyagent_tools import currencies
+
+        try:
+            return {c.name for c in await currencies.currency_masters(self)}
+        except Exception:  # noqa: BLE001 - currencies are optional
+            return set()
 
     async def _cost_centres(self) -> dict[str, str]:
         """Cost centre -> category, when the company tracks any."""

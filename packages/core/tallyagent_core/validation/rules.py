@@ -51,6 +51,12 @@ class ValidationContext:
     #: Cost centre name -> its category. Empty when the company does not
     #: track cost centres, which makes the cost centre rules inert.
     known_cost_centres: dict[str, str] = field(default_factory=dict)
+    #: Currency symbols the company has masters for. The base currency is
+    #: not in here; a line with no currency is a base-currency line.
+    known_currencies: set[str] = field(default_factory=set)
+    #: False when the target Tally cannot take foreign-currency writes at
+    #: all - on 1.1.7.1 a currency master terminates the process.
+    multi_currency_supported: bool = False
     #: Quantity on hand per item, for the negative-stock check.
     stock_on_hand: dict[str, Decimal] = field(default_factory=dict)
     #: Some traders deliberately allow stock to go negative. Tally permits it,
@@ -410,6 +416,51 @@ def cost_centres_exist(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
     return RuleResult("cost_centres_exist", True, "all cost centres resolve")
 
 
+def currency_is_usable(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
+    """A foreign-currency line needs a rate, a master, and a Tally that copes.
+
+    The last part is not pedantry: importing a currency master terminates
+    TallyPrime 1.1.7.1, so a foreign-currency voucher aimed at that build has
+    to be stopped here rather than discovered by the process dying.
+    """
+    foreign = [line for line in voucher.lines if line.currency]
+    if not foreign:
+        return RuleResult("currency_is_usable", True, "base currency only")
+
+    symbols = sorted({str(line.currency) for line in foreign})
+    if not ctx.multi_currency_supported:
+        return RuleResult(
+            "currency_is_usable",
+            False,
+            "this TallyPrime cannot handle foreign currency (importing a "
+            "currency master terminates 1.1.7.1), so "
+            + ", ".join(symbols)
+            + " cannot be posted. Set [tally] supports_multi_currency = true "
+            "for a build that handles it.",
+        )
+
+    missing = [s for s in symbols if s not in ctx.known_currencies]
+    if missing:
+        return RuleResult(
+            "currency_is_usable",
+            False,
+            "unknown currenc(y/ies): " + ", ".join(repr(m) for m in missing),
+            details={"missing": missing},
+        )
+
+    rateless = sorted(
+        {str(line.currency) for line in foreign if not line.rate_of_exchange}
+    )
+    if rateless:
+        return RuleResult(
+            "currency_is_usable",
+            False,
+            "no rate of exchange for " + ", ".join(rateless)
+            + ": without it the foreign figure means nothing",
+        )
+    return RuleResult("currency_is_usable", True, "foreign currency lines are complete")
+
+
 def inventory_matches_value(voucher: Voucher, ctx: ValidationContext) -> RuleResult:
     """The stock moved must be worth what the voucher booked.
 
@@ -491,6 +542,7 @@ ALL_RULES = (
     edu_date_allowed,
     stock_items_exist,
     cost_centres_exist,
+    currency_is_usable,
     inventory_matches_value,
     stock_not_negative,
     not_duplicate,

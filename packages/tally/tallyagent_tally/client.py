@@ -34,11 +34,18 @@ class TallyConfig:
     username: str = ""
     password: str = ""
     timeout_seconds: float = 60.0
+    #: Importing a ``<CURRENCY>`` master **terminates TallyPrime 1.1.7.1** -
+    #: the process dies mid-request and the port stops answering, reproducibly.
+    #: So foreign-currency writes are refused before anything is sent, and this
+    #: stays off until a build is known to survive them.
+    supports_multi_currency: bool = False
     #: TallyPrime 1.1.7.1's XML import is create-only: an Alter, Delete or
     #: Cancel aimed at an existing voucher does not match it and creates a new
     #: voucher instead - verified against REMOTEID, VCHKEY, GUID and MASTERID.
     #: Off by default in live mode, because "amend" that silently duplicates is
     #: worse than "amend" that refuses. Turn on for a Tally that supports it.
+    #: (Since measured to work when the voucher carries a REMOTEID we assigned;
+    #: see DECISIONS D-125.)
     supports_voucher_alter: bool = True
 
     @property

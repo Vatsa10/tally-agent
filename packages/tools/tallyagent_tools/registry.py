@@ -13,6 +13,7 @@ from typing import Any
 
 from tallyagent_tools import (
     cost_centres,
+    currencies,
     ingest,
     masters,
     reconcile,
@@ -431,6 +432,30 @@ TOOLS: tuple[Tool, ...] = (
             }
         ),
         stock.create_stock_masters,
+        mutating=True,
+    ),
+    Tool(
+        "list_currencies",
+        "The currencies this company has masters for.",
+        _object({}),
+        currencies.list_currencies,
+    ),
+    Tool(
+        "create_currencies",
+        "Create currency masters. Refused outright on a TallyPrime that cannot "
+        "survive the import.",
+        _object(
+            {
+                "currencies": {
+                    "type": "array",
+                    "items": _object(
+                        {"symbol": _STRING, "name": _STRING, "decimal_places": _NUMBER},
+                        ["symbol"],
+                    ),
+                }
+            }
+        ),
+        currencies.create_currencies,
         mutating=True,
     ),
     Tool(

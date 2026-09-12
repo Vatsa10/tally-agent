@@ -73,7 +73,20 @@ class VoucherLine(BaseModel):
     #: filed under the wrong category, so this is resolved from the masters
     #: rather than assumed to be the Primary one.
     cost_category: str | None = None
+    #: Foreign currency symbol, when this line was billed in one. ``amount``
+    #: stays in the base currency either way - that is what balances.
+    currency: str | None = None
+    #: Base units per one unit of ``currency``. Required whenever currency is
+    #: set: without it the foreign figure is decoration.
+    rate_of_exchange: Decimal | None = None
     bill_reference: str | None = None
+
+    @property
+    def foreign_amount(self) -> Decimal | None:
+        """The line's value in its own currency, or None for a base-currency line."""
+        if self.currency is None or not self.rate_of_exchange:
+            return None
+        return (self.amount / self.rate_of_exchange).quantize(PAISA)
 
     def model_post_init(self, _ctx: object) -> None:
         if self.is_debit is None:

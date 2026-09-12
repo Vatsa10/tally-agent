@@ -17,6 +17,7 @@ from lxml import etree
 from tallyagent_core.models import (
     CostCategory,
     CostCentre,
+    Currency,
     Godown,
     InventoryLine,
     Ledger,
@@ -204,6 +205,14 @@ def build_voucher_element(
         amount_text, deemed_positive = tally_amount(line.amount)
         etree.SubElement(entry, "ISDEEMEDPOSITIVE").text = deemed_positive
         etree.SubElement(entry, "AMOUNT").text = amount_text
+        if line.currency and line.rate_of_exchange:
+            # The base amount above is what balances; these describe it.
+            etree.SubElement(entry, "RATEOFEXCHANGE").text = format(
+                line.rate_of_exchange, "f"
+            )
+            foreign = line.foreign_amount
+            if foreign is not None:
+                etree.SubElement(entry, "FOREXAMOUNT").text = format(-foreign, "f")
         if line.bill_reference:
             bill = etree.SubElement(entry, "BILLALLOCATIONS.LIST")
             etree.SubElement(bill, "NAME").text = line.bill_reference
@@ -318,6 +327,23 @@ def build_voucher_delete_element(
     )
     etree.SubElement(element, "DATE").text = to_tally_date(when)
     etree.SubElement(element, "VOUCHERTYPENAME").text = voucher_type.value
+    return element
+
+
+def build_currency_element(currency: Currency, action: str = "Create") -> etree._Element:
+    """A currency master.
+
+    Sending this to TallyPrime 1.1.7.1 kills the process, so nothing builds it
+    in live mode unless ``[tally] supports_multi_currency`` is on. It exists so
+    a build that does support currencies needs no new code.
+    """
+    element = etree.Element("CURRENCY", attrib={"NAME": currency.name, "ACTION": action})
+    etree.SubElement(element, "NAME").text = currency.name
+    if currency.formal_name and currency.formal_name != currency.name:
+        etree.SubElement(element, "MAILINGNAME").text = currency.formal_name
+    etree.SubElement(element, "DECIMALPLACES").text = str(currency.decimal_places)
+    etree.SubElement(element, "ISSUFFIX").text = "Yes" if currency.is_suffix else "No"
+    etree.SubElement(element, "HASSPACE").text = "Yes" if currency.has_space else "No"
     return element
 
 
