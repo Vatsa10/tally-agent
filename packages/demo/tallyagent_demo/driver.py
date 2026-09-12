@@ -190,14 +190,35 @@ class DemoDriver:
         await self.say_to_agent(text=f"/approve {chosen}")
 
     async def show_day_book(self, **_: Any) -> None:
-        """Raise Tally and point at where the new voucher landed."""
+        """Open Tally's own Day Book, so the new voucher is visible on screen.
+
+        ``K`` from the Gateway, which is navigation and changes nothing. Saying
+        "the voucher is in Tally" over a picture of the Gateway menu would be
+        asking the viewer to take it on trust, which is the opposite of the
+        point.
+        """
         self._hide_card()
-        self.keyboard.focus(self.tally_title)
-        self.log.append("point at the day book")
+        if not self.keyboard.focus(self.tally_title):
+            self.log.append("day book: could not raise Tally")
+            return
+        self.keyboard.press("k")
+        await self.clock.sleep(1.2)
+        self.log.append("day book open")
         if self.spotlight is not None:
             left, top, width, _height = capture.TALLY_RECT
             self.spotlight.announce("the voucher that was just approved")
-            self.spotlight.point(left + width // 2, top + 320)
+            self.spotlight.point(left + width // 2, top + 420)
+
+    async def close_report(self, **_: Any) -> None:
+        """Back out of whatever report is open, to the Gateway.
+
+        One Escape, never a handful: Tally reads a second Escape at the Gateway
+        as "Quit?", and a take that films a quit dialog is a take wasted.
+        """
+        self.keyboard.focus(self.tally_title)
+        self.keyboard.press("escape")
+        await self.clock.sleep(0.6)
+        self.log.append("back to the gateway")
 
     async def tier3_cursor(self, **_: Any) -> None:
         """The red cursor over the real Tally window. Points, never clicks."""
