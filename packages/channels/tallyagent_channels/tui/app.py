@@ -66,6 +66,22 @@ ModalScreen { align: center middle; }
 """
 
 
+def _is_markdown(text: str) -> bool:
+    """Is this worth handing to a markdown renderer?
+
+    Only tables and bullet lists, which are the two things the model emits that
+    are unreadable raw. A plain sentence is left as plain text: running every
+    answer through a markdown parser would reflow it, swallow the odd asterisk,
+    and make a one-line reply look like a document.
+    """
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) < 2:
+        return False
+    pipes = sum(1 for line in lines if line.startswith("|") and line.endswith("|"))
+    bullets = sum(1 for line in lines if line.startswith(("- ", "* ", "1. ")))
+    return pipes >= 2 or bullets >= 2
+
+
 class Transcript(VerticalScroll):
     """The chat log. Tool calls are collapsed to one line with a detail beneath."""
 
@@ -79,6 +95,23 @@ class Transcript(VerticalScroll):
             "error": "  !!  ",
             "approval": "  **  ",
         }.get(kind, "")
+
+        if kind == "agent" and _is_markdown(text):
+            # A trial balance comes back as a markdown table, and a wall of
+            # pipes and dashes is not a report. Rich draws it as one.
+            from rich.markdown import Markdown
+
+            self.mount(Static(Markdown(text), classes="line"))
+            if meta:
+                self.mount(
+                    Static(
+                        f"[dim]      -- {meta.get('provider')}/{meta.get('model')}[/]",
+                        classes="line detail",
+                        markup=True,
+                    )
+                )
+            self.scroll_end(animate=False)
+            return
 
         label = f"[{style}]{prefix}{text}[/]" if style else f"{prefix}{text}"
         if kind == "agent" and meta:

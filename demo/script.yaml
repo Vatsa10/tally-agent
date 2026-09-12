@@ -47,7 +47,13 @@ chapters:
       - id: b04-ask
         action: say_to_agent
         args:
-          text: raise a sale of 2 widgets to Acme at 3200
+          # Named precisely, because the agent refuses to guess a party or a
+          # tax rate - which is the behaviour chapter three is about. Asking it
+          # vaguely here would just show the same refusal twice.
+          text: >-
+            raise a sales invoice to Acme Industries for 2 Widget at 3200 each,
+            18% GST, sales ledger Sales - GST 18%, dated 2 June 2026,
+            reference DEMO-{run}
         say: A sale, in plain words.
         tail_pad: 0.6
 
@@ -55,9 +61,11 @@ chapters:
         action: show_draft
         say: >-
           The model does not write the voucher. It calls a typed tool, and the
-          tool builds it: two widgets at thirty two hundred, taxable value six
-          thousand four hundred, tax split nine and nine, on a date this
-          Educational licence will actually accept.
+          tool builds it. Two widgets at thirty two hundred. Taxable value six
+          thousand four hundred. And the tax is integrated G S T, not the split
+          rate, because the customer is in Maharashtra and the company is in
+          Gujarat. Nobody told it that. It read both G S T numbers and worked
+          it out.
         tail_pad: 0.8
 
   - id: ch3-refusal

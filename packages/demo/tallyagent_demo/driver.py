@@ -57,7 +57,6 @@ class Keyboard:
             import win32gui  # type: ignore[import-not-found]
         except ImportError:
             return False
-        _ = win32con
 
         found: list[int] = []
 
@@ -75,7 +74,8 @@ class Keyboard:
         # the one failure worth refusing over.
         from tallyagent_agent.fallback.window import raise_window
 
-        win32gui.ShowWindow(found[0], win32con.SW_RESTORE)
+        if win32gui.GetWindowPlacement(found[0])[1] == win32con.SW_SHOWMINIMIZED:
+            win32gui.ShowWindow(found[0], win32con.SW_RESTORE)
         return bool(raise_window(found[0], title_fragment))
 
 
@@ -118,6 +118,11 @@ class DemoDriver:
     spotlight: Any = None
     tally_title: str = "TallyPrime"
     terminal_title: str = "tallyagent"
+    #: Substituted into any beat text containing ``{run}``. Every take needs a
+    #: fresh invoice reference, because duplicate detection is working and will
+    #: correctly refuse the same sale twice - which is the right behaviour and
+    #: the wrong take.
+    run_id: str = ""
     assets: Path = Path("demo/assets")
     #: Every keystroke and window switch, for the run report.
     log: list[str] = field(default_factory=list)
@@ -147,11 +152,15 @@ class DemoDriver:
     async def say_to_agent(self, text: str = "", **_: Any) -> None:
         """Type a question into the TUI and press Enter, as a person would."""
         self._hide_card()
+        line = text.replace("{run}", self.run_id or "1")
         self.keyboard.focus(self.terminal_title)
-        self.log.append(f"type {text!r}")
-        self.keyboard.type(text)
+        self.log.append(f"type {line!r}")
+        self.keyboard.type(line)
         await self.clock.sleep(0.3)
         self.keyboard.press("enter")
+
+    def _run_text(self, text: str) -> str:
+        return text.replace("{run}", self.run_id or "1")
 
     async def run_command(self, command: str = "", **_: Any) -> None:
         await self.say_to_agent(text=command)
@@ -212,7 +221,11 @@ class DemoDriver:
     # --- helpers ------------------------------------------------------------
 
     def pending_ticket(self) -> str:
-        """The oldest ticket waiting, read from the live approvals queue."""
+        """The ticket just drafted - the newest one waiting, not the oldest.
+
+        A queue left over from a rehearsal would otherwise have the approval
+        beat approving something the camera never showed.
+        """
         try:
             from tallyagent_daemon import config as config_mod
             from tallyagent_daemon import wiring
@@ -224,7 +237,7 @@ class DemoDriver:
         config = config_mod.load("config/config.toml", "config/policy.toml")
         wired = wiring.build(config)
         waiting = wired.services.queue.list("pending", config.company.name)
-        return waiting[0].ticket if waiting else ""
+        return waiting[-1].ticket if waiting else ""
 
     def _card(self, name: str) -> None:
         if self.card_screen is None:

@@ -52,7 +52,11 @@ def raise_window(handle: int, title: str = "") -> bool:
         return _foreground() == handle
 
     try:
-        win32gui.ShowWindow(handle, win32con.SW_RESTORE)
+        # SW_RESTORE would un-maximise a maximised window, which is how a
+        # carefully framed take ends up with a small window in the middle of
+        # the screen. Only a minimised window needs restoring.
+        if win32gui.GetWindowPlacement(handle)[1] == win32con.SW_SHOWMINIMIZED:
+            win32gui.ShowWindow(handle, win32con.SW_RESTORE)
         win32gui.SetForegroundWindow(handle)
         if settled():
             return True

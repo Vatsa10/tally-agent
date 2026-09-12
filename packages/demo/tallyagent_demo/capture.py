@@ -29,13 +29,34 @@ REGION_HEIGHT = 1440
 
 FRAMERATE = 30
 
-#: Where each window sits inside that rectangle. Set programmatically, because
-#: "roughly where I dragged it last time" is how chapter cuts start to jump.
-#: The two tile the frame with a small gutter, so nothing else is visible
-#: between them - a browser tab showing through the seam is the fastest way to
-#: make a product video look like someone's desktop.
-TERMINAL_RECT = (16, 96, 1248, 1408)
-TALLY_RECT = (1296, 96, 1248, 1408)
+#: Both windows fill the whole frame, and whichever one the narration is about
+#: is brought forward. Side by side was the first idea and it does not survive
+#: contact with Tally, which refuses to be resized below about 1877 pixels wide
+#: - leaving the terminal a column too narrow to read. Full frame each also
+#: doubles the type size in a 1080p export, which matters more than showing
+#: both at once.
+TERMINAL_RECT = (REGION_LEFT, REGION_TOP, REGION_WIDTH, REGION_HEIGHT)
+TALLY_RECT = (REGION_LEFT, REGION_TOP, REGION_WIDTH, REGION_HEIGHT)
+
+
+def make_dpi_aware() -> bool:
+    """Work in real pixels, the ones ffmpeg and the screen actually have.
+
+    Windows lies to a process that has not said otherwise: on a display scaled
+    to 167%, ``GetWindowRect`` reported Tally as 1536x960 when it is really
+    2304x1440, and every ``SetWindowPos`` was quietly ignored because the
+    coordinates meant something else. Declaring per-monitor awareness makes all
+    of it - window rects, mouse positions, the capture region - the same
+    coordinate system.
+    """
+    try:
+        import ctypes
+
+        # 2 = PROCESS_PER_MONITOR_DPI_AWARE.
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # type: ignore[attr-defined]
+        return True
+    except Exception:  # noqa: BLE001 - not Windows, or already set by the host
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,12 +168,20 @@ class Recorder:
             self.process = None
 
 
-def place_windows(windows: dict[str, tuple[int, int, int, int]]) -> dict[str, bool]:
+def place_windows(
+    windows: dict[str, tuple[int, int, int, int]], region: Region | None = None
+) -> dict[str, bool]:
     """Move each named window to its rect. Windows only; a no-op elsewhere.
 
     Matched on a substring of the title, which is all that is available and all
     that is needed: there is one TallyPrime and one terminal on this desktop.
+
+    A window asked to fill the frame is *maximised* rather than resized. Tally
+    ignores a resize that does not suit it - asked for 2560x1440 it settles on
+    2090x1296, leaving a strip of desktop down the side - but it maximises to
+    the full screen without argument.
     """
+    region = region or Region()
     placed = dict.fromkeys(windows, False)
     try:
         import win32con  # type: ignore[import-not-found]
@@ -167,9 +196,33 @@ def place_windows(windows: dict[str, tuple[int, int, int, int]]) -> dict[str, bo
         for name, (x, y, w, h) in windows.items():
             if placed[name] or name.lower() not in title.lower():
                 continue
-            win32gui.ShowWindow(handle, win32con.SW_RESTORE)
-            win32gui.SetWindowPos(handle, 0, x, y, w, h, 0x0004)  # SWP_NOZORDER
-            placed[name] = True
+            fills_frame = w >= region.width and h >= region.height
+            if fills_frame:
+                win32gui.ShowWindow(handle, win32con.SW_MAXIMIZE)
+            else:
+                win32gui.ShowWindow(handle, win32con.SW_RESTORE)
+                win32gui.SetWindowPos(handle, 0, x, y, w, h, 0x0004)  # SWP_NOZORDER
+            # Verify rather than assume. An application is free to ignore a
+            # resize - Tally does, below a certain size - and a chapter recorded
+            # against a window that quietly stayed put does not cut together
+            # with the others.
+            left, top, right, bottom = win32gui.GetWindowRect(handle)
+            if fills_frame:
+                # Good enough is "covers the frame", not "matches the rect":
+                # a maximised window is usually a little larger than asked.
+                placed[name] = (
+                    left <= region.left
+                    and top <= region.top
+                    and right >= region.left + region.width
+                    and bottom >= region.top + region.height
+                )
+            else:
+                placed[name] = (
+                    abs(left - x) <= 12
+                    and abs(top - y) <= 12
+                    and abs((right - left) - w) <= 24
+                    and abs((bottom - top) - h) <= 24
+                )
 
     win32gui.EnumWindows(visit, None)
     return placed

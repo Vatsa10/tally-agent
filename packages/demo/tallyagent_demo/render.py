@@ -19,9 +19,13 @@ from pathlib import Path
 OUT_WIDTH = 1920
 OUT_HEIGHT = 1080
 
+#: Sizes here are in ASS points against libass's default 288-line canvas, not
+#: pixels: the filter scales them by 1080/288, so 18 became a 67 pixel caption
+#: sitting across the middle of the screen. 9 lands near 34 pixels, which reads
+#: on a phone without covering the thing being demonstrated.
 SUBTITLE_STYLE = (
-    "FontName=Consolas,FontSize=18,PrimaryColour=&H00FFFFFF,"
-    "OutlineColour=&H90000000,BorderStyle=3,Outline=2,Shadow=0,MarginV=54"
+    "FontName=Segoe UI,FontSize=9,PrimaryColour=&H00FFFFFF,"
+    "OutlineColour=&HC0000000,BorderStyle=3,Outline=1,Shadow=0,MarginV=14"
 )
 
 
@@ -49,8 +53,17 @@ def silence_args(seconds: float, out: Path, sample_rate: int = 48000) -> list[st
 
 
 def concat_list(paths: list[Path]) -> str:
-    """A concat demuxer list. Quoting matters: paths here contain backslashes."""
-    return "".join(f"file '{str(p).replace(chr(92), '/')}'\n" for p in paths)
+    """A concat demuxer list, with absolute paths.
+
+    Absolute because ffmpeg resolves each entry relative to the *list file*,
+    not to the working directory - a relative entry lands at something like
+    ``build/scratch/build/audio/line.wav`` and the render dies on the first
+    one. Forward slashes for the same reason the quoting matters: these are
+    Windows paths going into a parser that treats backslash as an escape.
+    """
+    return "".join(
+        f"file '{str(p.resolve()).replace(chr(92), '/')}'\n" for p in paths
+    )
 
 
 def concat_args(list_file: Path, out: Path, audio: bool = False) -> list[str]:

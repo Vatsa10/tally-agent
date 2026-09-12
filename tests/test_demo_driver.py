@@ -197,6 +197,14 @@ async def test_asking_the_agent_focuses_the_terminal_then_types_and_sends():
     assert keyboard.pressed == ["enter"]  # type: ignore[attr-defined]
 
 
+async def test_each_take_gets_a_fresh_invoice_reference():
+    """Duplicate detection is right to refuse the same sale twice."""
+    driver = _driver()
+    driver.run_id = "8421"
+    await driver.say_to_agent(text="raise a sale, reference DEMO-{run}")
+    assert driver.keyboard.typed == ["raise a sale, reference DEMO-8421"]  # type: ignore[attr-defined]
+
+
 async def test_a_slash_command_goes_in_the_same_way_a_person_would_type_it():
     driver = _driver()
     await driver.run_command(command="/reco bank statement.csv")

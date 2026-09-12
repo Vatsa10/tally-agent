@@ -44,11 +44,16 @@ def test_a_region_that_is_not_sixteen_by_nine_is_refused():
         capture.check_framing(capture.Region(width=2560, height=1600), {})
 
 
-def test_the_two_windows_do_not_overlap():
-    """They sit side by side; an overlap would hide the thing being demonstrated."""
-    tally_x, _, _, _ = capture.TALLY_RECT
-    term_x, _, term_w, _ = capture.TERMINAL_RECT
-    assert term_x + term_w <= tally_x
+def test_both_windows_fill_the_frame():
+    """Whichever the narration is about is raised; neither is a narrow column."""
+    region = capture.Region()
+    for rect in (capture.TALLY_RECT, capture.TERMINAL_RECT):
+        assert rect == (region.left, region.top, region.width, region.height)
+
+
+def test_tally_gets_more_than_its_minimum_width():
+    """Tally refuses to be resized below ~1877px, so the frame has to allow it."""
+    assert capture.TALLY_RECT[2] >= 1900
 
 
 # --- capture args -----------------------------------------------------------
@@ -108,8 +113,19 @@ def test_a_run_without_subtitles_still_scales_and_muxes():
 
 
 def test_the_concat_list_uses_forward_slashes():
+    """Backslash is an escape character to ffmpeg's parser."""
     listing = render.concat_list([Path("d:\\build\\a.wav"), Path("d:\\build\\b.wav")])
-    assert listing == "file 'd:/build/a.wav'\nfile 'd:/build/b.wav'\n"
+    assert "\\" not in listing
+    assert listing.lower().splitlines() == [
+        "file 'd:/build/a.wav'",
+        "file 'd:/build/b.wav'",
+    ]
+
+
+def test_the_concat_list_is_absolute():
+    """ffmpeg resolves entries against the list file, not the working directory."""
+    for line in render.concat_list([Path("a.wav")]).splitlines():
+        assert Path(line[len("file '") : -1]).is_absolute(), line
 
 
 def test_a_gap_becomes_a_real_silent_file():

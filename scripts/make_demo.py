@@ -106,6 +106,18 @@ def stage_preflight(demo) -> int:  # type: ignore[no-untyped-def]
     )
     print("  framing: both windows inside the 2560x1440 capture region")
 
+    # A queue left over from a rehearsal makes the approval beat approve
+    # something the camera never showed.
+    from tallyagent_daemon import config as config_mod
+    from tallyagent_daemon import wiring
+
+    config = config_mod.load("config/config.toml", "config/policy.toml")
+    queue = wiring.build(config).services.queue
+    stale = queue.list("pending", config.company.name)
+    for item in stale:
+        queue.reject(item.ticket, "demo-setup", "cleared before recording")
+    print(f"  queue: {len(stale)} stale ticket(s) cleared")
+
     if not placed.get(demo.title):
         print(
             f"\n  Open the TUI in its own console window titled {demo.title!r} first:\n"
@@ -130,7 +142,10 @@ async def stage_record(demo, paths, chapters: list[str], show_cursor: bool) -> i
     spotlight = driver_mod.build_spotlight(show_cursor)
     screen = driver_mod.build_stage()
     screen.backdrop()
+    import time as _time
+
     driver = driver_mod.DemoDriver(
+        run_id=f"{int(_time.time()) % 100000}",
         clock=driver_mod.Clock(pump=screen.pump),
         audio_seconds=lengths,
         spotlight=spotlight,
@@ -141,6 +156,13 @@ async def stage_record(demo, paths, chapters: list[str], show_cursor: bool) -> i
     try:
         for chapter_id in chapters:
             chapter = demo.chapter(chapter_id)
+            # Re-place before every chapter. Windows drift: Tally re-centres
+            # itself after some screens, and a console remembers a size a user
+            # dragged. Framing has to be identical or the cuts jump.
+            capture.place_windows(
+                {"TallyPrime": capture.TALLY_RECT, demo.title: capture.TERMINAL_RECT}
+            )
+            screen.backdrop()
             take_dir = paths.takes / chapter_id
             take_dir.mkdir(parents=True, exist_ok=True)
             number = len(list(take_dir.glob("*.mkv"))) + 1
@@ -277,6 +299,9 @@ async def main() -> int:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # Before anything measures or moves a window. Without this every coordinate
+    # in the build is in scaled units and the screen is in real ones.
+    capture.make_dpi_aware()
     applied = env.load()
     if applied:
         logging.info("read %s from .env", ", ".join(applied))
