@@ -33,6 +33,10 @@ class TierConfig:
     perception_interval_seconds: int = 30
     fallback_enabled: bool = False
     fallback_max_steps: int = 10
+    #: Draw a red ring where Tier 3 is about to click and caption every
+    #: keystroke, so a person can see what is being done to their books
+    #: as it happens. On whenever the fallback is.
+    show_cursor: bool = True
 
 
 @dataclass(slots=True)

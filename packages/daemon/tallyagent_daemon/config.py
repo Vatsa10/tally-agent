@@ -177,6 +177,7 @@ def from_dict(
             ),
             fallback_enabled=bool(tiers_raw.get("fallback_enabled", False)),
             fallback_max_steps=int(tiers_raw.get("fallback_max_steps") or 10),
+            show_cursor=bool(tiers_raw.get("show_cursor", True)),
         ),
         whatsapp=WhatsAppConfig(
             enabled=bool(whatsapp_raw.get("enabled", False)),

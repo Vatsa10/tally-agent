@@ -124,6 +124,8 @@ class ComputerUseFallback:
         grab: Callable[[WindowBounds], bytes] = capture,
         do_key: Callable[[str], None] = press,
         do_click: Callable[[int, int], None] = click,
+        spotlight: Any = None,
+        ensure_visible: Callable[[], tuple[WindowBounds | None, str]] | None = None,
     ) -> None:
         self.router = router
         self.tiers = tiers
@@ -133,8 +135,19 @@ class ComputerUseFallback:
         self.approve = approve
         self._locate = locate
         self._grab = grab
-        self._key = do_key
-        self._click = do_click
+        # The spotlight narrates and slows down what is about to happen. It
+        # wraps the key and click functions rather than replacing them, so the
+        # approval gate above is untouched by whether anyone is watching.
+        self.spotlight = spotlight
+        if spotlight is not None:
+            spotlight._key = do_key
+            spotlight._click = do_click
+            self._key = spotlight.key
+            self._click = spotlight.click
+        else:
+            self._key = do_key
+            self._click = do_click
+        self._ensure_visible = ensure_visible
 
     async def run(self, task: str) -> FallbackSession:
         self.tiers.require_fallback()
@@ -143,10 +156,18 @@ class ComputerUseFallback:
             self.on_fallback_used(task)
         log.warning("fallback_used: %s - build a Tier 1 tool for this", task)
 
-        bounds = self._locate()
-        if bounds is None:
-            session.stopped_reason = "no TallyPrime window is open"
-            return session
+        if self._ensure_visible is not None:
+            # Keystrokes land wherever focus is. Tally has to be in front
+            # before a single one is sent, and if it cannot be, nothing is.
+            bounds, reason = self._ensure_visible()
+            if bounds is None:
+                session.stopped_reason = reason
+                return session
+        else:
+            bounds = self._locate()
+            if bounds is None:
+                session.stopped_reason = "no TallyPrime window is open"
+                return session
 
         history: list[Message] = [Message(role="system", content=SYSTEM)]
         limit = self.tiers.config.fallback_max_steps
@@ -194,6 +215,8 @@ class ComputerUseFallback:
                     session.stopped_reason = f"step {index} was rejected by the approver"
                     return session
 
+            if self.spotlight is not None:
+                self.spotlight.announce(why)
             if action == "key":
                 self._key(key)
             else:

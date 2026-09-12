@@ -78,13 +78,20 @@ def _wire_fallback(wired: wiring.Wired) -> None:
     config = wired.config
     if not config.tiers.fallback_enabled:
         return
+    from tallyagent_agent.fallback import spotlight as spotlight_mod
+    from tallyagent_agent.fallback import window as window_mod
     from tallyagent_agent.fallback.computer_use import ComputerUseFallback
     from tallyagent_agent.tiers import TierRouter
 
     router = TierRouter(config.tiers)
     wired.services.tiers = router  # type: ignore[attr-defined]
     wired.services.tools.fallback = ComputerUseFallback(
-        wired.services.router, router
+        wired.services.router,
+        router,
+        spotlight=spotlight_mod.build(config.tiers.show_cursor),
+        # Tally is brought up and put in front before a single key is sent,
+        # whether the request came from the TUI, the web UI or a chat.
+        ensure_visible=window_mod.ensure_visible,
     )
 
 

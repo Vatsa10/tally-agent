@@ -599,3 +599,21 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
   feeds ledger and cost-centre suggestions, the ledger one word by word so
   "Bombay Branch" finds "Mumbai Branch". Suggestions only - both names can
   legitimately be separate masters, so nothing is substituted silently.
+- **D-132 Tier 3 now shows its work.** A red crosshair ring travels to where
+  the pointer is going, flashes when the button goes down, and a caption spells
+  the keystroke out in words - "press Alt+D - delete the selected voucher
+  (removing the duplicate receipt)". Built on tkinter, so watching costs no new
+  dependency. Two things learned making it visible: setting `WS_EX_LAYERED`
+  again after Tk's `-transparentcolor` clears the colour key and the overlay
+  renders as nothing at all (only `WS_EX_TRANSPARENT` may be added), and an
+  `overrideredirect` window keeps its first geometry until `geometry("")` asks
+  it to fit its contents - which is why the caption was a 10x10 speck.
+- **D-133 Narration must never be able to block an approved action.** The
+  overlay is cosmetic; the keystroke behind it has been approved by a person.
+  Every send is wrapped, and a sink that raises downgrades to a log line rather
+  than leaving a voucher half-entered.
+- **D-134 Tally is brought to the front before a single key is sent.**
+  Keystrokes go to whatever has focus, so an approved `Alt+D` aimed at Tally
+  and delivered to something else is the worst outcome available. Tier 3 now
+  starts Tally if it is not running, raises it if it is behind something, and
+  refuses to send anything at all if it cannot be fronted.
