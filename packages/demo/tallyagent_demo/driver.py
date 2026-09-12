@@ -57,6 +57,7 @@ class Keyboard:
             import win32gui  # type: ignore[import-not-found]
         except ImportError:
             return False
+        _ = win32con
 
         found: list[int] = []
 
@@ -69,13 +70,13 @@ class Keyboard:
         win32gui.EnumWindows(visit, None)
         if not found:
             return False
+        # The same stubborn raise Tier 3 uses: a background process is not
+        # allowed to take the foreground, and typing into the wrong window is
+        # the one failure worth refusing over.
+        from tallyagent_agent.fallback.window import raise_window
+
         win32gui.ShowWindow(found[0], win32con.SW_RESTORE)
-        try:
-            win32gui.SetForegroundWindow(found[0])
-        except Exception:  # noqa: BLE001 - Windows declines this sometimes
-            return False
-        time.sleep(0.4)
-        return True
+        return bool(raise_window(found[0], title_fragment))
 
 
 @dataclass(slots=True)
@@ -83,6 +84,10 @@ class Clock:
     """Monotonic time and sleeping, both injectable so a test can run instantly."""
 
     epoch: float = 0.0
+    #: Called every tick while sleeping. The Tk backdrop is not running a main
+    #: loop of its own, and a window that goes unpumped for six seconds is a
+    #: window Windows paints white and labels "not responding" - on camera.
+    pump: Any = None
 
     def now(self) -> float:
         return time.monotonic() - self.epoch
@@ -91,8 +96,15 @@ class Clock:
         self.epoch = time.monotonic()
 
     async def sleep(self, seconds: float) -> None:
-        if seconds > 0:
+        if seconds <= 0:
+            return
+        if self.pump is None:
             await asyncio.sleep(seconds)
+            return
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            await asyncio.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+            self.pump()
 
 
 @dataclass
@@ -206,8 +218,10 @@ class DemoDriver:
             from tallyagent_daemon import wiring
         except ImportError:  # pragma: no cover - the daemon is always present
             return ""
+        # Whatever database the TUI on screen is using - no override. Reading a
+        # different one would hand the approval beat a ticket number that the
+        # visible queue has never heard of.
         config = config_mod.load("config/config.toml", "config/policy.toml")
-        config.db_path = "./live.db"
         wired = wiring.build(config)
         waiting = wired.services.queue.list("pending", config.company.name)
         return waiting[0].ticket if waiting else ""
@@ -280,5 +294,7 @@ def build_spotlight(show_cursor: bool = True) -> Any:
     return spotlight.build(show_cursor)
 
 
-def build_cards() -> Any:
-    return cards.FullScreen()
+def build_stage() -> Any:
+    """Backdrop plus cards, sized to the capture region."""
+    region = capture.Region()
+    return cards.Stage((region.left, region.top, region.width, region.height))

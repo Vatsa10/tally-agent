@@ -11,8 +11,11 @@ the timing to go wrong.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 WIDTH = 2560
 HEIGHT = 1440
@@ -93,49 +96,101 @@ def build_all(root: Path) -> dict[str, Path]:
     }
 
 
-class FullScreen:
-    """Shows a card over everything, for exactly as long as its line runs.
+class Stage:
+    """The two Tk surfaces the recording needs, over one root.
 
-    Tk again, and for the same reason as the Tier 3 overlay: it is in the
-    standard library, and a demo build should not add a dependency to draw a
-    rectangle. Failure to display is logged and ignored - a missing card is a
-    cosmetic problem, and it must not take the recording down with it.
+    A backdrop that sits *behind* everything for the whole take, and a card that
+    comes in *front* for a few seconds at each end. One Tk root because two in
+    a process is a source of hangs, and because they are the same concern: what
+    the camera sees that is not an application window.
+
+    The backdrop matters more than it sounds. Without it the frame shows
+    whatever is on the desktop in the gaps - a bookmarks bar along the top, an
+    editor down the seam between the two windows - and the video stops looking
+    like a product and starts looking like somebody's screen.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, region: tuple[int, int, int, int] | None = None) -> None:
+        self.region = region
         self._root: Any = None
+        self._backdrop: Any = None
+        self._card: Any = None
         self._label: Any = None
         self._image: Any = None
 
-    def show(self, path: Path) -> None:
+    def _ensure(self) -> bool:
+        if self._root is not None:
+            return True
         try:
             import tkinter as tk
 
-            if self._root is None:
-                self._root = tk.Tk()
-                self._root.attributes("-fullscreen", True)
-                self._root.configure(bg=PAPER)
-                self._label = tk.Label(self._root, bd=0, bg=PAPER)
-                self._label.pack(expand=True, fill="both")
+            self._root = tk.Tk()
+            self._root.withdraw()
 
+            self._backdrop = tk.Toplevel(self._root)
+            self._backdrop.overrideredirect(True)
+            self._backdrop.configure(bg=PAPER)
+            if self.region:
+                left, top, width, height = self.region
+                self._backdrop.geometry(f"{width}x{height}+{left}+{top}")
+            self._backdrop.withdraw()
+
+            self._card = tk.Toplevel(self._root)
+            self._card.overrideredirect(True)
+            self._card.attributes("-topmost", True)
+            self._card.configure(bg=PAPER)
+            self._label = tk.Label(self._card, bd=0, bg=PAPER)
+            self._label.pack(expand=True, fill="both")
+            self._card.withdraw()
+            return True
+        except Exception:  # noqa: BLE001 - a bare screen is not worth a failed take
+            log.warning("could not open the demo stage; recording without it")
+            self._root = None
+            return False
+
+    def backdrop(self) -> None:
+        """Put the dark rectangle up, behind the application windows."""
+        if not self._ensure():
+            return
+        try:
+            self._backdrop.deiconify()
+            self._backdrop.lower()
+            self._root.update()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def show(self, path: Path) -> None:
+        if not self._ensure():
+            return
+        try:
             from PIL import Image, ImageTk
 
-            screen = (self._root.winfo_screenwidth(), self._root.winfo_screenheight())
-            picture = Image.open(path).resize(screen, Image.LANCZOS)
+            left, top, width, height = self.region or (
+                0, 0, self._root.winfo_screenwidth(), self._root.winfo_screenheight()
+            )
+            picture = Image.open(path).resize((width, height), Image.LANCZOS)
             self._image = ImageTk.PhotoImage(picture)
             self._label.configure(image=self._image)
-            self._root.deiconify()
-            self._root.lift()
+            self._card.geometry(f"{width}x{height}+{left}+{top}")
+            self._card.deiconify()
+            self._card.lift()
             self._root.update()
-        except Exception:  # noqa: BLE001 - a card is never worth a failed take
-            import logging
+        except Exception:  # noqa: BLE001
+            log.warning("could not show the card %s", path.name)
 
-            logging.getLogger(__name__).warning("could not show the card %s", path.name)
+    def pump(self) -> None:
+        """Give Tk a slice. Cheap, and the difference between a black backdrop
+        and a white rectangle saying "not responding"."""
+        try:
+            if self._root is not None:
+                self._root.update()
+        except Exception:  # noqa: BLE001
+            pass
 
     def hide(self) -> None:
         try:
-            if self._root is not None:
-                self._root.withdraw()
+            if self._card is not None:
+                self._card.withdraw()
                 self._root.update()
         except Exception:  # noqa: BLE001
             pass

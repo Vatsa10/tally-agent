@@ -128,8 +128,10 @@ async def stage_record(demo, paths, chapters: list[str], show_cursor: bool) -> i
         return 1
 
     spotlight = driver_mod.build_spotlight(show_cursor)
-    screen = driver_mod.build_cards()
+    screen = driver_mod.build_stage()
+    screen.backdrop()
     driver = driver_mod.DemoDriver(
+        clock=driver_mod.Clock(pump=screen.pump),
         audio_seconds=lengths,
         spotlight=spotlight,
         card_screen=screen,

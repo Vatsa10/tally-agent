@@ -24,23 +24,66 @@ START_TIMEOUT_SECONDS = 40
 
 def focus(bounds: WindowBounds) -> bool:
     """Bring a window to the front. False when Windows refuses, as it may."""
-    try:
-        import win32con  # type: ignore[import-not-found]
-        import win32gui  # type: ignore[import-not-found]
-    except ImportError:
-        return False
-
     handle = _handle_for(bounds.title)
     if handle is None:
         return False
+    return raise_window(handle, bounds.title)
+
+
+def raise_window(handle: int, title: str = "") -> bool:
+    """Actually bring a window forward, against Windows' wishes.
+
+    A process that does not own the foreground is not allowed to steal it, so a
+    bare ``SetForegroundWindow`` from a background script simply fails. Two
+    documented ways round it, tried in order: borrow the foreground window's
+    input queue with ``AttachThreadInput``, or press and release Alt, which
+    Windows counts as input activity and which unlocks the call.
+
+    This is not a trick to be clever with. Tier 3 sends keystrokes, and a
+    keystroke lands wherever focus is - so if none of this works, the caller
+    must send nothing at all.
+    """
+    import win32con  # type: ignore[import-not-found]
+    import win32gui  # type: ignore[import-not-found]
+    import win32process  # type: ignore[import-not-found]
+
+    def settled() -> bool:
+        time.sleep(0.4)
+        return _foreground() == handle
+
     try:
         win32gui.ShowWindow(handle, win32con.SW_RESTORE)
         win32gui.SetForegroundWindow(handle)
-    except Exception:  # noqa: BLE001 - Windows declines this when it feels like it
-        log.debug("could not raise the Tally window")
-        return False
-    time.sleep(0.6)
-    return _handle_for(bounds.title) == _foreground()
+        if settled():
+            return True
+    except Exception:  # noqa: BLE001 - the refusal is the normal case here
+        pass
+
+    try:
+        import win32api  # type: ignore[import-not-found]
+
+        current = win32gui.GetForegroundWindow()
+        ours = win32process.GetWindowThreadProcessId(current)[0]
+        theirs = win32process.GetWindowThreadProcessId(handle)[0]
+        win32process.AttachThreadInput(ours, theirs, True)
+        try:
+            win32gui.BringWindowToTop(handle)
+            win32gui.SetForegroundWindow(handle)
+        finally:
+            win32process.AttachThreadInput(ours, theirs, False)
+        if settled():
+            return True
+
+        # Alt counts as input activity, which lifts the foreground lock.
+        win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)
+        win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)
+        win32gui.SetForegroundWindow(handle)
+        if settled():
+            return True
+    except Exception:  # noqa: BLE001
+        log.debug("could not raise %s", title or handle)
+
+    return False
 
 
 def _handle_for(title: str) -> int | None:

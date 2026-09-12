@@ -31,8 +31,11 @@ FRAMERATE = 30
 
 #: Where each window sits inside that rectangle. Set programmatically, because
 #: "roughly where I dragged it last time" is how chapter cuts start to jump.
-TALLY_RECT = (940, 120, 1600, 1000)
-TERMINAL_RECT = (40, 120, 880, 1000)
+#: The two tile the frame with a small gutter, so nothing else is visible
+#: between them - a browser tab showing through the seam is the fastest way to
+#: make a product video look like someone's desktop.
+TERMINAL_RECT = (16, 96, 1248, 1408)
+TALLY_RECT = (1296, 96, 1248, 1408)
 
 
 @dataclass(frozen=True, slots=True)
