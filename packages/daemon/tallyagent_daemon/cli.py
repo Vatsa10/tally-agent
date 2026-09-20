@@ -292,6 +292,37 @@ def tui(
     run_tui(wired.services, config.live)
 
 
+@app.command("close-month")
+def close_month(
+    month: str = typer.Argument(..., help="The month to close, YYYY-MM."),
+    bank_statement: str = typer.Option("", help="Bank statement CSV, if it has arrived."),
+    bank_ledger: str = typer.Option("", help="Which bank ledger the statement is."),
+    gstr2b: str = typer.Option("", help="GSTR-2B JSON from the portal, if downloaded."),
+    out_dir: str = typer.Option("reports/close", help="Where the pack is written."),
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+    fake: bool = FAKE_OPTION,
+) -> None:
+    """Run the month-end checks and write the close pack. Posts nothing."""
+    from tallyagent_tools import close as close_tool
+
+    config = _load(config_path, policy_path)
+    wired = _wire(config, fake)
+    result = asyncio.run(
+        close_tool.month_end_close(
+            wired.services.tools,
+            month,
+            bank_statement=bank_statement,
+            bank_ledger=bank_ledger,
+            gstr2b=gstr2b,
+            out_dir=out_dir,
+        )
+    )
+    typer.echo(result.message)
+    for finding in result.data["findings"]:
+        typer.echo(f"  {finding['severity']:<6} {finding['detail']}")
+
+
 @app.command("enable-server")
 def enable_server(
     port: int = typer.Option(9000, help="The port Tally should listen on."),

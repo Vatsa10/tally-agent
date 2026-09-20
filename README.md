@@ -22,6 +22,14 @@ Nothing posts to Tally unless a person approves it.
 - **Reconcile.** Bank statement against the bank ledger, and GSTR-2B against the
   purchase register, classified as matched / missing in books / missing in 2B /
   value mismatch, with a CSV. Both propose; neither posts.
+- **Close the month.** One dated pack per company: cash and bank, negative
+  stock, ageing, possible duplicate vouchers, and - when the files have arrived
+  - the bank reconciliation and GSTR-2B, with the input credit at risk in
+  rupees. `tallyagent close-month 2026-06` or `/monthend 2026-06` in the TUI.
+  It writes a markdown pack and its workings, and posts nothing.
+- **Watch it work in Tally.** Ask to be shown something and the agent opens the
+  report in your own TallyPrime with a red cursor and a caption on every
+  keystroke, before it presses it. Off by default (`/tier3 on`).
 - **Approve, reject, or edit.** The approval screen shows the ledger impact, the
   validation report rule by rule, and the exact XML that will be sent. Edit a
   ledger and it remembers the correction.

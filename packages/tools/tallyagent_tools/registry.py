@@ -13,6 +13,7 @@ from typing import Any
 
 from tallyagent_tools import (
     bills,
+    close,
     cost_centres,
     currencies,
     ingest,
@@ -95,6 +96,32 @@ TOOLS: tuple[Tool, ...] = (
             ["report"],
         ),
         show.show_in_tally,
+    ),
+    Tool(
+        "month_end_close",
+        "Run every month-end check for one month and write the close pack: "
+        "cash and bank, negative stock, ageing, possible duplicate vouchers, "
+        "and - when the files are given - the bank reconciliation and GSTR-2B. "
+        "Reads only; proposals still go to the approval queue.",
+        _object(
+            {
+                "month": {**_STRING, "description": "The month to close, YYYY-MM."},
+                "bank_statement": {
+                    **_STRING,
+                    "description": "Path to the bank statement CSV. Optional.",
+                },
+                "bank_ledger": {
+                    **_STRING,
+                    "description": "Which bank ledger the statement belongs to.",
+                },
+                "gstr2b": {
+                    **_STRING,
+                    "description": "Path to the GSTR-2B JSON from the portal. Optional.",
+                },
+            },
+            ["month"],
+        ),
+        close.month_end_close,
     ),
     Tool(
         "trial_balance",

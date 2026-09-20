@@ -616,3 +616,34 @@ def test_demo_transaction_dates_are_edu_legal():
 
     for txn in demo_transactions(5, edu=True, fy_start=date(2026, 4, 1)):
         assert txn.kwargs["voucher_date"].day in (1, 2, 31)
+
+
+# --- the month-end close ------------------------------------------------------
+
+
+async def test_monthend_runs_the_close_against_the_fake_books(session, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    turn = await session.handle("/monthend 2026-06")
+
+    assert turn.lines[-1].kind == "system"
+    assert "Nothing was posted" in turn.text
+    assert (tmp_path / "reports" / "close").exists()
+
+
+async def test_monthend_without_a_month_says_how_to_call_it(session):
+    turn = await session.handle("/monthend")
+    assert turn.lines[-1].kind == "error"
+    assert "YYYY-MM" in turn.text
+
+
+async def test_monthend_rejects_a_file_that_is_not_there(session):
+    turn = await session.handle("/monthend 2026-06 nosuch.csv")
+    assert turn.lines[-1].kind == "error"
+    assert "no such file" in turn.text
+
+
+async def test_monthend_says_so_when_the_month_is_not_a_month(session, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    turn = await session.handle("/monthend June")
+    assert turn.lines[-1].kind == "error"
+    assert "not a month" in turn.text

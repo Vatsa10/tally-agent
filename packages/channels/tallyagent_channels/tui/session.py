@@ -515,6 +515,34 @@ class Session:
             "system", f"model is now {provider.name}/{provider.model}"
         )
 
+    async def cmd_monthend(self, args: list[str], turn: Turn) -> Turn:
+        """/monthend 2026-06 [bank.csv] [2b.json] - the whole close, one pack."""
+        if not args:
+            return turn.say(
+                "error", "usage: /monthend YYYY-MM [bank statement csv] [gstr2b json]"
+            )
+        from tallyagent_tools import close as close_tool
+
+        month, files = args[0], [Path(a) for a in args[1:]]
+        missing = [str(f) for f in files if not f.exists()]
+        if missing:
+            return turn.say("error", "no such file: " + ", ".join(missing))
+
+        statement = next((f for f in files if f.suffix.lower() == ".csv"), None)
+        portal = next((f for f in files if f.suffix.lower() == ".json"), None)
+        try:
+            result = await close_tool.month_end_close(
+                self.services.tools,
+                month,
+                bank_statement=str(statement) if statement else "",
+                gstr2b=str(portal) if portal else "",
+            )
+        except ValueError as exc:
+            return turn.say("error", f"{month!r} is not a month I can close: {exc}")
+
+        turn.say("system", result.message)
+        return turn.say("system", _render_findings(result.data["findings"]))
+
     async def cmd_close(self, args: list[str], turn: Turn) -> Turn:
         return turn.say("system", "Session summary: " + self.stats.summary(self.services))
 
@@ -558,6 +586,19 @@ def _render_2b(rows: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
+def _render_findings(findings: list[dict[str, str]]) -> str:
+    if not findings:
+        return "  nothing needs a person - every check passed."
+    lines = [
+        f"  {f['severity']:<6} {f['detail']}"
+        + (f"  ({f['amount']})" if f["amount"] not in ("", "0.00") else "")
+        + "\n         -> "
+        + f["fix"]
+        for f in findings
+    ]
+    return "\n".join(lines)
+
+
 COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
     "help": Session.cmd_help,
     "probe": Session.cmd_probe,
@@ -575,6 +616,7 @@ COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
     "egress": Session.cmd_egress,
     "tier3": Session.cmd_tier3,
     "model": Session.cmd_model,
+    "monthend": Session.cmd_monthend,
     "close": Session.cmd_close,
     "quit": Session.cmd_quit,
 }
@@ -596,6 +638,7 @@ HELP = {
     "egress": "exactly what left this machine",
     "tier3": "on | off - the gated computer-use fallback",
     "model": "show or switch the model provider",
+    "monthend": "<YYYY-MM> [bank.csv] [gstr2b.json] - the month-end close pack",
     "close": "print the session summary",
     "quit": "summary, then exit",
 }
