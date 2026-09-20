@@ -288,6 +288,11 @@ async def test_tally_reports_are_opened_by_name_through_go_to():
     await driver.show_day_book()
     await driver.show_stock_summary()
 
-    assert driver.keyboard.pressed == ["alt+g", "enter", "alt+g", "enter"]  # type: ignore[attr-defined]
+    assert driver.keyboard.pressed == [  # type: ignore[attr-defined]
+        "alt+g",
+        "enter",
+        "alt+g",
+        "enter",
+    ]
     assert driver.keyboard.typed == ["Day Book", "Stock Summary"]  # type: ignore[attr-defined]
     assert driver.keyboard.focused == ["TallyPrime", "TallyPrime"]  # type: ignore[attr-defined]

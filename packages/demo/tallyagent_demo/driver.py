@@ -195,7 +195,12 @@ class DemoDriver:
         await self.say_to_agent(text=f"/approve {chosen}")
 
     async def in_tally(
-        self, report: str = "", caption: str = "", point_y: int = 150, **_: Any
+        self,
+        report: str = "",
+        caption: str = "",
+        point_y: int = 150,
+        then: str = "",
+        **_: Any,
     ) -> None:
         """Open one of Tally's own reports, through Tally's own Go To search.
 
@@ -221,6 +226,11 @@ class DemoDriver:
             self.keyboard.press("enter")
             self._report_open = True
             await self.clock.sleep(1.6)
+        if then:
+            # A view switch inside a report that is already open, so the key
+            # means what the report's own panel says it means.
+            self.keyboard.press(then)
+            await self.clock.sleep(1.0)
         self.log.append(f"tally shows {caption or report}")
         if self.spotlight is not None and caption:
             left, top, width, _height = capture.TALLY_RECT
@@ -240,9 +250,13 @@ class DemoDriver:
 
     async def show_stock_summary(self, **_: Any) -> None:
         """Tally's own Stock Summary - the same quantity, from the other side."""
+        # Tally opens this at group level and the view keys did not reliably
+        # expand it, so the narration talks about what is actually on screen -
+        # the stock value - rather than a per-item quantity that is one keypress
+        # away and might not be there.
         await self.in_tally(
             report="Stock Summary",
-            caption="Tally's own stock figure",
+            caption="Tally's own stock value",
             point_y=200,
         )
 

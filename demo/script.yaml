@@ -104,8 +104,8 @@ chapters:
       - id: b09-stock
         action: show_stock_summary
         say: >-
-          The sale moved stock as well as money. Tally's own Stock Summary, two
-          Widgets lighter. Nobody typed this in.
+          The sale moved goods as well as money, and this is Tally's own Stock
+          Summary, valued as of today. Nobody typed any of it in.
         tail_pad: 0.8
 
       - id: b10-back
