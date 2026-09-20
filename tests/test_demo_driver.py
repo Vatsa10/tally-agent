@@ -92,13 +92,13 @@ def test_every_beat_names_an_action_the_driver_actually_has():
     assert missing == []
 
 
-def test_the_script_is_about_three_minutes():
+def test_the_script_is_about_four_minutes():
     """The estimate runs long: the voice reads faster than the words-per-second
     guess, and 175 estimated seconds came back as 160 spoken ones. The band is
     wide enough to allow for that and still catch a script that has quietly
-    grown into a five minute one."""
+    grown into a six minute one."""
     demo = script_mod.load("demo/script.yaml")
-    assert 150 <= demo.estimated_seconds <= 215, demo.estimated_seconds
+    assert 150 <= demo.estimated_seconds <= 265, demo.estimated_seconds
 
 
 def test_every_beat_has_something_to_say():
@@ -296,3 +296,32 @@ async def test_tally_reports_are_opened_by_name_through_go_to():
     ]
     assert driver.keyboard.typed == ["Day Book", "Stock Summary"]  # type: ignore[attr-defined]
     assert driver.keyboard.focused == ["TallyPrime", "TallyPrime"]  # type: ignore[attr-defined]
+
+
+async def test_it_will_not_type_when_the_window_refuses_to_come_forward():
+    """The take that made this a test typed its script into a live shell,
+    because focus() returned False and say_to_agent typed regardless."""
+    import pytest
+
+    from tallyagent_demo import driver as driver_mod
+
+    class Stubborn:
+        def __init__(self) -> None:
+            self.typed: list[str] = []
+
+        def focus(self, title: str) -> bool:
+            return False
+
+        def type(self, text: str, interval: float = 0.0) -> None:
+            self.typed.append(text)
+
+        def press(self, key: str) -> None:
+            self.typed.append(f"<{key}>")
+
+    keyboard = Stubborn()
+    driver = driver_mod.DemoDriver(audio_seconds={}, keyboard=keyboard)
+
+    with pytest.raises(RuntimeError, match="refusing to type"):
+        await driver.say_to_agent(text="anything at all")
+
+    assert keyboard.typed == []

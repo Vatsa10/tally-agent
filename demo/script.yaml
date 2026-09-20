@@ -5,6 +5,11 @@
 # Tally's Stock Summary saying it is evidence, and it costs one keystroke. A
 # demo that only ever shows its own UI is asking to be taken on trust.
 #
+# The arc follows the work a practice actually has: one voucher to show how a
+# write is made and approved, then the pile of bills that is the real volume,
+# then the agent working inside Tally where a bookkeeper can watch it, then the
+# month-end close that is the reason any of it is worth buying.
+#
 # Copy is written the way the codebase talks: declarative, no adjectives doing
 # sales work. Numbers are spelled the way a voice should read them, and
 # abbreviations phonetically where a TTS engine would otherwise guess - "G-S-T-R
@@ -54,8 +59,8 @@ chapters:
         action: say_to_agent
         args:
           # Named precisely. The agent refuses to guess a party or a tax rate,
-          # which is what chapter four is about - asking it vaguely here would
-          # only show the same refusal twice.
+          # which is what the refusal chapter is about - asking it vaguely here
+          # would only show the same refusal twice.
           text: >-
             raise a sales invoice to Acme Industries for 2 Widget at 3200 each,
             18% GST, sales ledger Sales - GST 18%, dated 2 June 2026,
@@ -67,11 +72,10 @@ chapters:
         action: show_draft
         say: >-
           The model does not write the voucher. It calls a typed tool, and the
-          tool builds it. Two widgets at thirty two hundred. Taxable value six
-          thousand four hundred. And the tax is integrated G S T, not the split
+          tool builds it. Two widgets at thirty two hundred, taxable value six
+          thousand four hundred, and integrated G S T rather than the split
           rate, because the customer is in Maharashtra and the company is in
-          Gujarat. Nobody told it that. It read both G S T numbers and worked
-          it out.
+          Gujarat. Nobody told it that. It read both G S T numbers.
         tail_pad: 0.8
 
   - id: ch3-approval
@@ -90,115 +94,155 @@ chapters:
           the firm keeps the judgement.
         tail_pad: 0.6
 
-  - id: ch4-landing
-    title: Watching it land in Tally
-    beats:
       - id: b08-daybook
         action: show_day_book
         say: >-
           And here is the same moment from Tally's side. This is Tally's own Day
-          Book, not our rendering of it, and the voucher is in it - posted over
+          Book, not our rendering of it, and the voucher is in it, posted over
           X M L the instant that approval went through.
         tail_pad: 0.8
 
-      - id: b09-stock
-        action: show_stock_summary
-        say: >-
-          The sale moved goods as well as money, and this is Tally's own Stock
-          Summary, valued as of today. Nobody typed any of it in.
-        tail_pad: 0.8
-
-      - id: b10-back
+      - id: b09-back
         action: close_report
         say: Back to where we started.
         tail_pad: 0.4
 
-  - id: ch5-refusal
+  - id: ch4-bills
+    title: The pile of bills
+    beats:
+      - id: b10-pile
+        action: run_command
+        args:
+          command: /bills demo/bills --limit 4 --again
+          # Not waited for here. Reading four scans is the better part of a
+          # minute, and a beat that waits for it puts that minute on camera as
+          # silence. The narration runs over the work; ch4 ends by waiting.
+          wait: false
+        say: >-
+          One voucher at a time is not the job, though. This is: a folder of
+          purchase bills, scanned, the way they arrive.
+        tail_pad: 0.5
+
+      - id: b11-reading
+        action: pause
+        say: >-
+          Each scan is read on this machine, by local character recognition.
+          Only the text it produced is sent to the model, never the image, and
+          four of them are read at once. Vendor, invoice number, date, taxable
+          value, tax - then matched to a supplier ledger that already exists in
+          this company.
+        tail_pad: 0.5
+
+      - id: b12-queued
+        action: pause
+        say: >-
+          Drafted, not posted. What it is sure of is queued as a purchase
+          voucher; what it could not read, or could not match to a supplier the
+          books already know, is set aside for a person rather than guessed
+          at. A hundred and fifty bills is an afternoon; this is the same
+          afternoon spent deciding rather than typing.
+        tail_pad: 0.8
+
+      - id: b12b-settled
+        action: wait_for_agent
+        say: Four bills, four drafts, none of them posted.
+        max_overrun: 60
+        tail_pad: 0.6
+
+  - id: ch5-cursor
+    title: Working inside Tally
+    beats:
+      - id: b13-tier3
+        action: run_command
+        args:
+          command: /tier3 on
+        say: >-
+          There is a second way it can work, and for a lot of bookkeepers it is
+          the one that matters.
+        tail_pad: 0.4
+
+      - id: b14-show
+        action: say_to_agent
+        args:
+          text: show me the day book in Tally
+        say: >-
+          Asked to show something, it drives TallyPrime itself: opens the
+          screen by name through Go To, then reads Tally's own header back to
+          confirm the right screen is open.
+        tail_pad: 0.6
+
+      - id: b15-ring
+        action: pause
+        say: >-
+          The ring is where it is working, and the caption says what it is
+          about to press, before it presses it. If the screen is not the one it
+          expected, it stops rather than typing into whatever has focus.
+        tail_pad: 1.0
+
+  - id: ch6-refusal
     title: What it refuses to do
     beats:
-      - id: b11-bad-ask
+      - id: b16-bad-ask
         action: say_to_agent
         args:
           text: book 100 rent to the Baroda branch
         say: Now something that should not go through.
         tail_pad: 0.6
 
-      - id: b12-refused
+      - id: b17-refused
         action: show_refusal
         say: >-
           There is no Baroda cost centre in this company. There is a Vadodara,
-          which is the same city under its other name, and the agent offers it
-          rather than guessing. Validation runs before the approval queue, not
-          after, so this never became a ticket and nothing reached Tally.
+          the same city under its other name, and the agent offers it rather
+          than guessing. Validation runs before the queue, so this never became
+          a ticket and nothing reached Tally.
         tail_pad: 0.8
 
-  - id: ch6-reports
-    title: Reading the books back
+  - id: ch7-close
+    title: The month-end close
     beats:
-      - id: b13-tb
-        action: say_to_agent
-        args:
-          text: trial balance please
-        say: >-
-          Reports come through the same tools, read live. The debits and the
-          credits agree because they are Tally's own figures, not a copy kept
-          somewhere else.
-
-      - id: b14-outstanding
-        action: say_to_agent
-        args:
-          text: who owes us money?
-        say: >-
-          Receivables, party by party, with the ageing.
-        tail_pad: 0.8
-
-  - id: ch7-reco
-    title: Reconciliation
-    beats:
-      - id: b15-bank
+      - id: b18-monthend
         action: run_command
         args:
-          command: /reco bank tests/fixtures/live_bank_statement.csv
+          command: >-
+            /monthend 2026-06 tests/fixtures/live_bank_statement.csv
+            tests/fixtures/live_gstr2b.json
         say: >-
-          A bank statement goes in. The agent matches what it can against the
-          ledger and proposes entries for the rest.
+          And then the end of the month. The bank statement and the G-S-T-R
+          two B go in together.
+        max_overrun: 45
+        tail_pad: 0.5
 
-      - id: b16-gstr
-        action: run_command
-        args:
-          command: /reco gstr2b tests/fixtures/live_gstr2b.json
+      - id: b19-findings
+        action: pause
         say: >-
-          The same for G-S-T-R two B. Matched, value mismatches, and invoices
-          missing from the books: listed, not quietly adjusted. Every proposal
-          is still a ticket somebody has to approve.
+          One pack. Cash gone negative, ageing past ninety days, the same bill
+          entered twice, statement lines with no voucher, and the input credit
+          at risk because a supplier has not filed. In rupees, ranked by what
+          somebody has to do about it.
         tail_pad: 0.8
 
-  - id: ch8-tier3
-    title: Driving Tally directly
-    beats:
-      - id: b17-cursor
-        action: tier3_cursor
+      - id: b20-nothing-posted
+        action: pause
         say: >-
-          Some things Tally will not do over X M L. For those there is a third
-          tier that drives the keyboard directly, and you can watch it work. It
-          is off by default, behind the same approval, and it narrates itself:
-          the ring shows where it is going and the caption says what it is about
-          to press, before it presses it.
-        tail_pad: 1.0
+          All of it read out of Tally, none of it changed, and written to a
+          file as well - because what a practice needs on the first is
+          something it can attach to an email.
+        tail_pad: 0.8
 
-  - id: ch9-audit
+  - id: ch8-audit
     title: Audit and close
     beats:
-      - id: b18-audit
+      - id: b21-audit
         action: run_command
         args:
           command: /egress
         say: >-
-          Every tool call, every approval, and every byte that left this machine
-          is on a hash chained log. It verifies, so you can tell whether it has
-          been altered.
+          Every tool call, approval and byte that left this machine is on a
+          hash chained log. It verifies, so you can tell whether it has been
+          altered.
 
-      - id: b19-close
+      - id: b22-close
         action: closing_card
         say: >-
           The firm's people stay in the approval loop. The typing stops.

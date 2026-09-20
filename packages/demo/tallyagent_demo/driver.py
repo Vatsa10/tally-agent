@@ -59,15 +59,23 @@ class Keyboard:
         except ImportError:
             return False
 
-        found: list[int] = []
+        exact: list[int] = []
+        partial: list[int] = []
 
         def visit(handle: int, _extra: object) -> None:
-            if not found and win32gui.IsWindowVisible(handle):
-                title = win32gui.GetWindowText(handle) or ""
-                if title_fragment.lower() in title.lower():
-                    found.append(handle)
+            if not win32gui.IsWindowVisible(handle):
+                return
+            title = win32gui.GetWindowText(handle) or ""
+            if title == title_fragment:
+                exact.append(handle)
+            elif title_fragment.lower() in title.lower():
+                partial.append(handle)
 
         win32gui.EnumWindows(visit, None)
+        # Exact first. "tallyagent" as a fragment also matches an editor or a
+        # shell with the project open, and the take then types a demo script
+        # into somebody's terminal.
+        found = exact or partial
         if not found:
             return False
         # The same stubborn raise Tier 3 uses: a background process is not
@@ -125,6 +133,8 @@ class DemoDriver:
     #: the wrong take.
     run_id: str = ""
     assets: Path = Path("demo/assets")
+    #: The database the TUI on screen is writing to. Watched, never written.
+    db_path: str = "tallyagent.db"
     #: Every keystroke and window switch, for the run report.
     log: list[str] = field(default_factory=list)
     #: Whether a Tally report is open because *we* opened it. Escape is only
@@ -154,21 +164,107 @@ class DemoDriver:
         self.log.append(f"focus {self.terminal_title}")
         self.keyboard.focus(self.terminal_title)
 
-    async def say_to_agent(self, text: str = "", **_: Any) -> None:
-        """Type a question into the TUI and press Enter, as a person would."""
+    async def say_to_agent(self, text: str = "", wait: bool = True, **_: Any) -> None:
+        """Type a question into the TUI and press Enter, as a person would.
+
+        Then wait for the answer to actually arrive. Without this the narration
+        describes a trial balance while the screen still shows a spinner, which
+        is the single thing that made earlier takes look faked: the words were
+        right and the screen was half a sentence behind them.
+        """
         self._hide_card()
         line = text.replace("{run}", self.run_id or "1")
-        self.keyboard.focus(self.terminal_title)
+        self._require_focus(self.terminal_title)
+        before = self._audit_rows()
         self.log.append(f"type {line!r}")
         self.keyboard.type(line)
         await self.clock.sleep(0.3)
         self.keyboard.press("enter")
+        if wait:
+            await self.wait_for_turn(before)
+
+    def _require_focus(self, title: str, attempts: int = 3) -> None:
+        """Bring a window to the front, or refuse to type at all.
+
+        Windows does not always grant the foreground to a background process,
+        and pyautogui types wherever focus happens to be. A take that loses the
+        race types its script into whatever the person was doing - which is
+        what happened, into a live shell. Failing the chapter is cheap; that is
+        not.
+        """
+        for _ in range(attempts):
+            if self.keyboard.focus(title):
+                return
+            time.sleep(0.6)
+        raise RuntimeError(
+            f"refusing to type: {title!r} would not come to the front, and the "
+            "keystrokes would land in whatever window did."
+        )
+
+    def _audit_rows(self) -> int:
+        """How many rows the audit log holds right now.
+
+        The TUI runs in its own process, so there is no object to ask. What
+        there is, is the log it writes to as it works - one row per tool call,
+        approval and egress - and a count of those is enough to tell "still
+        working" from "finished" without parsing a console.
+        """
+        import sqlite3
+
+        # Three tables, because they move at different moments: egress rows
+        # while the model is being called, audit rows as tools run, approvals
+        # as tickets land. Watching only the audit log made a folder of bills
+        # look finished while it was still reading the second scan.
+        try:
+            with sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True) as db:
+                return sum(
+                    int(db.execute(f"select count(*) from {table}").fetchone()[0])
+                    for table in ("audit_log", "egress", "approvals")
+                )
+        except Exception:  # noqa: BLE001 - no log is not a reason to stop filming
+            return -1
+
+    async def wait_for_turn(self, before: int, quiet: float = 1.4) -> None:
+        """Hold until the agent stops doing things, or the timeout gives up.
+
+        "Stops doing things" rather than "has done something": a turn is
+        several tool calls, and the first one landing does not mean the answer
+        is on screen. So it waits for the count to go quiet, and a beat whose
+        command writes nothing at all - /approvals, /help - simply waits out
+        the quiet period and moves on.
+        """
+        if before < 0:
+            await self.clock.sleep(1.0)
+            return
+        deadline = self.clock.now() + TURN_TIMEOUT
+        last_change = self.clock.now()
+        seen = before
+        while self.clock.now() < deadline:
+            await self.clock.sleep(0.3)
+            now = self._audit_rows()
+            if now != seen:
+                seen = now
+                last_change = self.clock.now()
+            elif self.clock.now() - last_change >= quiet:
+                break
+        self.log.append(f"turn settled after {seen - before} audit row(s)")
 
     def _run_text(self, text: str) -> str:
         return text.replace("{run}", self.run_id or "1")
 
-    async def run_command(self, command: str = "", **_: Any) -> None:
-        await self.say_to_agent(text=command)
+    async def run_command(self, command: str = "", wait: bool = True, **_: Any) -> None:
+        await self.say_to_agent(text=command, wait=wait)
+
+    async def wait_for_agent(self, quiet: float = 6.0, **_: Any) -> None:
+        """Hold until the work started by an earlier beat has finished.
+
+        For the long ones - a folder of bills is a minute of character
+        recognition - where waiting inside the beat that starts it would put a
+        minute of silence on camera. The narration runs over the work instead,
+        and this is where the next chapter waits for it to be done, so nothing
+        is typed into a busy terminal.
+        """
+        await self.wait_for_turn(self._audit_rows() - 1, quiet=quiet)
 
     async def show_draft(self, **_: Any) -> None:
         """The draft is already on screen; this beat only holds the frame."""

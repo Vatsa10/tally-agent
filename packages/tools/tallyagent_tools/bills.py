@@ -35,6 +35,13 @@ log = logging.getLogger(__name__)
 #: What a bill can arrive as. Photographs, because half of them are.
 BILL_SUFFIXES = (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff")
 
+#: How many bills are read at once. Reading a bill is character recognition on
+#: this machine and then a model call over the network, and the network wait is
+#: most of it, so overlapping them is nearly free. Kept small: the OCR engine
+#: wants the CPU, and a provider that rate-limits turns a fast batch into a
+#: batch of 429s.
+READ_AT_ONCE = 4
+
 MEDIA_TYPES = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -285,6 +292,17 @@ async def ingest_folder(
     reader = extractor or _default_extractor(ctx)
     batch = BatchResult()
 
+    # Read them together, queue them one at a time. Extraction is the slow part
+    # and it touches nothing shared; queueing writes tickets to one database in
+    # a fixed order, and a pile that comes back in a different order every run
+    # is a pile nobody can check against the paper.
+    to_read = [
+        path
+        for path in bills
+        if again or not _seen(ctx, fingerprint(path))
+    ]
+    reader = await _read_ahead(to_read, reader)
+
     for path in bills:
         digest = fingerprint(path)
         already = _seen(ctx, digest)
@@ -308,6 +326,47 @@ async def ingest_folder(
     if batch.count(QUEUED) == 0 and batch.attention:
         message += " " + BLIND_MODEL_HINT
     return ToolResult(message=message, data={"outcomes": batch.as_rows()})
+
+
+class _ReadAhead:
+    """Bills already read, handed back in the order the batch asks for them.
+
+    Holds the exception too, so a scan that failed fails at the same place in
+    the batch as it would have if nothing had been read ahead.
+    """
+
+    def __init__(self, done: dict[str, Any], fallback: Extractor) -> None:
+        self._done = done
+        self._fallback = fallback
+
+    async def extract(self, path: Path) -> dict[str, Any]:
+        if str(path) not in self._done:
+            return await self._fallback.extract(path)
+        result = self._done[str(path)]
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+
+async def _read_ahead(paths: list[Path], reader: Extractor) -> Extractor:
+    if len(paths) < 2:
+        return reader
+
+    import asyncio
+
+    gate = asyncio.Semaphore(READ_AT_ONCE)
+
+    async def read(path: Path) -> Any:
+        async with gate:
+            return await reader.extract(path)
+
+    results = await asyncio.gather(
+        *(read(path) for path in paths), return_exceptions=True
+    )
+    return _ReadAhead(
+        {str(path): result for path, result in zip(paths, results, strict=True)},
+        reader,
+    )
 
 
 async def _one_bill(
