@@ -1,10 +1,15 @@
 # The demo script. This file is the source of truth for the video.
 #
+# The shape of it: every claim the agent makes in the terminal is then checked
+# on Tally's own screen. The agent saying the stock is down by two is a claim;
+# Tally's Stock Summary saying it is evidence, and it costs one keystroke. A
+# demo that only ever shows its own UI is asking to be taken on trust.
+#
 # Copy is written the way the codebase talks: declarative, no adjectives doing
 # sales work. Numbers are spelled the way a voice should read them, and
-# abbreviations are spelled phonetically where a TTS engine would otherwise
-# guess - "G-S-T-R two B", "T-A". The ASR check will fail the build if the
-# audio and this text disagree, which is how a mispronunciation gets caught.
+# abbreviations phonetically where a TTS engine would otherwise guess - "G-S-T-R
+# two B", "X M L". The narration is checked against the rendered audio, so a
+# mispronunciation fails the build rather than reaching the video.
 title: tallyagent
 
 voice:
@@ -32,8 +37,9 @@ chapters:
       - id: b02-tally
         action: show_tally
         say: >-
-          This is a real TallyPrime instance, with a real company loaded.
-          Everything after this point is live.
+          This is a real TallyPrime instance with a real company loaded.
+          Everything after this point is live, and everything the agent claims
+          gets checked against this window.
 
   - id: ch2-draft
     title: Chat drafts a voucher
@@ -41,15 +47,15 @@ chapters:
       - id: b03-tui
         action: open_tui
         say: >-
-          The agent comes up beside it. The status line states the scope it is
+          The agent runs beside it. The status line states the scope it is
           allowed to write in: companies named T-A, and nothing else.
 
       - id: b04-ask
         action: say_to_agent
         args:
-          # Named precisely, because the agent refuses to guess a party or a
-          # tax rate - which is the behaviour chapter three is about. Asking it
-          # vaguely here would just show the same refusal twice.
+          # Named precisely. The agent refuses to guess a party or a tax rate,
+          # which is what chapter four is about - asking it vaguely here would
+          # only show the same refusal twice.
           text: >-
             raise a sales invoice to Acme Industries for 2 Widget at 3200 each,
             18% GST, sales ledger Sales - GST 18%, dated 2 June 2026,
@@ -68,79 +74,82 @@ chapters:
           it out.
         tail_pad: 0.8
 
-  - id: ch3-refusal
-    title: Validation refuses
+  - id: ch3-approval
+    title: The approval gate
     beats:
-      - id: b06-bad-ask
+      - id: b06-queue
+        action: show_approvals
+        say: >-
+          Nothing has been posted. Every write stops in one queue, whichever way
+          the request arrived, with the exact ledger effects to the paisa.
+
+      - id: b07-approve
+        action: approve_pending
+        say: >-
+          A person decides. That is the whole design: the agent does the typing,
+          the firm keeps the judgement.
+        tail_pad: 0.6
+
+  - id: ch4-landing
+    title: Watching it land in Tally
+    beats:
+      - id: b08-daybook
+        action: show_day_book
+        say: >-
+          And here is the same moment from Tally's side. This is Tally's own Day
+          Book, not our rendering of it, and the voucher is in it - posted over
+          X M L the instant that approval went through.
+        tail_pad: 0.8
+
+      - id: b09-stock
+        action: show_stock_summary
+        say: >-
+          The sale moved stock as well as money. Tally's own Stock Summary, two
+          Widgets lighter. Nobody typed this in.
+        tail_pad: 0.8
+
+      - id: b10-back
+        action: close_report
+        say: Back to where we started.
+        tail_pad: 0.4
+
+  - id: ch5-refusal
+    title: What it refuses to do
+    beats:
+      - id: b11-bad-ask
         action: say_to_agent
         args:
           text: book 100 rent to the Baroda branch
         say: Now something that should not go through.
         tail_pad: 0.6
 
-      - id: b07-refused
+      - id: b12-refused
         action: show_refusal
         say: >-
           There is no Baroda cost centre in this company. There is a Vadodara,
-          which is the same city under its other name, and the agent says so
+          which is the same city under its other name, and the agent offers it
           rather than guessing. Validation runs before the approval queue, not
           after, so this never became a ticket and nothing reached Tally.
         tail_pad: 0.8
 
-  - id: ch4-approval
-    title: The approval gate
-    beats:
-      - id: b08-queue
-        action: show_approvals
-        say: >-
-          Every write stops here. One queue, whichever way the request arrived.
-
-      - id: b09-diff
-        action: show_ticket
-        say: >-
-          The ticket carries the exact voucher and the exact ledger effects,
-          to the paisa, before anything is committed.
-
-      - id: b10-approve
-        action: approve_pending
-        say: A person decides. Nothing posts without that.
-        tail_pad: 0.8
-
-  - id: ch5-write
-    title: The write lands
-    beats:
-      - id: b11-daybook
-        action: show_day_book
-        say: >-
-          That approval sends X M L to Tally. This is the Tally window itself,
-          and the voucher is in it.
-
-      - id: b12-stock
-        action: say_to_agent
-        args:
-          text: what stock do we hold?
-        say: >-
-          Read back out of Tally, not out of the model's memory. The stock is
-          down by two.
-        tail_pad: 0.8
-
   - id: ch6-reports
-    title: Reports
+    title: Reading the books back
     beats:
       - id: b13-tb
         action: say_to_agent
         args:
           text: trial balance please
         say: >-
-          Reports come through the same tools. Trial balance, outstanding,
-          stock summary, all read live.
+          Reports come through the same tools, read live. The debits and the
+          credits agree because they are Tally's own figures, not a copy kept
+          somewhere else.
 
       - id: b14-outstanding
         action: say_to_agent
         args:
           text: who owes us money?
         say: >-
-          The debits and the credits agree, because they are Tally's own.
+          Receivables, party by party, with the ageing.
         tail_pad: 0.8
 
   - id: ch7-reco
@@ -165,16 +174,16 @@ chapters:
         tail_pad: 0.8
 
   - id: ch8-tier3
-    title: Tier three, visible
+    title: Driving Tally directly
     beats:
       - id: b17-cursor
         action: tier3_cursor
         say: >-
-          Some things Tally's interface will not do over X M L. For those there
-          is a third tier that drives the keyboard directly. It is off by
-          default, behind the same approval, and visible while it runs. The ring
-          shows where it is going, and the caption says what it is about to
-          press, before it presses it.
+          Some things Tally will not do over X M L. For those there is a third
+          tier that drives the keyboard directly, and you can watch it work. It
+          is off by default, behind the same approval, and it narrates itself:
+          the ring shows where it is going and the caption says what it is about
+          to press, before it presses it.
         tail_pad: 1.0
 
   - id: ch9-audit

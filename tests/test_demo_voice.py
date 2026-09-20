@@ -267,3 +267,23 @@ async def test_the_offline_listener_spreads_words_across_the_audio(tmp_path):
     assert [w.text for w in words] == ["one", "two", "three", "four"]
     assert words[0].start == 0.0
     assert words[-1].end == 4.0
+
+
+def test_a_long_line_with_two_misheard_words_is_not_flagged():
+    """difflib's autojunk scored two near-identical paragraphs at 13%, which
+    would have the check crying wolf on exactly the lines it protects."""
+    script = (
+        "Some things Tally will not do over X M L. For those there is a third "
+        "tier that drives the keyboard directly, and you can watch it work. It "
+        "is off by default, behind the same approval, and it narrates itself."
+    )
+    heard = script.replace("Tally", "Dolly").replace("X M L", "a x n l")
+
+    assert asr_mod.compare(script, [Word(w, 0, 1) for w in heard.split()]) == ""
+
+
+def test_a_long_line_that_is_genuinely_wrong_is_still_flagged():
+    script = " ".join(["the trial balance for June"] * 8)
+    heard = " ".join(["porridge elephant seventeen tuesday"] * 8)
+
+    assert asr_mod.compare(script, [Word(w, 0, 1) for w in heard.split()]) != ""

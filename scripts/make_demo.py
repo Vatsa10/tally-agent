@@ -119,12 +119,9 @@ def stage_preflight(demo) -> int:  # type: ignore[no-untyped-def]
     print(f"  queue: {len(stale)} stale ticket(s) cleared")
 
     if not placed.get(demo.title):
-        print(
-            f"\n  Open the TUI in its own console window titled {demo.title!r} first:\n"
-            f"    start {demo.title} cmd /k uv run tallyagent tui",
-            file=sys.stderr,
-        )
-        return 1
+        # Not a failure. The record stage opens its own console, precisely so a
+        # take never inherits the previous take's transcript.
+        print("  window agent: opened when recording starts")
     return 0
 
 
@@ -137,6 +134,15 @@ async def stage_record(demo, paths, chapters: list[str], show_cursor: bool) -> i
         lengths = json.loads(durations_file.read_text())
     else:
         print("  no durations.json - run the tts stage first", file=sys.stderr)
+        return 1
+
+    # A console opened for this take and closed after it. A reused one still
+    # holds the last take's transcript, and one recording opened on the previous
+    # recording's egress log scrolled up the screen.
+    terminal = driver_mod.Terminal(title=demo.title, build_dir=paths.root)
+    print("  opening the agent in its own window")
+    if not terminal.start():
+        print("  the TUI window never appeared", file=sys.stderr)
         return 1
 
     spotlight = driver_mod.build_spotlight(show_cursor)
@@ -181,6 +187,7 @@ async def stage_record(demo, paths, chapters: list[str], show_cursor: bool) -> i
     finally:
         screen.close()
         spotlight.close()
+        terminal.stop()
     return 0
 
 
@@ -279,7 +286,7 @@ async def main() -> int:
         "stages",
         nargs="+",
         choices=[
-            "all", "voices", "cards", "tts", "asr", "preflight",
+            "all", "voices", "cards", "prep", "tts", "asr", "preflight",
             "record", "subtitles", "render", "cleanup",
         ],
     )
@@ -312,7 +319,7 @@ async def main() -> int:
 
     stages = args.stages
     if "all" in stages:
-        stages = ["cards", "tts", "asr", "record", "subtitles", "render"]
+        stages = ["cards", "prep", "tts", "asr", "record", "subtitles", "render"]
 
     for stage in stages:
         print(f"[{stage}]")
@@ -321,6 +328,12 @@ async def main() -> int:
         elif stage == "cards":
             for name, path in cards.build_all(Path("demo/assets")).items():
                 print(f"  {name}: {path}")
+        elif stage == "prep":
+            import subprocess
+
+            subprocess.run(
+                [sys.executable, "scripts/demo_prep.py"], check=False
+            )
         elif stage == "tts":
             await stage_tts(demo, paths, args.offline)
         elif stage == "asr":

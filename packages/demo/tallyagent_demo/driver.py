@@ -190,25 +190,41 @@ class DemoDriver:
             )
         await self.say_to_agent(text=f"/approve {chosen}")
 
-    async def show_day_book(self, **_: Any) -> None:
-        """Open Tally's own Day Book, so the new voucher is visible on screen.
+    async def in_tally(
+        self, key: str = "", caption: str = "", point_y: int = 420, **_: Any
+    ) -> None:
+        """Open one of Tally's own reports and point at what changed.
 
-        ``K`` from the Gateway, which is navigation and changes nothing. Saying
-        "the voucher is in Tally" over a picture of the Gateway menu would be
-        asking the viewer to take it on trust, which is the opposite of the
-        point.
+        This is what makes the demo checkable rather than assertable. The agent
+        can say the stock is down by two; Tally's own Stock Summary saying it is
+        a different kind of claim, and it costs one keystroke from the Gateway -
+        ``K`` for the Day Book, ``S`` for Stock Summary, ``B`` for the Balance
+        Sheet. All navigation, none of it changes anything.
         """
         self._hide_card()
         if not self.keyboard.focus(self.tally_title):
-            self.log.append("day book: could not raise Tally")
+            self.log.append(f"tally {key!r}: could not raise the window")
             return
-        self.keyboard.press("k")
-        await self.clock.sleep(1.2)
-        self.log.append("day book open")
-        if self.spotlight is not None:
+        if key:
+            self.keyboard.press(key)
+            await self.clock.sleep(1.4)
+        self.log.append(f"tally shows {caption or key}")
+        if self.spotlight is not None and caption:
             left, top, width, _height = capture.TALLY_RECT
-            self.spotlight.announce("the voucher that was just approved")
-            self.spotlight.point(left + width // 2, top + 420)
+            self.spotlight.announce(caption)
+            self.spotlight.point(left + width // 2, top + point_y)
+
+    async def show_day_book(self, **_: Any) -> None:
+        """Tally's Day Book, with the voucher that was just approved in it."""
+        await self.in_tally(
+            key="k", caption="the voucher that was just approved", point_y=420
+        )
+
+    async def show_stock_summary(self, **_: Any) -> None:
+        """Tally's own Stock Summary - the same quantity, from the other side."""
+        await self.in_tally(
+            key="s", caption="Tally's own stock figure", point_y=360
+        )
 
     async def close_report(self, **_: Any) -> None:
         """Back out of whatever report is open, to the Gateway.

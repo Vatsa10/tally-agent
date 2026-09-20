@@ -93,8 +93,12 @@ def test_every_beat_names_an_action_the_driver_actually_has():
 
 
 def test_the_script_is_about_three_minutes():
+    """The estimate runs long: the voice reads faster than the words-per-second
+    guess, and 175 estimated seconds came back as 160 spoken ones. The band is
+    wide enough to allow for that and still catch a script that has quietly
+    grown into a five minute one."""
     demo = script_mod.load("demo/script.yaml")
-    assert 150 <= demo.estimated_seconds <= 200, demo.estimated_seconds
+    assert 150 <= demo.estimated_seconds <= 215, demo.estimated_seconds
 
 
 def test_every_beat_has_something_to_say():

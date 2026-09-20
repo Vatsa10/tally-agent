@@ -66,7 +66,14 @@ def compare(script_text: str, heard: list[Word]) -> str:
     if not actual:
         return "the audio transcribed to nothing - listen to this line before shipping it"
 
-    ratio = difflib.SequenceMatcher(None, " ".join(expected), " ".join(actual)).ratio()
+    # autojunk=False matters more than it looks. On sequences longer than
+    # 200 elements difflib treats any character appearing in more than 1%
+    # of them as junk - which for prose is every vowel and every space - and
+    # two nearly identical sentences then score 13%. The check would cry
+    # wolf on exactly the long lines it exists to protect.
+    ratio = difflib.SequenceMatcher(
+        None, " ".join(expected), " ".join(actual), autojunk=False
+    ).ratio()
     if ratio >= SIMILARITY_FLOOR:
         return ""
 
