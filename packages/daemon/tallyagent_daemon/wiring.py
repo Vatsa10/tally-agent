@@ -25,6 +25,7 @@ from tallyagent_daemon.config import Config
 from tallyagent_llm.router import EgressRecord, Router, build_provider
 from tallyagent_tally.backend import TallyBackend
 from tallyagent_tally.client import TallyClient
+from tallyagent_tally.recovery import Recovery
 from tallyagent_tools.base import ToolContext
 
 log = logging.getLogger(__name__)
@@ -54,7 +55,17 @@ def build(
     engine = make_engine(config.db_path)
     audit = AuditLog(engine)
 
-    client = TallyClient(config.tally, transport=transport)
+    # A repairer only in live mode with a real socket. A crashed Tally, a
+    # licence screen or an unopened company are the three things that end a real
+    # session, and none of them should need a person who knows what a TDL is.
+    # Never wired against the fake: restarting a process is not something a test
+    # should be able to trigger.
+    recovery = (
+        Recovery(config.tally)
+        if config.mode == "live" and transport is None
+        else None
+    )
+    client = TallyClient(config.tally, transport=transport, recovery=recovery)
     backend = TallyBackend(client, store=SqlIdempotencyStore(engine))
 
     provider = _provider_or_mock(config)

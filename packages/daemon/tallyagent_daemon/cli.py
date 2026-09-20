@@ -125,6 +125,94 @@ def probe(
 
 
 @app.command()
+def doctor(
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+    repair: bool = typer.Option(
+        True, help="Try to fix what is fixable, rather than only reporting it."
+    ),
+) -> None:
+    """Check everything a working session needs, and repair what can be repaired.
+
+    Written for the person at the firm, not for us: each line is something they
+    can act on, and the things this can fix on its own - a crashed Tally, the
+    licence screen, a company that is not open - it fixes rather than reports.
+    """
+    config = _load(config_path, policy_path)
+    problems: list[str] = []
+
+    typer.echo(f"config      {config_path}")
+    typer.echo(f"mode        {config.mode}")
+    typer.echo(f"company     {config.company.name or '(none configured)'}")
+    typer.echo(f"tally       {config.tally.url}")
+
+    if config.tally_is_placeholder:
+        problems.append(
+            f"[tally] host is still the placeholder {config.tally.host!r}. Edit "
+            f"{config_path} and set it to 127.0.0.1, or the machine Tally runs on."
+        )
+
+    wired = _wire(config, fake=False)
+
+    from tallyagent_tally.recovery import Recovery
+
+    healer = Recovery(config.tally)
+    if repair:
+        outcome = asyncio.run(healer.repair(force=True))
+        typer.echo(f"tally       {outcome.describe()}")
+        if not outcome.healthy:
+            problems.append(outcome.reason)
+    else:
+        healthy = asyncio.run(healer.port_answers())
+        typer.echo(f"tally       {'answering' if healthy else 'not answering'}")
+        if not healthy:
+            problems.append(f"{config.tally.url} is not answering.")
+
+    companies = asyncio.run(healer.companies())
+    typer.echo(f"companies   {', '.join(companies) or '(none open)'}")
+    if config.company.name and config.company.name not in companies:
+        problems.append(
+            f"{config.company.name!r} is not open in Tally. Open it there, or "
+            f"change [company] name in {config_path}."
+        )
+
+    if config.live.enabled:
+        typer.echo(f"write scope {config.live.write_prefix}* (live mode)")
+        if config.company.name and not config.company.name.startswith(
+            config.live.write_prefix
+        ):
+            problems.append(
+                f"live mode may only write to companies starting "
+                f"{config.live.write_prefix!r}, and the configured company does not."
+            )
+
+    typer.echo(
+        f"model       {wired.services.router.name}/{wired.services.router.model}"
+        + ("   (no API key; answers are deterministic)" if wired.using_mock_model else "")
+    )
+
+    verified = wired.services.audit.verify()
+    typer.echo(f"audit log   {'intact' if verified.ok else 'BROKEN'} "
+               f"({verified.checked} record(s))")
+    if not verified.ok:
+        problems.append(
+            "the audit chain does not verify - records have been altered or "
+            "removed. Keep the database and tell whoever owns this install."
+        )
+
+    pending = wired.services.queue.list("pending", config.company.name)
+    typer.echo(f"approvals   {len(pending)} waiting")
+
+    typer.echo("")
+    if not problems:
+        typer.echo("Ready.")
+        return
+    for problem in problems:
+        typer.echo(f"  - {problem}", err=True)
+    raise typer.Exit(code=1)
+
+
+@app.command()
 def chat(
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,

@@ -635,3 +635,17 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
   type from Tally and use the caller's only when the voucher cannot be read
   back. Six vouchers that had been written off as unreachable were deleted this
   way, with a deliberately wrong date and type passed in.
+- **D-137 A crashed Tally is the product's problem, not the user's.** Every
+  live session this was built in ended the same way: Tally had crashed, or was
+  sitting on the licence screen, or was up with no company open - and each time
+  a human ran a script. `tallyagent_tally.recovery` now does it, the client
+  calls it once on a dropped connection and retries, and `tallyagent doctor`
+  calls it on purpose. Measured: Tally killed, one read issued, 51 voucher rows
+  back 22 seconds later with no intervention. The repair is wired only in live
+  mode with a real socket - a test must never be able to restart a process -
+  and it is rate limited, because a repair that does not help must fail to the
+  caller rather than spin.
+- **D-138 The port answering is not the same as Tally working.** With no
+  company open every read succeeds and returns nothing, which reads like an
+  empty company rather than a broken session - the worst kind of failure. The
+  health check therefore is "a company is open", not "the socket answered".

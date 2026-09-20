@@ -11,6 +11,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 import httpx
 from lxml import etree
@@ -60,12 +61,18 @@ class TallyClient:
         self,
         config: TallyConfig | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        recovery: Any = None,
     ) -> None:
         self.config = config or TallyConfig()
         # Injected transport is how tests and the fake server attach without a
         # socket ever being opened.
         self._transport = transport
         self._version: str | None = None
+        # Optional repairer for a local Tally that has crashed, is sitting on
+        # the licence screen, or has no company open. Wired only in live mode:
+        # restarting a process is not something a test or the fake should be
+        # able to trigger.
+        self._recovery = recovery
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
@@ -78,7 +85,23 @@ class TallyClient:
 
     async def post(self, payload: bytes) -> bytes:
         """POST one envelope. Raises ConnectionError_/TallyError, never returns
-        a failure sentinel."""
+        a failure sentinel.
+
+        A connection failure is repaired once and retried, when a repairer is
+        wired. On a real desk the overwhelmingly common cause is Tally having
+        crashed or dropped back to its licence screen, and a bookkeeper should
+        not have to know that - the alternative is every session ending in a
+        support call.
+        """
+        try:
+            return await self._post_once(payload)
+        except ConnectionError_:
+            repaired = await self._repair()
+            if not repaired:
+                raise
+            return await self._post_once(payload)
+
+    async def _post_once(self, payload: bytes) -> bytes:
         try:
             async with self._client() as http:
                 response = await http.post(
@@ -93,6 +116,21 @@ class TallyClient:
                 f"Tally returned HTTP {response.status_code}: {response.text[:200]}"
             )
         return response.content
+
+    async def _repair(self) -> bool:
+        """Ask the repairer to put Tally back. False when there is none, or it
+        could not."""
+        if self._recovery is None:
+            return False
+        try:
+            result = await self._recovery.repair()
+        except Exception:  # noqa: BLE001 - a failed repair must not mask the
+            # original connection error, which is the more useful one.
+            log.exception("recovery failed")
+            return False
+        if result.healthy:
+            log.warning("Tally recovered: %s", result.describe())
+        return bool(result.healthy)
 
     async def banner(self) -> str:
         """The bare GET response.
