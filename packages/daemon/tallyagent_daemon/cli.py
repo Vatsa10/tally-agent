@@ -24,6 +24,8 @@ import typer
 from tallyagent_daemon import wiring
 from tallyagent_daemon.config import Config, load
 
+log = logging.getLogger(__name__)
+
 app = typer.Typer(
     help="Agentic bookkeeping for TallyPrime.", no_args_is_help=True, add_completion=False
 )
@@ -497,6 +499,15 @@ def fake_tally(
 
 
 def main() -> None:
+    # Before anything builds a provider. Without this the key sits in .env, the
+    # agent falls back to the deterministic mock exactly as designed, and every
+    # answer is a canned sentence - which reads as a stupid product rather than
+    # an unconfigured one.
+    from tallyagent_core import dotenv
+
+    applied = dotenv.load()
+    if applied:
+        log.info("read %s from .env", ", ".join(applied))
     app()
 
 
