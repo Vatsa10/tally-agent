@@ -1,8 +1,9 @@
 """Remembering the REMOTEIDs we assigned to vouchers we posted.
 
-Tally honours a REMOTEID supplied on create, for the life of the voucher, but
-never reports it back: every export shows Tally's own GUID. The handle that
-makes a voucher amendable therefore lives here and nowhere else.
+Tally honours a REMOTEID supplied on create, for the life of the voucher, and
+hands it back in REMOTEGUID - so this is a local cache of a fact that also
+lives in the books. It saves a round trip and remembers what Tally does not:
+which approval produced which voucher. The authority is Tally.
 """
 
 from __future__ import annotations

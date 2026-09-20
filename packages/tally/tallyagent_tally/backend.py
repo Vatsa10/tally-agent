@@ -149,8 +149,11 @@ class TallyBackend:
     VOUCHER_TDL = (
         '<COLLECTION NAME="TAVouchers" ISMODIFY="No">'
         "<TYPE>Voucher</TYPE>"
+        # REMOTEGUID carries the id we assigned. Without it in the FETCH list
+        # Tally answers with its own GUID instead, and every amendment aimed at
+        # a voucher read back this way is refused.
         "<FETCH>DATE,VOUCHERTYPENAME,VOUCHERNUMBER,PARTYLEDGERNAME,REFERENCE,"
-        "NARRATION,MASTERID,ALLLEDGERENTRIES.LIST</FETCH>"
+        "NARRATION,MASTERID,REMOTEGUID,ALLLEDGERENTRIES.LIST</FETCH>"
         "</COLLECTION>"
     )
 
@@ -591,6 +594,19 @@ class TallyBackend:
                     "([tally] supports_voucher_alter = false). Amend it in Tally."
                 ],
             )
+        found = await self.find_by_remote_id(remote_id, company=company)
+        if found is None:
+            return WriteResult(
+                ok=False,
+                idempotency_key=idempotency_key,
+                errors=[
+                    f"no voucher in {self.client.company_or_default(company)!r} "
+                    f"carries the id {remote_id!r}. Refusing to send an Alter: "
+                    "Tally treats one that matches nothing as a Create, so this "
+                    "would add a second voucher rather than change the first."
+                ],
+            )
+
         amended = voucher.model_copy(update={"remote_id": remote_id})
         element = builders.build_voucher_element(
             amended, action="Alter", remote_id=remote_id
@@ -615,12 +631,15 @@ class TallyBackend:
     ) -> WriteResult:
         """Delete a voucher we created, addressed by the REMOTEID we gave it.
 
-        Verification cannot use that REMOTEID: Tally honours it on the way in
-        but reports its own GUID on the way out, so "is it still there?" has to
-        be answered by watching which vouchers actually disappeared. A delete
-        that silently changed nothing is the worst outcome available here, so a
-        deletion is only reported successful once a voucher is demonstrably
-        gone.
+        The date and the voucher type are taken from Tally rather than from the
+        caller. Tally matches a delete on all three, and answers a mismatch with
+        "Voucher does not exist!" - which sends whoever reads it hunting for a
+        wrong id when the id was right and the date was a day out. The caller's
+        values are used only when the voucher cannot be read back.
+
+        Success is confirmed by re-reading, because a delete reports neither
+        CREATED nor ALTERED and a delete that silently did nothing is the worst
+        outcome available here.
         """
         if not str(remote_id).strip():
             return WriteResult(
@@ -630,6 +649,11 @@ class TallyBackend:
                     "cannot delete a voucher without the REMOTEID it was created with"
                 ],
             )
+
+        found = await self.find_by_remote_id(remote_id, company=company)
+        if found is not None:
+            voucher_type = found[0]
+            when = found[1]
 
         target = self.client.company_or_default(company)
         decision = idempotency.check(self.store, idempotency_key, target)
@@ -764,10 +788,34 @@ class TallyBackend:
 
     async def voucher_exists(self, remote_id: str, company: str | None = None) -> bool:
         """Is a voucher with this REMOTEID still in the books?"""
+        return await self.find_by_remote_id(remote_id, company=company) is not None
+
+    async def find_by_remote_id(
+        self, remote_id: str, company: str | None = None
+    ) -> tuple[VoucherType, date, str] | None:
+        """The type, date and master id of a voucher we posted, from Tally.
+
+        This is what makes amending and deleting survive a lost database. The
+        REMOTEID is ours, Tally hands it back in REMOTEGUID, and everything an
+        amendment needs can be read from the books themselves - so the local
+        index is a convenience rather than the only copy of the handle.
+        """
+        if not str(remote_id).strip():
+            return None
         for row in await self.get_vouchers(company=company):
-            if str(row.get("REMOTEID") or "") == remote_id:
-                return True
-        return False
+            if str(row.get("REMOTEID") or "") != remote_id:
+                continue
+            when = from_tally_date(str(row.get("DATE") or ""))
+            try:
+                kind = VoucherType(str(row.get("VOUCHERTYPENAME") or ""))
+            except ValueError:
+                # A voucher type we do not model - a Stock Journal, say. The
+                # caller's own value is the better guess in that case.
+                return None
+            if when is None:
+                return None
+            return kind, when, str(row.get("MASTERID") or "")
+        return None
 
     async def create_ledger(
         self,

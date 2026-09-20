@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -309,17 +310,105 @@ class DemoDriver:
         return timeline
 
 
-def launch_terminal(command: str, title: str = "tallyagent") -> subprocess.Popen[bytes]:
-    """Open a real console window running the TUI, and give it a known title.
+class Terminal:
+    """The TUI, in its own console window, opened and closed by the build.
 
-    A new console rather than this one: the recorder needs a window it can place
-    at a fixed rectangle, and the build's own output must not scroll past on
-    camera.
+    A separate console rather than this one, for three reasons: the recorder
+    needs a window it can place at a fixed rectangle, the build's own output
+    must not scroll past on camera, and the window has to carry a known title so
+    keystrokes can be aimed at it.
+
+    It is opened fresh for every take. A reused console still holds the previous
+    take's transcript, and the first thing the camera saw in one recording was
+    the *last* recording's egress log scrolled up the screen.
     """
-    return subprocess.Popen(
-        ["cmd", "/c", "start", title, "cmd", "/k", command],
-        shell=False,
-    )
+
+    #: The TUI needs to reach Tally, list companies and draw itself before a
+    #: keystroke means anything.
+    STARTUP_SECONDS = 26
+
+    def __init__(self, title: str = "tallyagent", build_dir: Path = Path("demo/build")) -> None:
+        self.title = title
+        self.build_dir = build_dir
+        self.process: subprocess.Popen[bytes] | None = None
+
+    def script(self) -> Path:
+        """A .cmd wrapper: the title, a cleared screen, and the model key.
+
+        The key is read out of ``.env`` here rather than exported globally,
+        because the product deliberately reads secrets from the environment and
+        nothing else - this bridges the developer's file into the one process
+        that needs it, for as long as it runs.
+        """
+        from tallyagent_demo import env as env_mod
+
+        key = os.environ.get("DEEPSEEK_API_KEY", "") or env_mod.parse(
+            Path(".env").read_text(encoding="utf-8") if Path(".env").is_file() else ""
+        ).get("DEEPSEEK_API_KEY", "")
+
+        self.build_dir.mkdir(parents=True, exist_ok=True)
+        path = self.build_dir / "run_tui.cmd"
+        path.write_text(
+            "@echo off\r\n"
+            f"title {self.title}\r\n"
+            "cls\r\n"
+            f"cd /d {Path.cwd()}\r\n"
+            + (f"set DEEPSEEK_API_KEY={key}\r\n" if key else "")
+            + "uv run tallyagent tui\r\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def start(self) -> bool:
+        import time as _time
+
+        self.stop()
+        self.process = subprocess.Popen(
+            [str(self.script())],
+            creationflags=0x00000010,  # CREATE_NEW_CONSOLE
+        )
+        waited = 0.0
+        while waited < self.STARTUP_SECONDS:
+            _time.sleep(2)
+            waited += 2
+            if _window(self.title) is not None:
+                _time.sleep(4)  # let it finish drawing before anything is typed
+                return True
+        return False
+
+    def stop(self) -> None:
+        """Close the window politely, so the next take starts from nothing."""
+        handle = _window(self.title)
+        if handle is None:
+            return
+        try:
+            import win32con  # type: ignore[import-not-found]
+            import win32gui  # type: ignore[import-not-found]
+
+            win32gui.PostMessage(handle, win32con.WM_CLOSE, 0, 0)
+            import time as _time
+
+            _time.sleep(2)
+        except Exception:  # noqa: BLE001 - a lingering console is not fatal
+            pass
+        self.process = None
+
+
+def _window(title: str) -> int | None:
+    try:
+        import win32gui  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+
+    found: list[int] = []
+
+    def visit(handle: int, _extra: object) -> None:
+        if not found and win32gui.IsWindowVisible(handle):
+            if (win32gui.GetWindowText(handle) or "") == title:
+                found.append(handle)
+
+    win32gui.EnumWindows(visit, None)
+    return found[0] if found else None
 
 
 def build_spotlight(show_cursor: bool = True) -> Any:

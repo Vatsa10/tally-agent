@@ -76,11 +76,11 @@ class IdempotencyRow(SQLModel, table=True):
 class VoucherIndexRow(SQLModel, table=True):
     """Which REMOTEID we gave each voucher we posted.
 
-    Tally accepts a REMOTEID on create and honours it for later Alter and
-    Delete, but it does not report it back - every export shows Tally's own
-    GUID instead. So the identity that makes a voucher amendable exists only
-    here. Losing this table means losing the ability to amend or delete
-    anything already posted (the books are untouched; only the handle is lost).
+    A convenience, not the only copy. Tally returns the id we assigned in
+    REMOTEGUID, so a voucher can always be found again from the books alone -
+    see ``TallyBackend.find_by_remote_id``. This table saves the round trip and
+    carries what Tally does not (which approval produced the voucher), but
+    losing it no longer costs the ability to amend or delete anything.
     """
 
     __tablename__ = "voucher_index"

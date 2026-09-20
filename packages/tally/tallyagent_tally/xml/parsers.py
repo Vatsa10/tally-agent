@@ -102,9 +102,17 @@ def parse_voucher_rows(xml_bytes: bytes) -> list[dict[str, object]]:
         }
         if not shared.get("VOUCHERTYPENAME"):
             shared["VOUCHERTYPENAME"] = voucher.get("VCHTYPE", "")
-        # REMOTEID is a GUID and lives on the attribute, not as a child. It is
-        # the id an amendment should be aimed at.
-        shared["REMOTEID"] = voucher.get("REMOTEID", "")
+        # The id an amendment must be aimed at is the one *we* assigned, and
+        # Tally does hand it back - in REMOTEGUID. The REMOTEID attribute looks
+        # like the same thing and is not: unless REMOTEGUID is fetched, Tally
+        # puts its own GUID there, and an amendment aimed at that is refused
+        # with "Voucher does not exist!" - which reads like the voucher is gone
+        # rather than like the handle is wrong.
+        shared["REMOTEID"] = (
+            (voucher.findtext("REMOTEGUID") or "").strip()
+            or voucher.get("REMOTEID", "")
+        )
+        shared["TALLY_GUID"] = voucher.get("REMOTEID", "")
         if not shared.get("GUID"):
             shared["GUID"] = voucher.get("REMOTEID", "")
 

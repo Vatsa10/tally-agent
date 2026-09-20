@@ -389,15 +389,22 @@ def _sales() -> Voucher:
     )
 
 
-async def test_alter_with_an_unknown_master_id_fails_loudly(backend, sales_voucher):
-    """Tally does not reject an unmatched amendment - it silently creates a new
-    voucher. That is worse than an error, so the adapter turns it into one."""
+async def test_alter_with_an_unknown_id_never_reaches_tally(
+    backend, fake_tally, sales_voucher
+):
+    """Tally does not reject an unmatched amendment - it silently creates a
+    second voucher. So the id is checked against the books first, and nothing
+    is sent when it matches nothing."""
+    before = len(fake_tally.vouchers)
+
     result = await backend.alter_voucher(
         sales_voucher, "999999", make_key("Demo", sales_voucher, salt="alter")
     )
+
     assert not result.ok
-    assert "did not match an existing voucher" in result.errors[0]
-    assert "duplicate must be removed" in result.errors[0]
+    assert "carries the id '999999'" in result.errors[0]
+    assert "rather than change the first" in result.errors[0]
+    assert len(fake_tally.vouchers) == before, "an unmatched Alter must not post"
 
 
 async def test_alter_without_an_id_never_reaches_tally(backend, fake_tally, sales_voucher):

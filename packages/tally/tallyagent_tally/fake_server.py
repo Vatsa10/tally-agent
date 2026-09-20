@@ -328,9 +328,14 @@ class FakeTally:
             etree.SubElement(element, "REFERENCE").text = voucher.reference
             etree.SubElement(element, "NARRATION").text = voucher.narration
             etree.SubElement(element, "MASTERID").text = voucher.master_id
+            # Real Tally puts *its own* GUID on the REMOTEID attribute and the
+            # id we supplied in REMOTEGUID. Reproducing that split is the point:
+            # reading the attribute is what made amendments fail with "Voucher
+            # does not exist!", and a fake that echoed our id in both places
+            # would have let that ship.
+            element.set("REMOTEID", f"fake-guid-{voucher.master_id}")
             if voucher.remote_id:
-                element.set("REMOTEID", voucher.remote_id)
-                etree.SubElement(element, "REMOTEID").text = voucher.remote_id
+                etree.SubElement(element, "REMOTEGUID").text = voucher.remote_id
             for name, amount in voucher.lines:
                 entry = etree.SubElement(element, "ALLLEDGERENTRIES.LIST")
                 etree.SubElement(entry, "LEDGERNAME").text = name

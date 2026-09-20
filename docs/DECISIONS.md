@@ -617,3 +617,21 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
   and delivered to something else is the worst outcome available. Tier 3 now
   starts Tally if it is not running, raises it if it is behind something, and
   refuses to send anything at all if it cannot be fronted.
+- **D-135 D-125 was half wrong: Tally does hand our REMOTEID back.** It returns
+  it in `REMOTEGUID`, and the `REMOTEID` *attribute* - which looks like the same
+  field - carries Tally's own GUID unless `REMOTEGUID` is in the `FETCH` list.
+  Reading the attribute is why amendments aimed at a voucher we had just read
+  were refused with "Voucher does not exist!": the id was Tally's, not ours.
+  The voucher TDL now fetches `REMOTEGUID`, the parser prefers it, and Tally's
+  own id is kept alongside as `TALLY_GUID` rather than being confused with it.
+  The consequence is the point: `find_by_remote_id` resolves a voucher from the
+  books alone, so amend and delete survive a lost database, a different machine
+  or a different config - the local index became a cache instead of the only
+  copy of the handle.
+- **D-136 "Voucher does not exist!" usually means the date is wrong.** Tally
+  matches a delete on id, type *and* date together, so a caller a day out gets
+  the same message as a caller with a fabricated id, and spends its time
+  hunting the id. `delete_voucher` and `alter_voucher` now take the date and
+  type from Tally and use the caller's only when the voucher cannot be read
+  back. Six vouchers that had been written off as unreachable were deleted this
+  way, with a deliberately wrong date and type passed in.
