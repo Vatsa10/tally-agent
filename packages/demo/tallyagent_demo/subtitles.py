@@ -109,9 +109,42 @@ def to_srt(cues: list[Cue]) -> str:
     return "\n".join(blocks)
 
 
+def align(script_text: str, heard: list[Word]) -> list[Word]:
+    """The script's words, carrying the timings of what was actually said.
+
+    Captions must read as the script, not as the transcript. Deepgram hears
+    "TallyPrime" as "Dolly Prime" and "X M L" as "a x n l" - harmless for
+    timing, humiliating burned into the picture. So the words come from the
+    script and only the clock comes from the audio.
+
+    Word counts rarely match exactly: transcription splits and joins things.
+    Where they do, the mapping is one to one; where they do not, each script
+    word takes the timing of the transcript word at the same position through
+    the line, which is accurate enough for a caption that is on screen for two
+    seconds.
+    """
+    words = script_text.split()
+    if not words or not heard:
+        return []
+    if len(words) == len(heard):
+        return [
+            Word(text=word, start=spoken.start, end=spoken.end)
+            for word, spoken in zip(words, heard, strict=True)
+        ]
+
+    last = len(heard) - 1
+    span = max(len(words) - 1, 1)
+    timed: list[Word] = []
+    for index, word in enumerate(words):
+        spoken = heard[min(last, round(index * last / span))]
+        timed.append(Word(text=word, start=spoken.start, end=spoken.end))
+    return timed
+
+
 def build(
     placements: list[tuple[str, float, float]],
     words_by_beat: dict[str, list[Word]],
+    texts_by_beat: dict[str, str] | None = None,
 ) -> list[Cue]:
     """Every cue in the finished video, in order.
 
@@ -122,5 +155,8 @@ def build(
     """
     cues: list[Cue] = []
     for beat_id, start, _seconds in placements:
-        cues.extend(group(words_by_beat.get(beat_id, []), offset=start))
+        heard = words_by_beat.get(beat_id, [])
+        script_text = (texts_by_beat or {}).get(beat_id, "")
+        words = align(script_text, heard) if script_text else heard
+        cues.extend(group(words, offset=start))
     return cues

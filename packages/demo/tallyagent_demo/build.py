@@ -113,7 +113,10 @@ async def transcribe(
 
 
 def caption(
-    timelines: list[Timeline], words: dict[str, list[Word]], paths: Paths
+    timelines: list[Timeline],
+    words: dict[str, list[Word]],
+    paths: Paths,
+    texts: dict[str, str] | None = None,
 ) -> Path:
     """One SRT for the whole video, with each chapter shifted to where it sits."""
     placements: list[tuple[str, float, float]] = []
@@ -123,7 +126,7 @@ def caption(
             placements.append((beat_id, offset + start, seconds))
         offset += timeline.duration
 
-    cues = subtitles.build(placements, words)
+    cues = subtitles.build(placements, words, texts)
     target = paths.root / "demo.srt"
     target.write_text(subtitles.to_srt(cues), encoding="utf-8")
     log.info("%d subtitle cue(s) -> %s", len(cues), target)

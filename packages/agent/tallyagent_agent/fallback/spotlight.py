@@ -306,6 +306,7 @@ class Spotlight:
             sleep = time.sleep
         self._sleep = sleep
         self.why = ""
+        self._resting: tuple[int, int] | None = _pointer_now()
 
     def announce(self, why: str) -> None:
         """The reason the next action is being taken, shown alongside it."""
@@ -329,8 +330,11 @@ class Spotlight:
         Used to preview a click while an approver is deciding, and by the demo,
         which must be able to show the narration without touching the books.
         """
+        # Never "click at 1280,500": this method does not click, and a caption
+        # that says otherwise is the overlay lying about what it is doing -
+        # which is the one thing the overlay exists to prevent.
         self._show(
-            Beat(kind="move", caption=caption or describe("click", f"{x},{y}", self.why),
+            Beat(kind="move", caption=caption or self.why or "reading the screen",
                  x=x, y=y)
         )
         self._glide(x, y)
@@ -360,7 +364,31 @@ class Spotlight:
             self._sleep(self.travel_seconds)
 
     def close(self) -> None:
+        """Put the pointer back where the person left it.
+
+        The ring moves the real mouse, which is the point while it is running
+        and rude afterwards: leaving someone's cursor parked in the middle of
+        an accounting package makes the machine feel possessed.
+        """
+        try:
+            import pyautogui  # type: ignore[import-not-found]
+
+            if self._resting is not None:
+                pyautogui.moveTo(*self._resting, duration=0.15)
+        except Exception:  # noqa: BLE001 - cosmetic, and the take is over
+            pass
         self.sink.close()
+
+
+def _pointer_now() -> tuple[int, int] | None:
+    """Where the mouse is, so it can be put back afterwards."""
+    try:
+        import pyautogui  # type: ignore[import-not-found]
+
+        position = pyautogui.position()
+        return int(position.x), int(position.y)
+    except Exception:  # noqa: BLE001 - headless, or no mouse
+        return None
 
 
 def build(show_cursor: bool = True) -> Spotlight:

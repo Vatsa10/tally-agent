@@ -127,6 +127,10 @@ class DemoDriver:
     assets: Path = Path("demo/assets")
     #: Every keystroke and window switch, for the run report.
     log: list[str] = field(default_factory=list)
+    #: Whether a Tally report is open because *we* opened it. Escape is only
+    #: safe when something is open to back out of: at the Gateway Tally reads it
+    #: as "Quit ?", and a take that films a quit dialog is a take wasted.
+    _report_open: bool = False
 
     # --- actions ------------------------------------------------------------
 
@@ -191,24 +195,33 @@ class DemoDriver:
         await self.say_to_agent(text=f"/approve {chosen}")
 
     async def in_tally(
-        self, key: str = "", caption: str = "", point_y: int = 420, **_: Any
+        self, report: str = "", caption: str = "", point_y: int = 150, **_: Any
     ) -> None:
-        """Open one of Tally's own reports and point at what changed.
+        """Open one of Tally's own reports, through Tally's own Go To search.
 
-        This is what makes the demo checkable rather than assertable. The agent
-        can say the stock is down by two; Tally's own Stock Summary saying it is
-        a different kind of claim, and it costs one keystroke from the Gateway -
-        ``K`` for the Day Book, ``S`` for Stock Summary, ``B`` for the Balance
-        Sheet. All navigation, none of it changes anything.
+        Not the menu accelerators. A bare "k" means Day Book at the Gateway and
+        something else entirely on any other screen, and a driver that presses
+        letters hopefully ends up three menus deep with half a ledger name typed
+        into a filter - which is exactly what happened. ``Alt+G`` opens the Go To
+        box from anywhere, the report is named in full, and Enter takes it. One
+        path, no assumptions about what is currently on screen.
+
+        This is also why the demo can verify itself at all: Tally showing the
+        figure is evidence in a way that the agent reporting it is not.
         """
         self._hide_card()
         if not self.keyboard.focus(self.tally_title):
-            self.log.append(f"tally {key!r}: could not raise the window")
+            self.log.append(f"tally {report!r}: could not raise the window")
             return
-        if key:
-            self.keyboard.press(key)
-            await self.clock.sleep(1.4)
-        self.log.append(f"tally shows {caption or key}")
+        if report:
+            self.keyboard.press("alt+g")
+            await self.clock.sleep(0.8)
+            self.keyboard.type(report)
+            await self.clock.sleep(0.6)
+            self.keyboard.press("enter")
+            self._report_open = True
+            await self.clock.sleep(1.6)
+        self.log.append(f"tally shows {caption or report}")
         if self.spotlight is not None and caption:
             left, top, width, _height = capture.TALLY_RECT
             self.spotlight.announce(caption)
@@ -216,24 +229,36 @@ class DemoDriver:
 
     async def show_day_book(self, **_: Any) -> None:
         """Tally's Day Book, with the voucher that was just approved in it."""
+        # Near the top of the report: Tally lists the day's vouchers from the
+        # first row down, and a ring in the empty middle of the screen points at
+        # nothing.
         await self.in_tally(
-            key="k", caption="the voucher that was just approved", point_y=420
+            report="Day Book",
+            caption="the voucher that was just approved",
+            point_y=150,
         )
 
     async def show_stock_summary(self, **_: Any) -> None:
         """Tally's own Stock Summary - the same quantity, from the other side."""
         await self.in_tally(
-            key="s", caption="Tally's own stock figure", point_y=360
+            report="Stock Summary",
+            caption="Tally's own stock figure",
+            point_y=200,
         )
 
     async def close_report(self, **_: Any) -> None:
-        """Back out of whatever report is open, to the Gateway.
+        """Back out of a report *we* opened, and only then.
 
-        One Escape, never a handful: Tally reads a second Escape at the Gateway
-        as "Quit?", and a take that films a quit dialog is a take wasted.
+        Escape at the Gateway is "Quit ?", so this tracks whether anything is
+        open rather than pressing hopefully. Pressing it blind is exactly how an
+        earlier take filmed Tally asking whether to shut down.
         """
+        if not self._report_open:
+            self.log.append("nothing open; not pressing escape")
+            return
         self.keyboard.focus(self.tally_title)
         self.keyboard.press("escape")
+        self._report_open = False
         await self.clock.sleep(0.6)
         self.log.append("back to the gateway")
 

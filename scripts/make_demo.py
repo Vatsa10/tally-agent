@@ -221,7 +221,12 @@ def stage_subtitles(demo, paths) -> int:  # type: ignore[no-untyped-def]
     if not timelines:
         print("  no takes recorded yet", file=sys.stderr)
         return 1
-    build_mod.caption(timelines, words, paths)
+    build_mod.caption(
+        timelines,
+        words,
+        paths,
+        texts={beat.id: beat.say for beat in demo.beats},
+    )
     return 0
 
 

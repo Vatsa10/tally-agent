@@ -74,3 +74,44 @@ def test_srt_is_renumbered_and_stamped():
 def test_a_negative_stamp_never_reaches_the_file():
     srt = subtitles.to_srt([subtitles.Cue(1, start=-0.5, end=1.0, text="x")])
     assert "00:00:00,000" in srt
+
+
+# --- captions say what was written, not what was heard -----------------------
+
+
+def test_captions_use_the_script_and_the_audios_timing():
+    """Transcription hears "TallyPrime" as "Dolly Prime". Fine for timing,
+    humiliating burned into the picture."""
+    heard = [Word("Dolly", 0.0, 0.4), Word("Prime", 0.4, 0.9), Word("runs.", 0.9, 1.4)]
+
+    cues = subtitles.build(
+        placements=[("b01", 10.0, 1.4)],
+        words_by_beat={"b01": heard},
+        texts_by_beat={"b01": "TallyPrime runs."},
+    )
+
+    assert "TallyPrime runs." in cues[0].text
+    assert "Dolly" not in cues[0].text
+    assert cues[0].start == 10.0, "and it is still timed by what was said"
+
+
+def test_alignment_survives_a_transcript_that_splits_words():
+    script = "X M L is the interface"
+    heard = [Word(w, i * 0.5, i * 0.5 + 0.5) for i, w in enumerate("xml is the interface".split())]
+
+    timed = subtitles.align(script, heard)
+
+    assert [w.text for w in timed] == script.split()
+    assert timed[0].start == 0.0
+    assert timed[-1].end == heard[-1].end
+
+
+def test_alignment_is_one_to_one_when_the_counts_agree():
+    heard = [Word("one", 0.0, 0.5), Word("two", 0.5, 1.0)]
+    timed = subtitles.align("ONE TWO", heard)
+    assert [(w.text, w.start) for w in timed] == [("ONE", 0.0), ("TWO", 0.5)]
+
+
+def test_a_beat_with_no_audio_yields_no_caption():
+    assert subtitles.align("anything", []) == []
+    assert subtitles.align("", [Word("x", 0, 1)]) == []

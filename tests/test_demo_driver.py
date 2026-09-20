@@ -257,3 +257,37 @@ async def test_showing_a_card_and_then_the_screen_hides_it_again():
 
     assert screen.shown == ["title.png"]
     assert screen.hidden == 1
+
+
+async def test_escape_is_only_sent_when_a_report_is_open():
+    """At the Gateway Tally reads Escape as "Quit ?" - an earlier take filmed it."""
+    driver = _driver()
+
+    await driver.close_report()
+    assert driver.keyboard.pressed == []  # type: ignore[attr-defined]
+
+    await driver.show_day_book()
+    await driver.close_report()
+    assert driver.keyboard.pressed[-1] == "escape"  # type: ignore[attr-defined]
+
+
+async def test_backing_out_twice_only_presses_once():
+    driver = _driver()
+    await driver.show_stock_summary()
+    await driver.close_report()
+    await driver.close_report()
+    assert driver.keyboard.pressed.count("escape") == 1  # type: ignore[attr-defined]
+
+
+async def test_tally_reports_are_opened_by_name_through_go_to():
+    """Never a bare menu letter: "k" is Day Book at the Gateway and something
+    else on every other screen, which is how a take ended up three menus deep
+    with half a ledger name typed into a filter."""
+    driver = _driver()
+
+    await driver.show_day_book()
+    await driver.show_stock_summary()
+
+    assert driver.keyboard.pressed == ["alt+g", "enter", "alt+g", "enter"]  # type: ignore[attr-defined]
+    assert driver.keyboard.typed == ["Day Book", "Stock Summary"]  # type: ignore[attr-defined]
+    assert driver.keyboard.focused == ["TallyPrime", "TallyPrime"]  # type: ignore[attr-defined]

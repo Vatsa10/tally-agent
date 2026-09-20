@@ -264,3 +264,18 @@ async def test_the_run_stops_when_tally_cannot_be_fronted():
     assert not session.completed
     assert "could not be raised" in session.stopped_reason
     assert keys == []
+
+
+def test_the_pointer_is_put_back_when_the_run_ends():
+    """The ring moves the real mouse. Leaving it parked in someone's accounts
+    makes the machine feel possessed."""
+    moved: list[tuple[int, int]] = []
+    light = spot.Spotlight(
+        sink=spot.LogSink(), do_key=lambda _k: None, travel_seconds=0, sleep=lambda _s: None
+    )
+    light._resting = (17, 23)
+    light._glide = lambda x, y: moved.append((x, y))  # type: ignore[method-assign]
+
+    light.close()  # must not raise, with or without a desktop
+
+    assert light._resting == (17, 23), "it remembers where to go back to"
