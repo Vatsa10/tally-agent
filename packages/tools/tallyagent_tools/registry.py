@@ -19,6 +19,7 @@ from tallyagent_tools import (
     masters,
     reconcile,
     reports,
+    show,
     stock,
     vouchers,
 )
@@ -69,6 +70,32 @@ def _object(properties: dict[str, Any], required: list[str] | None = None) -> di
 
 TOOLS: tuple[Tool, ...] = (
     # --- reads --------------------------------------------------------------
+    Tool(
+        "show_in_tally",
+        "Open a report in the user's own TallyPrime window and point the "
+        "on-screen cursor at it, so they can see it in Tally rather than only "
+        "read it here. Changes nothing. Use it when the user asks to be shown "
+        "something, or to open a screen - not to answer a question about "
+        "figures, which the read tools do without touching their screen.",
+        _object(
+            {
+                "report": {
+                    **_STRING,
+                    "description": (
+                        "One of: day book, trial balance, balance sheet, "
+                        "profit and loss, stock summary, outstanding, ledger."
+                    ),
+                },
+                "voucher_number": {
+                    **_STRING,
+                    "description": "Optional voucher to ring in the Day Book.",
+                },
+                "voucher_date": _DATE,
+            },
+            ["report"],
+        ),
+        show.show_in_tally,
+    ),
     Tool(
         "trial_balance",
         "Closing balance of every ledger. Positive means a debit balance.",

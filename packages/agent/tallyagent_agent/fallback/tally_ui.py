@@ -50,6 +50,10 @@ class UiStep:
     what: str
     keys: list[str] = field(default_factory=list)
     text: str = ""
+    #: The screen this step expects to be typing into. Tally opens sub-screens
+    #: of its own accord, and a step that names the one it wants is the only
+    #: way to tell the expected one from a surprise.
+    on_screen: str = "Payment"
     mutating: bool = False
     done: bool = False
     refused: bool = False
@@ -73,6 +77,8 @@ class UiRun:
 
     def report(self) -> str:
         if self.completed:
+            if not self.performed:
+                return f"{self.task}: done, on screen in Tally."
             return f"{self.task}: {len(self.performed)} step(s), finished."
         return f"{self.task}: stopped after {len(self.performed)} step(s) - {self.stopped}"
 
@@ -101,7 +107,7 @@ class TallyUi:
         if sleep is None:
             import asyncio
 
-            async def sleep(seconds: float) -> None:  # type: ignore[misc]
+            async def sleep(seconds: float) -> None:
                 await asyncio.sleep(seconds)
 
         self._sleep = sleep
@@ -119,13 +125,38 @@ class TallyUi:
         self.say(f"opening {report}")
         if not self.keyboard.focus(self.title):
             return False
-        self.keyboard.press("alt+g")
-        await self._sleep(0.8)
+        # A Go To list left open from a previous step swallows the next Alt+G,
+        # and then the report name is typed into a palette that is already
+        # searching. Close it first, and only it.
+        if self._palette_open():
+            self.keyboard.press("escape")
+            await self._sleep(0.6)
+        # The first Alt+G after Tally is raised is sometimes swallowed, and the
+        # report name then gets typed into whatever report is open. Confirm the
+        # palette is up before typing, and ask again if it is not.
+        for attempt in (1, 2):
+            self.keyboard.press("alt+g")
+            await self._sleep(0.8)
+            if self._palette_open():
+                break
+            log.info("Go To did not open (attempt %d)", attempt)
+        else:
+            return False
         self.keyboard.type(report)
         await self._sleep(0.5)
         self.keyboard.press("enter")
         await self._sleep(SETTLE)
+        # Go To leaves its report list sitting over the report it just opened.
+        # Escape closes the list, not the report - but only press it when the
+        # list is actually there, or it backs out of the report instead.
+        if self._palette_open():
+            self.keyboard.press("escape")
+            await self._sleep(0.6)
         return True
+
+    def _palette_open(self) -> bool:
+        """Is Tally's Go To list up? It is what Alt+G is supposed to produce."""
+        return "listofreports" in self._screen_name().lower().replace(" ", "")
 
     async def expect_screen(self, expected: str) -> bool:
         """Is the screen we asked for the screen that is open?
@@ -189,47 +220,83 @@ class TallyUi:
 
     async def enter_payment(
         self,
-        ledger: str,
+        from_ledger: str,
+        expense_ledger: str,
         amount: Decimal,
         when: date,
         narration: str = "",
+        cost_centre: str = "",
+        cost_category: str = "",
     ) -> UiRun:
         """Key a payment voucher through Tally's own screen.
 
-        Deliberately the simplest voucher there is - one ledger, one amount -
-        because the point of this mode is that a person can follow it, and a
-        GST sales invoice keyed through the UI is a wall of fields nobody can
-        watch meaningfully. Anything more elaborate belongs on the XML path,
-        which is what it is for.
+        Deliberately the simplest voucher there is - paid out of one account,
+        against one expense - because the point of this mode is that a person
+        can follow it, and a GST sales invoice keyed through the UI is a wall
+        of fields nobody can watch meaningfully. Anything more elaborate
+        belongs on the XML path, which is what it is for.
+
+        Go To is asked for "Create Voucher", not for "Payment": typing a
+        voucher type into Go To matches the first report that happens to start
+        the same way - "Payment" selects *Payment Advice* - so the screen is
+        opened generically and F5 chooses the type once we are on it.
 
         Each field is its own step, so an approver refusing halfway leaves a
         half-filled voucher that Tally has not accepted, rather than a posted
         one that has to be found and deleted.
         """
-        run = UiRun(task=f"payment {amount} to {ledger}")
-        if not await self.go_to("Payment"):
+        run = UiRun(task=f"payment {amount} to {expense_ledger}")
+        if not await self.go_to("Create Voucher"):
             run.stopped = "could not bring Tally to the front"
             return run
-        if not await self.expect_screen("Payment"):
+        if not await self.expect_screen("Voucher Creation"):
             run.stopped = (
-                "Tally did not open the Payment voucher screen, so nothing was typed"
+                "Tally did not open the voucher creation screen, so nothing was typed"
             )
             return run
 
+        # Whatever voucher type was last used is the one Tally opens on.
+        await self.step(UiStep("choose the Payment voucher type", keys=["f5"]))
+        if not await self.expect_screen("Payment"):
+            run.stopped = "Tally did not switch to a Payment voucher; nothing was typed"
+            return run
+
         steps = [
-            UiStep("set the date", keys=["f2"], mutating=False),
-            UiStep("the voucher date", text=when.strftime("%d-%m-%Y"), keys=["enter"]),
-            UiStep("the account to pay from", text=ledger, keys=["enter"]),
+            UiStep("open the date field", keys=["f2"]),
+            UiStep(
+                "the voucher date",
+                text=when.strftime("%d-%m-%Y"),
+                keys=["enter"],
+                on_screen="Change Voucher Date",
+            ),
+            UiStep("the account to pay from", text=from_ledger, keys=["enter"]),
+            UiStep("what it is being spent on", text=expense_ledger, keys=["enter"]),
             UiStep("the amount", text=f"{amount}", keys=["enter"]),
         ]
-        if narration:
-            steps.append(UiStep("the narration", text=narration, keys=["enter"]))
-        steps.append(
-            UiStep("accept the voucher", keys=["ctrl+a"], mutating=True)
-        )
+        tail = [
+            # An empty particulars line is how Tally is told the entries are
+            # done; it is also what moves the cursor to the narration. Typed
+            # before this, a narration goes into a ledger name field and Tally
+            # offers to create a ledger called "June rent".
+            UiStep("no more lines", keys=["enter"]),
+            UiStep("the narration", text=narration),
+            UiStep("accept the voucher", keys=["ctrl+a"], mutating=True),
+        ]
 
         run.steps = steps
         for step in steps:
+            # Tally opens sub-screens of its own accord: a ledger with cost
+            # centres on it pops a Cost Allocation screen mid-voucher, and the
+            # next field then goes into *that*. Left unchecked, a narration was
+            # typed into a cost centre name and Ctrl+A accepted the sub-screen.
+            # So every field re-confirms it is still the Payment voucher.
+            if step is not steps[0] and not await self.expect_screen(step.on_screen):
+                run.stopped = (
+                    "Tally opened another screen mid-voucher "
+                    f"({self._screen_name()[:80]!r}), so the rest was not typed"
+                )
+                self.keyboard.press("escape")
+                return run
             if not await self.step(step):
                 run.stopped = (
                     f"refused at {step.describe()}"
@@ -237,6 +304,79 @@ class TallyUi:
                     else f"could not perform {step.describe()}"
                 )
                 # Back out so Tally is not left holding a half-typed voucher.
+                self.keyboard.press("escape")
+                return run
+
+        # Most Indian companies switch cost centres on for their expense
+        # ledgers, and Tally then interrupts the voucher with an allocation
+        # screen. Allocating the whole amount to one centre is the case worth
+        # automating; anything split belongs on the XML path.
+        if await self.expect_screen("Cost Allocations"):
+            if not cost_centre:
+                run.stopped = (
+                    f"{expense_ledger} is allocated to cost centres, and none "
+                    "was given, so the voucher was left unposted"
+                )
+                self.keyboard.press("escape")
+                return run
+            allocation = []
+            # A company with cost categories asks for the category before the
+            # centre, and the centre name typed into that field matches
+            # nothing. Which it is cannot be read off the screen - the category
+            # list only appears once the field is typed into - so the caller,
+            # which has the cost centre masters, says.
+            if cost_category:
+                allocation.append(
+                    UiStep(
+                        "the cost category",
+                        text=cost_category,
+                        keys=["enter"],
+                        on_screen="Cost Allocations",
+                    )
+                )
+            allocation += [
+                UiStep(
+                    "the cost centre",
+                    text=cost_centre,
+                    keys=["enter"],
+                    on_screen="Cost Allocations",
+                ),
+                UiStep(
+                    "the amount against it",
+                    text=f"{amount}",
+                    keys=["enter"],
+                    on_screen="Cost Allocations",
+                ),
+                # Tally offers a second allocation row; an empty one closes the
+                # screen and hands the voucher back.
+                UiStep(
+                    "finish the allocation",
+                    keys=["enter"],
+                    on_screen="Cost Allocations",
+                ),
+            ]
+            run.steps.extend(allocation)
+            for step in allocation:
+                if not await self.step(step):
+                    run.stopped = f"could not perform {step.describe()}"
+                    self.keyboard.press("escape")
+                    return run
+
+        run.steps.extend(tail)
+        for step in tail:
+            if not await self.expect_screen(step.on_screen):
+                run.stopped = (
+                    "Tally opened another screen mid-voucher "
+                    f"({self._screen_name()[:80]!r}), so the rest was not typed"
+                )
+                self.keyboard.press("escape")
+                return run
+            if not await self.step(step):
+                run.stopped = (
+                    f"refused at {step.describe()}"
+                    if step.refused
+                    else f"could not perform {step.describe()}"
+                )
                 self.keyboard.press("escape")
                 return run
 
@@ -261,22 +401,93 @@ def _row_position() -> tuple[int, int]:
         return (0, 0)
 
 
-def _screen_from_title() -> str:
-    """What Tally says it is showing, read off the window.
+_OCR: Any = None
 
-    Tally puts the open report's name in its own header rather than the OS
-    title bar, so this reads the window text it does expose and falls back to
-    an empty string - which fails the check, which is the safe direction.
+
+def _ocr_lines(png: bytes) -> list[str]:
+    """Read the words out of a PNG with the local OCR engine."""
+    global _OCR
+    import numpy  # noqa: PLC0415
+    from PIL import Image as PilImage  # noqa: PLC0415
+
+    if _OCR is None:
+        from rapidocr_onnxruntime import RapidOCR  # type: ignore[import-untyped]  # noqa: PLC0415
+
+        _OCR = RapidOCR()
+    import io  # noqa: PLC0415
+
+    image = PilImage.open(io.BytesIO(png)).convert("RGB")
+    found, _ = _OCR(numpy.array(image))
+    return [line[1] for line in (found or [])]
+
+
+def _screen_from_title() -> str:
+    """What Tally says it is showing, read off Tally's own header.
+
+    The OS title bar says ``TallyPrime:9000`` whatever is open - the report name
+    lives in the header Tally draws itself, so the only way to know which screen
+    is up is to look at the pixels. The window renders itself through
+    PrintWindow, so this works even when Tally is not in front, and the top
+    fifth is cropped off before OCR because the rest of the screen is rows of
+    numbers that cost a second each and never contain the answer.
+
+    Anything that goes wrong returns "" - an unknown screen is treated as the
+    wrong screen, which is the direction that refuses to type.
     """
     try:
-        import win32gui  # type: ignore[import-not-found]
+        import io  # noqa: PLC0415
 
-        from tallyagent_agent.perception.screen import find_tally_window
+        from PIL import Image as PilImage  # noqa: PLC0415
+
+        from tallyagent_agent.perception.screen import capture, find_tally_window
 
         bounds = find_tally_window()
         if bounds is None:
             return ""
-        handle = win32gui.FindWindow(None, bounds.title)
-        return win32gui.GetWindowText(handle) or "" if handle else ""
-    except Exception:  # noqa: BLE001 - unknown screen is treated as wrong screen
+        png = capture(bounds)
+        image = PilImage.open(io.BytesIO(png)).convert("RGB")
+        header = image.crop((0, 0, image.width, max(1, image.height // 5)))
+        buffer = io.BytesIO()
+        header.save(buffer, format="PNG")
+        return " ".join(_ocr_lines(buffer.getvalue()))
+    except Exception as exc:  # noqa: BLE001 - unknown screen is the wrong screen
+        log.debug("could not read Tally's screen name: %s", exc)
         return ""
+
+
+class DesktopKeyboard:
+    """The real keyboard, and the window it is allowed to type into.
+
+    ``focus`` is not a convenience: every key here goes to whatever has focus,
+    so a step that cannot prove Tally is in front must not press anything.
+    """
+
+    def __init__(self, interval: float = 0.02) -> None:
+        self.interval = interval
+
+    def _pyautogui(self) -> Any:
+        import pyautogui  # type: ignore[import-untyped]  # noqa: PLC0415
+
+        pyautogui.FAILSAFE = False
+        return pyautogui
+
+    def type(self, text: str, interval: float | None = None) -> None:
+        self._pyautogui().write(
+            text, interval=self.interval if interval is None else interval
+        )
+
+    def press(self, key: str) -> None:
+        pyautogui = self._pyautogui()
+        if "+" in key:
+            pyautogui.hotkey(*[part.strip() for part in key.split("+")])
+        else:
+            pyautogui.press(key)
+
+    def focus(self, title: str = "TallyPrime") -> bool:
+        from tallyagent_agent.fallback.window import ensure_visible  # noqa: PLC0415
+
+        bounds, reason = ensure_visible()
+        if bounds is None:
+            log.warning("cannot type into Tally: %s", reason)
+            return False
+        return True

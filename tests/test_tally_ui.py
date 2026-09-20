@@ -48,15 +48,25 @@ async def _nosleep(seconds: float) -> None:
     return None
 
 
-def _ui(screen: str = "Payment", focusable: bool = True, approve=None):  # type: ignore[no-untyped-def]
+def _ui(screen: str = "Payment Voucher Creation", focusable: bool = True, approve=None):  # type: ignore[no-untyped-def]
     keyboard = FakeKeyboard(focusable=focusable)
     spotlight = FakeSpotlight()
+
+    def screen_name() -> str:
+        # F2 opens Tally's date sub-screen; the fake says so, because the code
+        # under test has to tell that one apart from an unexpected sub-screen.
+        if keyboard.pressed and keyboard.pressed[-1] == "f2":
+            return "Change Voucher Date"
+        if keyboard.pressed and keyboard.pressed[-1] == "alt+g":
+            return "List of Reports"
+        return screen
+
     ui = TallyUi(
         keyboard=keyboard,
         spotlight=spotlight,
         approve=approve,
         sleep=_nosleep,
-        screen_name=lambda: screen,
+        screen_name=screen_name,
     )
     return ui, keyboard, spotlight
 
@@ -113,10 +123,11 @@ async def test_an_unreadable_screen_counts_as_the_wrong_screen():
 
 
 async def test_a_payment_is_keyed_field_by_field_and_accepted():
-    ui, keyboard, _ = _ui(screen="Payment", approve=yes)
+    ui, keyboard, _ = _ui(screen="Payment Voucher Creation", approve=yes)
 
     run = await ui.enter_payment(
-        ledger="Bank - HDFC 1234",
+        from_ledger="Bank - HDFC 1234",
+        expense_ledger="Rent",
         amount=Decimal("2500.00"),
         when=date(2026, 6, 1),
         narration="June rent",
@@ -124,9 +135,10 @@ async def test_a_payment_is_keyed_field_by_field_and_accepted():
 
     assert run.completed, run.stopped
     assert keyboard.typed == [
-        "Payment",
+        "Create Voucher",
         "01-06-2026",
         "Bank - HDFC 1234",
+        "Rent",
         "2500.00",
         "June rent",
     ]
@@ -136,19 +148,19 @@ async def test_a_payment_is_keyed_field_by_field_and_accepted():
 async def test_the_wrong_screen_stops_it_before_a_single_field():
     ui, keyboard, _ = _ui(screen="Gateway of Tally", approve=yes)
 
-    run = await ui.enter_payment("Cash", Decimal("100"), date(2026, 6, 1))
+    run = await ui.enter_payment("Cash", "Rent", Decimal("100"), date(2026, 6, 1))
 
     assert not run.completed
     assert "nothing was typed" in run.stopped
-    assert keyboard.typed == ["Payment"], "only the Go To, no voucher fields"
+    assert keyboard.typed == ["Create Voucher"], "only the Go To, no fields"
 
 
 async def test_refusing_the_accept_leaves_the_voucher_unposted():
     """Refusing halfway must leave a half-typed voucher Tally never took, not a
     posted one somebody has to find and delete."""
-    ui, keyboard, _ = _ui(screen="Payment", approve=no)
+    ui, keyboard, _ = _ui(screen="Payment Voucher Creation", approve=no)
 
-    run = await ui.enter_payment("Cash", Decimal("100"), date(2026, 6, 1))
+    run = await ui.enter_payment("Cash", "Rent", Decimal("100"), date(2026, 6, 1))
 
     assert not run.completed
     assert "refused" in run.stopped
@@ -158,9 +170,9 @@ async def test_refusing_the_accept_leaves_the_voucher_unposted():
 
 async def test_without_an_approver_nothing_is_ever_accepted():
     """Visible is not the same as permitted."""
-    ui, keyboard, _ = _ui(screen="Payment", approve=None)
+    ui, keyboard, _ = _ui(screen="Payment Voucher Creation", approve=None)
 
-    run = await ui.enter_payment("Cash", Decimal("100"), date(2026, 6, 1))
+    run = await ui.enter_payment("Cash", "Rent", Decimal("100"), date(2026, 6, 1))
 
     assert not run.completed
     assert "ctrl+a" not in keyboard.pressed
@@ -174,18 +186,18 @@ async def test_only_the_accept_asks_for_approval():
         asked.append(step.what)
         return True
 
-    ui, _, _ = _ui(screen="Payment", approve=record)
-    await ui.enter_payment("Cash", Decimal("100"), date(2026, 6, 1))
+    ui, _, _ = _ui(screen="Payment Voucher Creation", approve=record)
+    await ui.enter_payment("Cash", "Rent", Decimal("100"), date(2026, 6, 1))
 
     assert asked == ["accept the voucher"]
 
 
 async def test_every_step_is_narrated_before_it_happens():
-    ui, _, spotlight = _ui(screen="Payment", approve=yes)
+    ui, _, spotlight = _ui(screen="Payment Voucher Creation", approve=yes)
 
-    await ui.enter_payment("Cash", Decimal("100"), date(2026, 6, 1))
+    await ui.enter_payment("Cash", "Rent", Decimal("100"), date(2026, 6, 1))
 
-    assert any("opening Payment" in said for said in spotlight.said)
+    assert any("opening Create Voucher" in said for said in spotlight.said)
     assert any("accept the voucher" in said for said in spotlight.said)
 
 
@@ -213,6 +225,81 @@ async def test_showing_a_voucher_changes_nothing():
 
 async def test_the_report_says_where_it_stopped():
     ui, _, _ = _ui(screen="Gateway of Tally", approve=yes)
-    run = await ui.enter_payment("Cash", Decimal("100"), date(2026, 6, 1))
+    run = await ui.enter_payment("Cash", "Rent", Decimal("100"), date(2026, 6, 1))
 
     assert "stopped after 0 step(s)" in run.report()
+
+
+async def test_a_sub_screen_tally_opened_by_itself_stops_the_voucher():
+    """A ledger with cost centres on it pops a Cost Allocation screen, and the
+    next field would be typed into that instead."""
+    keyboard = FakeKeyboard()
+
+    def screen_name() -> str:
+        # Everything is normal until the date field, and then Tally is
+        # somewhere nobody asked for.
+        if keyboard.pressed and keyboard.pressed[-1] == "alt+g":
+            return "List of Reports"
+        if "f2" in keyboard.pressed:
+            return "Cost Centre Creation"
+        return "Payment Voucher Creation"
+
+    ui = TallyUi(
+        keyboard=keyboard,
+        approve=yes,
+        sleep=_nosleep,
+        screen_name=screen_name,
+    )
+
+    run = await ui.enter_payment("Cash", "Rent", Decimal("100"), date(2026, 6, 1))
+
+    assert not run.completed
+    assert "another screen mid-voucher" in run.stopped
+    assert "ctrl+a" not in keyboard.pressed
+
+
+def _with_allocation():  # type: ignore[no-untyped-def]
+    """A Tally that interrupts the voucher with a cost allocation screen once
+    the amount has been keyed, the way a cost-centre ledger does."""
+    keyboard = FakeKeyboard()
+
+    def screen_name() -> str:
+        if keyboard.pressed and keyboard.pressed[-1] == "f2":
+            return "Change Voucher Date"
+        if keyboard.pressed and keyboard.pressed[-1] == "alt+g":
+            return "List of Reports"
+        if len(keyboard.typed) >= 5 and "Admin" not in keyboard.typed:
+            return "Cost Allocations"
+        return "Payment Voucher Creation"
+
+    return keyboard, screen_name
+
+
+async def test_a_ledger_with_cost_centres_is_allocated_then_accepted():
+    keyboard, screen_name = _with_allocation()
+    ui = TallyUi(
+        keyboard=keyboard, approve=yes, sleep=_nosleep, screen_name=screen_name
+    )
+
+    run = await ui.enter_payment(
+        "Cash", "Bank Charges", Decimal("150"), date(2026, 6, 2), cost_centre="Admin"
+    )
+
+    assert run.completed, run.stopped
+    assert "Admin" in keyboard.typed
+    assert keyboard.pressed[-1] == "ctrl+a"
+
+
+async def test_without_a_cost_centre_the_voucher_is_left_unposted():
+    keyboard, screen_name = _with_allocation()
+    ui = TallyUi(
+        keyboard=keyboard, approve=yes, sleep=_nosleep, screen_name=screen_name
+    )
+
+    run = await ui.enter_payment(
+        "Cash", "Bank Charges", Decimal("150"), date(2026, 6, 2)
+    )
+
+    assert not run.completed
+    assert "cost centres" in run.stopped
+    assert "ctrl+a" not in keyboard.pressed

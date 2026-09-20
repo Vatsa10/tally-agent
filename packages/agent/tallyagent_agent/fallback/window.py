@@ -51,6 +51,12 @@ def raise_window(handle: int, title: str = "") -> bool:
         time.sleep(0.4)
         return _foreground() == handle
 
+    # Already in front is the common case once a run is under way, and the
+    # cheapest. It also avoids the Alt tap below, which Tally reads as a menu
+    # key when it does land in its window.
+    if _foreground() == handle:
+        return True
+
     try:
         # SW_RESTORE would un-maximise a maximised window, which is how a
         # carefully framed take ends up with a small window in the middle of

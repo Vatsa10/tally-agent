@@ -80,8 +80,9 @@ def _wire_fallback(wired: wiring.Wired) -> None:
     REPL, the daemon's web UI, and MCP.
     """
     config = wired.config
-    if not config.tiers.fallback_enabled:
-        return
+    # Wired even when the tier is off, because /tier3 on flips the flag on a
+    # live session and a runner that was never attached cannot be turned on.
+    # The gate is the flag, checked on every call, not whether this ran.
     from tallyagent_agent.fallback import spotlight as spotlight_mod
     from tallyagent_agent.fallback import window as window_mod
     from tallyagent_agent.fallback.computer_use import ComputerUseFallback
