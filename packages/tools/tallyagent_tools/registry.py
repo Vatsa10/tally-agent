@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tallyagent_tools import (
+    bills,
     cost_centres,
     currencies,
     ingest,
@@ -521,6 +522,31 @@ TOOLS: tuple[Tool, ...] = (
         ),
         masters.create_party,
         mutating=True,
+    ),
+    Tool(
+        "ingest_bill_folder",
+        "Read a folder of purchase bills - photographs, scans or PDFs - and "
+        "queue a draft for each one that is clean. Bills whose vendor is not "
+        "already a ledger are listed for a person instead; nothing is created "
+        "silently. A document that has been through before is skipped.",
+        _object(
+            {
+                "folder": _STRING,
+                "limit": _NUMBER,
+                "as_purchase": {"type": "boolean", "default": True},
+                "again": {"type": "boolean", "default": False},
+            },
+            ["folder"],
+        ),
+        bills.ingest_folder,
+        mutating=True,
+    ),
+    Tool(
+        "bill_attention_list",
+        "Dry run over a folder of bills: what would queue and what would need a "
+        "person, without sending anything to Tally.",
+        _object({"folder": _STRING, "limit": _NUMBER}, ["folder"]),
+        bills.bill_attention_list,
     ),
     Tool(
         "invoice_image_to_draft",

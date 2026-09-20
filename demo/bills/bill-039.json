@@ -1,0 +1,18 @@
+{
+  "vendor": "Sharma Trading Co",
+  "gstin": "27AAPFU0939F1ZV",
+  "invoice_no": "ST/2026/039",
+  "invoice_date": "2026-06-02",
+  "line_items": [
+    {
+      "description": "Freight inward",
+      "amount": 800.0
+    }
+  ],
+  "taxable_value": 800.0,
+  "cgst": 0,
+  "sgst": 0,
+  "igst": 144.0,
+  "total": 944.0,
+  "place_of_supply": "27"
+}

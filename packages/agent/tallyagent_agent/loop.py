@@ -220,17 +220,41 @@ class Agent:
         A raised exception here would end the conversation; what the model
         actually needs is to be told what went wrong so it can correct itself.
 
-        A *read* tool called twice with the same arguments inside one turn is
-        answered from the first call. Nothing about the books can have changed
-        in between - no write has happened - so the second call can only return
-        the same rows more slowly. Write tools are never memoised: two identical
-        writes are two writes, and deciding otherwise here would silently
-        swallow one.
+        A tool called twice with the same arguments inside one turn is answered
+        from the first call.
+
+        For reads that is obvious: nothing can have changed in between. For
+        *writes* it was not, and the first version deliberately let them
+        through on the reasoning that two writes are two writes. Measurement
+        says otherwise: asked for one invoice, the model called
+        create_sales_voucher twice, three seconds apart, and the idempotency
+        key - being derived from the same content - collapsed them into the one
+        ticket anyway. So the second call cost three seconds and a page of
+        tokens to arrive back where the first one already was.
+
+        A repeat inside one turn is a retry, and it is answered with what
+        happened the first time, said plainly enough that the model stops. A
+        genuine second invoice is a second *turn*, and the memo does not
+        survive one.
         """
         memo_key = _memo_key(name, arguments)
         if answered is not None and memo_key in answered:
             step.cached = True
             cached = answered[memo_key]
+            if _is_mutating(name):
+                # Said explicitly, because a model that reads "done" without
+                # being told it was already done tends to try a third time.
+                cached = ToolResult(
+                    message=(
+                        f"{name} was already called with these exact arguments "
+                        f"in this turn. Nothing further was sent to Tally. The "
+                        f"first call said: {cached.message}"
+                    ),
+                    data=cached.data,
+                    pending=cached.pending,
+                    write=cached.write,
+                    validation=cached.validation,
+                )
             step.output_summary = _summarise(cached.message)
             return cached
 
@@ -260,6 +284,6 @@ class Agent:
 
         step.output_hash = _hash(result.data if result.data is not None else result.message)
         step.output_summary = _summarise(result.message)
-        if answered is not None and not _is_mutating(name):
+        if answered is not None:
             answered[memo_key] = result
         return result

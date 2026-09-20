@@ -12,6 +12,7 @@ assertion would not be watching.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -67,11 +68,47 @@ class Scenario:
 
 
 @dataclass(slots=True)
+class Quality:
+    """How the answer was arrived at, not just whether it contained a word.
+
+    A scenario that passes its substring checks can still be a bad answer: six
+    tool calls where two would do, the same lookup twice, a write attempted
+    twice, or four paragraphs where a sentence was asked for. None of that shows
+    up in an assertion, all of it shows up to a user, so it is measured.
+    """
+
+    seconds: float = 0.0
+    tools: list[str] = field(default_factory=list)
+    answer_words: int = 0
+
+    @property
+    def tool_calls(self) -> int:
+        return len(self.tools)
+
+    @property
+    def repeated_tools(self) -> int:
+        """Lookups issued more than once in one turn."""
+        return len(self.tools) - len(set(self.tools))
+
+    @property
+    def repeated_writes(self) -> list[str]:
+        """Write tools called more than once in a single turn.
+
+        Almost always the model retrying something it did not notice had
+        worked. Idempotency stops Tally seeing it twice; the approval queue
+        still ends up with two tickets for one sale.
+        """
+        writes = [t for t in self.tools if t.startswith(("create_", "alter_", "delete_"))]
+        return sorted({t for t in writes if writes.count(t) > 1})
+
+
+@dataclass(slots=True)
 class StepResult:
     step: Step
     turn: Turn
     missing: list[str] = field(default_factory=list)
     forbidden: list[str] = field(default_factory=list)
+    quality: Quality = field(default_factory=Quality)
 
     @property
     def ok(self) -> bool:
@@ -125,6 +162,33 @@ class RunResult:
         return "\n".join(lines)
 
 
+def measure(turn: Turn, seconds: float) -> Quality:
+    """Read the shape of an answer off the turn the user actually saw.
+
+    The tool lines are the same ones on screen, so this measures what a person
+    would see rather than an internal trace that might disagree with it.
+    """
+    tools = [
+        line.text.split()[0]
+        for line in turn.lines
+        if line.kind == "tool" and line.text.split()
+    ]
+    # Prose only. A trial balance is a table, and counting its rows as
+    # verbosity would push the agent towards summarising figures in sentences -
+    # which is the opposite of what an accountant wants.
+    prose = [
+        line
+        for answer in (t.text for t in turn.lines if t.kind == "agent")
+        for line in answer.splitlines()
+        if not line.strip().startswith(("|", "+--", "---"))
+    ]
+    return Quality(
+        seconds=round(seconds, 2),
+        tools=tools,
+        answer_words=len(" ".join(prose).split()),
+    )
+
+
 async def run_scenario(
     services: Services,
     scenario: Scenario,
@@ -146,13 +210,16 @@ async def run_scenario(
 
     for step in scenario.steps:
         session.auto_approve = auto_approve and step.approve
+        started = time.perf_counter()
         turn = await session.handle(step.say)
+        elapsed = time.perf_counter() - started
         haystack = turn.text
         step_result = StepResult(
             step=step,
             turn=turn,
             missing=[e for e in step.expect if e.lower() not in haystack.lower()],
             forbidden=[e for e in step.expect_not if e.lower() in haystack.lower()],
+            quality=measure(turn, elapsed),
         )
         result.steps.append(step_result)
         if on_step is not None:

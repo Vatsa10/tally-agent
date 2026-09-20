@@ -340,6 +340,46 @@ class Session:
             turn,
         )
 
+    async def cmd_bills(self, args: list[str], turn: Turn) -> Turn:
+        """Hand over a folder of purchase bills.
+
+        The whole pile in one go, with the ones that need a person pulled out -
+        which is the shape of the work, rather than one invoice per question.
+        """
+        if not args:
+            return turn.say(
+                "error", "usage: /bills <folder> [--dry] [--again] [--limit N]"
+            )
+        flags = {a for a in args if a.startswith("--")}
+        words = [a for a in args if not a.startswith("--")]
+        folder = " ".join(words)
+        limit = 0
+        for index, arg in enumerate(args):
+            if arg == "--limit" and index + 1 < len(args):
+                limit = int(args[index + 1]) if args[index + 1].isdigit() else 0
+                folder = folder.replace(args[index + 1], "").strip()
+
+        if not Path(folder).is_dir():
+            return turn.say("error", f"not a folder: {folder}")
+
+        from tallyagent_tools import bills
+
+        turn.say("system", f"Reading {folder} ...")
+        if "--dry" in flags:
+            result = await bills.bill_attention_list(
+                self.services.tools, folder, limit=limit
+            )
+        else:
+            result = await bills.ingest_folder(
+                self.services.tools, folder, limit=limit, again="--again" in flags
+            )
+
+        rows = (result.data or {}).get("outcomes", [])
+        for line in bills.as_table(rows):
+            turn.say("system", line)
+        self.stats.tool_calls += 1
+        return turn.say("system", result.message)
+
     async def cmd_reco(self, args: list[str], turn: Turn) -> Turn:
         if len(args) < 2:
             return turn.say("error", "usage: /reco bank <file> | /reco gstr2b <file>")
@@ -526,6 +566,7 @@ COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
     "bootstrap": Session.cmd_bootstrap,
     "seed": Session.cmd_seed,
     "ingest": Session.cmd_ingest,
+    "bills": Session.cmd_bills,
     "reco": Session.cmd_reco,
     "approvals": Session.cmd_approvals,
     "approve": Session.cmd_approve,
@@ -546,6 +587,7 @@ HELP = {
     "bootstrap": "create a company (TA-... ) and load it",
     "seed": "seed the chart of accounts and demo transactions",
     "ingest": "read an invoice image or document and draft from it",
+    "bills": "<folder> [--dry] [--limit N] - a pile of purchase bills at once",
     "reco": "bank <file> | gstr2b <file> - propose, never post",
     "approvals": "list what is waiting for you",
     "approve": "<ticket> or A for all",

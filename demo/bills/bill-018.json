@@ -1,0 +1,18 @@
+{
+  "vendor": "Bharat Supplies",
+  "gstin": "27AAPFU0939F1ZV",
+  "invoice_no": "BS/2026/018",
+  "invoice_date": "2026-06-02",
+  "line_items": [
+    {
+      "description": "Gadget",
+      "amount": 2400.0
+    }
+  ],
+  "taxable_value": 2400.0,
+  "cgst": 0,
+  "sgst": 0,
+  "igst": 432.0,
+  "total": 2832.0,
+  "place_of_supply": "27"
+}

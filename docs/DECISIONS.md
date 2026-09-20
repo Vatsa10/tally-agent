@@ -649,3 +649,23 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
   company open every read succeeds and returns nothing, which reads like an
   empty company rather than a broken session - the worst kind of failure. The
   health check therefore is "a company is open", not "the socket answered".
+- **D-139 The product is the data-entry seat, not the chat window.** Research
+  into how Indian firms actually use Tally: manual entry runs 10-15 hours per
+  100-150 bills, SMEs post 200-2000 vouchers a month, and most of the pain is
+  photographs and scans from small vendors. Existing automation is shallow -
+  XML files you still import by hand, connectors that break on Tally updates,
+  TDL work at 5,000-50,000 rupees per custom report. One invoice per chat turn
+  is a demonstration; a folder of 150 with the eight that need a person pulled
+  out is a product. `ingest_bill_folder` is that, and `/bills <folder>` is how a
+  bookkeeper reaches it. Measured against live Tally: 41 documents in 18.5
+  seconds, 37 queued, 3 unknown vendors named, 1 unreadable - no ledger
+  invented.
+- **D-140 A bill nobody could open and a bill with an illegible vendor line are
+  different problems.** The first goes to whoever scans; the second goes to
+  whoever knows the vendors. Collapsing them sends someone hunting through
+  scans that were fine. The extractor chain therefore keeps a reading with a
+  blank vendor rather than treating it as a failure to read.
+- **D-141 A text-only model makes every bill look unreadable.** Pointed at
+  images, it returns nothing and 41 documents each report "could not read a
+  vendor". Said once at the end, naming the actual cause, rather than 41 times
+  naming the documents.

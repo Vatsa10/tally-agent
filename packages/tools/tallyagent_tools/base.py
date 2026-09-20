@@ -111,6 +111,14 @@ class ToolContext:
     #: Optional Tier 3 runner, wired only when the fallback is enabled. Typed as
     #: Any so the tools package does not depend on the agent package.
     fallback: Any = None
+    #: Reads a document. Wired to the model router when one is configured, so a
+    #: folder of scanned bills can be read without the caller doing the vision
+    #: step itself. Typed as Any to keep tools independent of the llm package.
+    vision: Any = None
+    #: Per-company learned facts. Used by the bill batch to remember which
+    #: documents have already been through, so re-running a folder costs no
+    #: extraction and queues nothing twice.
+    memory: Any = None
     #: Where the REMOTEIDs we assigned are remembered. Tally never reports them
     #: back, so without this a posted voucher cannot be amended or deleted.
     #: Typed as Any to keep tools independent of the approvals package.

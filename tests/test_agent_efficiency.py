@@ -94,9 +94,12 @@ async def test_different_arguments_are_different_questions(backend, company):
     assert [s.cached for s in result.steps if s.tool] == [False, False]
 
 
-async def test_a_write_is_never_answered_from_the_memo(backend, company):
-    """Two identical writes are two writes. Silently swallowing one is worse
-    than doing it twice - the duplicate rule exists to catch that."""
+async def test_a_write_repeated_in_one_turn_is_not_sent_twice(backend, company):
+    """Measured, not assumed. Asked for one invoice, the model called
+    create_sales_voucher twice three seconds apart; the idempotency key is
+    derived from the content, so both collapsed to the same ticket anyway and
+    the second call bought nothing but latency. A repeat inside one turn is a
+    retry, and it is answered with what happened the first time."""
     agent, _ = _agent(
         [
             mock.call("create_receipt", party_name="Acme Industries", amount="500",
@@ -112,8 +115,34 @@ async def test_a_write_is_never_answered_from_the_memo(backend, company):
     result = await agent.run("receipt 500 from Acme, twice")
 
     writes = [s for s in result.steps if s.tool == "create_receipt"]
-    assert len(writes) == 2
-    assert all(not s.cached for s in writes)
+    assert len(writes) == 2, "the model still asked twice"
+    assert writes[0].cached is False
+    assert writes[1].cached is True, "the second must not reach Tally again"
+    assert "already called" in writes[1].output_summary, (
+        "and the model has to be told, or it tries a third time"
+    )
+
+
+async def test_a_second_turn_may_write_the_same_thing_again(backend, company):
+    """A genuine second invoice is a second turn. The memo must not outlive one,
+    or a firm that really does want two identical receipts cannot have them."""
+    agent, _ = _agent(
+        [
+            mock.call("create_receipt", party_name="Acme Industries", amount="500",
+                      voucher_date="2026-06-01"),
+            mock.text("First."),
+            mock.call("create_receipt", party_name="Acme Industries", amount="500",
+                      voucher_date="2026-06-01"),
+            mock.text("Second."),
+        ],
+        backend,
+        company,
+    )
+
+    await agent.run("receipt 500 from Acme")
+    second = await agent.run("again please")
+
+    assert [s.cached for s in second.steps if s.tool] == [False]
 
 
 async def test_the_memo_does_not_leak_between_turns(backend, company):
@@ -157,3 +186,38 @@ def test_a_plain_sentence_is_left_exactly_as_written():
 
     assert not _is_markdown("Queued for approval as APR-0007. Nothing posted yet.")
     assert not _is_markdown("There is no Baroda cost centre.\nThe closest is Vadodara.")
+
+
+# --- measuring an answer ----------------------------------------------------
+
+
+def test_a_table_is_not_counted_as_verbosity():
+    """Counting table rows as words pushes the agent towards describing figures
+    in sentences, which is the opposite of what an accountant wants."""
+    from tallyagent_channels.tui.script_runner import measure
+    from tallyagent_channels.tui.session import Turn
+
+    turn = Turn().say(
+        "agent",
+        "Here it is:\n| Ledger | Balance |\n|---|---|\n| Cash | 15,000.00 |",
+    )
+
+    assert measure(turn, seconds=1.0).answer_words == 3
+
+
+def test_repeated_writes_are_reported_by_name():
+    from tallyagent_channels.tui.script_runner import Quality
+
+    quality = Quality(tools=["day_book", "create_receipt", "create_receipt"])
+
+    assert quality.repeated_writes == ["create_receipt"]
+    assert quality.repeated_tools == 1
+
+
+def test_a_read_repeated_is_noted_but_not_called_a_write():
+    from tallyagent_channels.tui.script_runner import Quality
+
+    quality = Quality(tools=["cash_position", "cash_position"])
+
+    assert quality.repeated_writes == []
+    assert quality.repeated_tools == 1

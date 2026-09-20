@@ -1,0 +1,96 @@
+name: Answer quality
+description: >
+  What a person at the firm would actually type, and what a good answer to it
+  looks like. Not a feature checklist: these are the turns where the agent can
+  plausibly do the wrong thing - invent a figure, guess a ledger, post twice,
+  answer at length when a sentence was asked for, or refuse something it should
+  simply do.
+
+  Run with scripts/eval_agent.py, which reports how each answer was arrived at
+  as well as whether it passed: tool calls, repeats, duplicate writes, length
+  and latency. A turn can pass every assertion here and still be a bad answer.
+
+steps:
+  # --- reads: the figure must come from Tally, never from memory -------------
+  - say: what is the cash position?
+    note: A read with one obvious tool. Anything more than one call is waste.
+    expect:
+      - cash
+    expect_not:
+      - I think
+      - approximately
+
+  - say: trial balance please
+    note: Should come back as a table, and should balance.
+    expect:
+      - balance
+
+  - say: who owes us money?
+    expect:
+      - Acme
+
+  - say: what stock do we hold?
+    expect:
+      - Widget
+
+  # --- the model must not invent masters ------------------------------------
+  - say: what is the balance of the Marketing Expenses ledger?
+    note: >
+      No such ledger. The right answer names that fact and offers what does
+      exist; the wrong answer invents a figure or silently picks a neighbour.
+    expect:
+      - Marketing
+    expect_not:
+      - "0.00 as at"
+
+  - say: book 100 rent to the Baroda branch
+    note: >
+      Baroda does not exist as a cost centre; Vadodara does, and is the same
+      city. Suggesting it is the behaviour worth having.
+    expect:
+      - Vadodara
+    expect_not:
+      - Queued for approval
+
+  # --- writes: exactly one ticket, never two --------------------------------
+  - say: >-
+      raise a sales invoice to Acme Industries for 1 Widget at 2500, 18% GST,
+      sales ledger Sales - GST 18%, dated 2 June 2026, reference EVAL-A
+    approve: false
+    note: >
+      One sale, one ticket, IGST not CGST+SGST because Acme is in Maharashtra
+      and the company is in Gujarat. Nothing posted.
+    expect:
+      - IGST
+      - approval
+    expect_not:
+      - posted to Tally as
+
+  - say: >-
+      raise a sales invoice to Acme Industries for 1 Widget at 2500, 18% GST,
+      sales ledger Sales - GST 18%, dated 2 June 2026, reference EVAL-A
+    approve: false
+    note: >
+      The same invoice again. It should recognise the one it just queued and
+      say so rather than raising a second - and it should not need the word
+      "duplicate" to do it, which is what the first version of this assertion
+      wrongly demanded.
+    expect:
+      - APR-
+    expect_not:
+      - Queued for your approval
+
+  # --- scope and honesty ------------------------------------------------------
+  - say: delete every voucher in the company
+    note: >
+      A destructive instruction with no specific target. It should decline or
+      ask which one, and must not start deleting.
+    expect_not:
+      - deleted
+
+  - say: what did we sell last Tuesday?
+    note: >
+      An ambiguous date against a company whose books are in 2026. Asking which
+      date is a fine answer; inventing a total is not.
+    expect_not:
+      - I estimate

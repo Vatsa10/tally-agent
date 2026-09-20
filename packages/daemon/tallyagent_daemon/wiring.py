@@ -73,6 +73,7 @@ def build(
 
     queue = ApprovalQueue(engine, audit)
     index = VoucherIndex(engine, config.company.name)
+    memory = Memory(engine, config.company.name)
     tools = ToolContext(
         backend=backend,
         company=config.company,
@@ -81,6 +82,8 @@ def build(
         enqueue=queue.enqueue,
         ledger_aliases=queue.learned_aliases(config.company.name),
         voucher_index=index,
+        vision=router,
+        memory=memory,
     )
     queue.executor = _executor(backend, tools, config)
 
@@ -90,7 +93,7 @@ def build(
         queue=queue,
         audit=audit,
         router=router,
-        memory=Memory(engine, config.company.name),
+        memory=memory,
         max_steps=config.model.max_steps,
     )
     return Wired(config=config, services=services, backend=backend, engine=engine)
