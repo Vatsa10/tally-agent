@@ -157,6 +157,66 @@ class ModelExtractor:
         return asdict(parse_invoice_json(completion.text))
 
 
+class OcrExtractor:
+    """Read the document locally, then ask a text model to make sense of it.
+
+    This exists because the model a firm can afford is usually text-only, and
+    pointed at a photograph it returns nothing while every bill in the pile
+    reports itself unreadable. OCR turns the picture into lines; the model's job
+    is then the one it is good at - deciding which line is the invoice number
+    and which is the GSTIN.
+
+    It also means the image never leaves the machine. Only the text does, and
+    the egress log records exactly that.
+    """
+
+    def __init__(self, router: Any) -> None:
+        self.router = router
+        self._engine: Any = None
+
+    def read(self, path: Path) -> str:
+        if self._engine is None:
+            from rapidocr_onnxruntime import RapidOCR  # noqa: PLC0415
+
+            self._engine = RapidOCR()
+        found, _ = self._engine(str(path))
+        return "\n".join(line[1] for line in (found or []))
+
+    async def extract(self, path: Path) -> dict[str, Any]:
+        from tallyagent_llm.provider import Message
+        from tallyagent_tools.ingest import INVOICE_SCHEMA_PROMPT, parse_invoice_json
+
+        text = self.read(path)
+        if not text.strip():
+            raise ValueError(f"no text could be read out of {path.name}")
+
+        messages = [
+            Message(role="system", content=INVOICE_SCHEMA_PROMPT),
+            Message(
+                role="user",
+                content=(
+                    "These lines were read off an invoice by OCR, in roughly "
+                    "reading order. Some words may be run together.\n\n" + text
+                ),
+            ),
+        ]
+
+        # One retry on an empty reply. Providers do occasionally answer with
+        # nothing, and a blank came back as a bill with no vendor - which reads
+        # as an unreadable document and sends someone to look at a scan that was
+        # perfectly legible.
+        for attempt in (1, 2):
+            completion = await self.router.complete(messages, max_tokens=800)
+            if completion.text.strip():
+                return asdict(parse_invoice_json(completion.text))
+            log.warning("empty reply reading %s (attempt %d)", path.name, attempt)
+
+        raise ValueError(
+            f"the model returned nothing for {path.name}; the text was read off "
+            "it fine, so this is the model rather than the document"
+        )
+
+
 def find_bills(folder: str | Path, limit: int = 0) -> list[Path]:
     """Every document in a folder, oldest first.
 
@@ -344,12 +404,25 @@ class ChainExtractor:
 
 
 def _default_extractor(ctx: ToolContext) -> Extractor:
-    """A sidecar if there is one, otherwise the model."""
+    """Sidecar, then OCR, then the model reading the picture itself.
+
+    Cheapest and most certain first. OCR before vision because it runs locally -
+    the image stays on the machine and only the text it contains is sent - and
+    because it works with the text-only model most firms will have configured.
+    """
     router = getattr(ctx, "vision", None)
     readers: list[Extractor] = [SidecarExtractor()]
     if router is not None:
+        if _has_ocr():
+            readers.append(OcrExtractor(router))
         readers.append(ModelExtractor(router))
     return ChainExtractor(readers)
+
+
+def _has_ocr() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("rapidocr_onnxruntime") is not None
 
 
 #: Said once, at the end, rather than against every document in the pile.

@@ -316,3 +316,48 @@ async def test_a_legible_bill_with_no_vendor_needs_a_person_not_a_retry(ctx, tmp
     outcome = result.data["outcomes"][0]
     assert outcome["status"] == bills.ATTENTION
     assert "vendor" in outcome["reason"].lower()
+
+
+async def test_an_empty_reply_is_retried_then_reported_as_the_models_fault(tmp_path):
+    """A blank completion used to arrive as a bill with no vendor, which reads
+    as an unreadable scan and sends someone to look at a legible document."""
+    document = tmp_path / "fine.png"
+    document.write_bytes(b"\x89PNG\r\n\x1a\n")
+    replies = []
+
+    class SilentRouter:
+        async def complete(self, messages, tools=None, max_tokens=0, temperature=0.0):
+            from tallyagent_llm.provider import Completion
+
+            replies.append(messages)
+            return Completion(text="   ")
+
+    reader = bills.OcrExtractor(SilentRouter())
+    reader.read = lambda path: "Bharat Supplies\nTotal 118.00"  # type: ignore[method-assign]
+
+    with pytest.raises(ValueError, match="rather than the document"):
+        await reader.extract(document)
+    assert len(replies) == 2, "it tried twice before blaming anything"
+
+
+async def test_ocr_text_is_what_leaves_the_machine_not_the_image(tmp_path):
+    """The picture stays local; only the words it contains are sent."""
+    document = tmp_path / "private.png"
+    document.write_bytes(b"\x89PNG\r\n\x1a\nsecret-pixels")
+    sent: list[str] = []
+
+    class Router:
+        async def complete(self, messages, tools=None, max_tokens=0, temperature=0.0):
+            from tallyagent_llm.provider import Completion
+
+            sent.extend(m.content for m in messages)
+            assert all(not m.images for m in messages)
+            return Completion(text='{"vendor": "Bharat Supplies"}')
+
+    reader = bills.OcrExtractor(Router())
+    reader.read = lambda path: "Bharat Supplies"  # type: ignore[method-assign]
+
+    await reader.extract(document)
+
+    assert any("Bharat Supplies" in text for text in sent)
+    assert not any("secret-pixels" in text for text in sent)
