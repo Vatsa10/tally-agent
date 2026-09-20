@@ -669,3 +669,21 @@ Target instance for every finding below: **TallyPrime 1.1.7.1, Educational
   images, it returns nothing and 41 documents each report "could not read a
   vendor". Said once at the end, naming the actual cause, rather than 41 times
   naming the documents.
+- **D-142 OCR first, vision second.** The model a firm can afford is usually
+  text-only, and pointed at a photograph it returns nothing while every bill in
+  the pile reports itself unreadable. RapidOCR runs locally and turns the
+  picture into lines; the model then does the part it is good at - deciding
+  which line is the invoice number. Two consequences worth having: it works with
+  the key most users already have, and the image never leaves the machine, only
+  the text does. Measured on live Tally: 9 of 10 photographed bills queued with
+  no sidecar extraction at all.
+- **D-143 The CLI reads a local .env.** This looks like it breaks "secrets from
+  the environment, never from config files" and does not: a .env *is* how an
+  environment variable gets set on Windows, it is gitignored, and no secret is
+  ever read out of config.toml. It exists because of what happened without it -
+  the key sat in .env, the agent found nothing, fell back to the deterministic
+  mock exactly as designed, and answered everything with a canned sentence. The
+  warning was three lines above the prompt and was missed repeatedly by the
+  person who wrote the fallback. A user would have concluded the product was
+  stupid rather than unconfigured. Only known key names are imported, and a
+  variable already set always wins.
