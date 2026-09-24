@@ -27,7 +27,6 @@ from tallyagent_tools.executor import execute
 TARGET_ON_HAND = Decimal("40")
 RESTOCK_DATE = date(2026, 6, 1)  # an EDU-legal date
 
-
 async def main() -> int:
     config = config_mod.load("config/config.toml", "config/policy.toml")
     wired = wiring.build(config)
