@@ -131,3 +131,11 @@ def test_a_grant_reads_as_a_sentence(store):
     assert "Sharma Textiles" in granted.describe()
     assert "R. Mehta" in granted.describe()
     assert "FRONT-DESK" in granted.describe()
+
+
+def test_the_table_remembers_a_company_it_has_ruled_on(store):
+    store.grant("TA-Demo Traders", guid="guid-aaa", by="R. Mehta")
+    store.revoke("TA-Demo Traders", by="R. Mehta")
+
+    assert store.known("TA-Demo Traders"), "so the name prefix cannot override it"
+    assert not store.known("Never Heard Of Ltd")

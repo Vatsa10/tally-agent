@@ -385,3 +385,26 @@ def test_an_install_with_no_consent_store_can_still_only_touch_its_own():
 
     assert live.may_write_to("TA-Demo Traders")
     assert not live.may_write_to("Sharma Textiles")
+
+
+def test_consent_decides_even_for_a_company_named_like_our_own():
+    """Revoking a grant has to stop the writes. Without this the name-prefix
+    shortcut quietly let them through again."""
+    live = LiveMode(
+        enabled=True,
+        consents=lambda company, guid: "revoked last week",
+        consent_known=lambda company: True,
+    )
+
+    assert not live.may_write_to("TA-Demo Traders")
+
+
+def test_the_prefix_still_covers_companies_nobody_has_ruled_on():
+    live = LiveMode(
+        enabled=True,
+        consents=lambda company, guid: "nobody has enabled it",
+        consent_known=lambda company: False,
+    )
+
+    assert live.may_write_to("TA-Demo Traders")
+    assert not live.may_write_to("Sharma Textiles")
