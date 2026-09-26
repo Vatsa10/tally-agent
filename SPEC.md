@@ -1,10 +1,11 @@
-# One-shot Claude Code prompt: Tally Agent (end-to-end)
+# Tally Agent — build specification (end-to-end)
 
-Paste everything below the line into Claude Code in an empty repo.
+The full specification this monorepo was built against. Kept verbatim as the
+record of intent; `docs/DECISIONS.md` records where implementation diverged.
 
 ---
 
-You are building `tallyagent`, a production-grade agentic bookkeeping system that operates TallyPrime on behalf of CA firms and SMB owners. Implement the entire monorepo end to end, with tests, in one pass. Do not stop to ask questions; make reasonable decisions, record them in `docs/DECISIONS.md`, and continue. Do not stub anything you can implement.
+`tallyagent` is a production-grade agentic bookkeeping system that operates TallyPrime on behalf of CA firms and SMB owners. Implement the entire monorepo end to end, with tests, in one pass. Do not stop to ask questions; make reasonable decisions, record them in `docs/DECISIONS.md`, and continue. Do not stub anything you can implement.
 
 ## Non-negotiable design principles
 

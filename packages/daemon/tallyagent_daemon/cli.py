@@ -8,6 +8,8 @@
     tallyagent mcp               the MCP server (stdio or http)
     tallyagent audit verify      check the hash chain
     tallyagent approvals ...     list, stats, approve, reject
+    tallyagent users ...         register people and what they may decide
+    tallyagent consent ...       which client companies may be written to
     tallyagent fake-tally        run the fake Tally for the demo
 """
 
@@ -21,6 +23,7 @@ from pathlib import Path
 
 import typer
 
+from tallyagent_core.errors import TallyAgentError
 from tallyagent_daemon import wiring
 from tallyagent_daemon.config import Config, load
 
@@ -31,8 +34,12 @@ app = typer.Typer(
 )
 approvals_app = typer.Typer(help="Inspect and decide queued actions.")
 audit_app = typer.Typer(help="The append-only audit log.")
+consent_app = typer.Typer(help="Which client companies may be written to.")
+users_app = typer.Typer(help="Who works here, and what they may decide.")
 app.add_typer(approvals_app, name="approvals")
 app.add_typer(audit_app, name="audit")
+app.add_typer(consent_app, name="consent")
+app.add_typer(users_app, name="users")
 
 CONFIG_OPTION = typer.Option("config/config.toml", "--config", "-c", help="Path to config.toml.")
 POLICY_OPTION = typer.Option("config/policy.toml", "--policy", help="Path to policy.toml.")
@@ -387,7 +394,7 @@ def mcp(
 
     config = _load(config_path, policy_path)
     wired = _wire(config, fake)
-    # A request arriving over MCP - from Claude Code, say - reaches the same
+    # A request arriving over MCP - from an editor's MCP client, say - reaches the same
     # fallback the TUI has, so Tally comes to the front and the red cursor
     # shows what is being done.
     _wire_fallback(wired)
@@ -514,6 +521,172 @@ def approvals_reject(
     wired = wiring.build(config)
     wired.services.queue.reject(ticket, actor, reason)
     typer.echo(f"{ticket} rejected.")
+
+
+def _partner(wired: wiring.Wired, name: str, action: str = "grant_consent"):  # type: ignore[no-untyped-def]
+    """Check a PIN at the keyboard and return the partner, or exit.
+
+    The PIN is asked for here rather than passed as an option on purpose: an
+    option ends up in shell history and in the screenshots people paste into
+    support chats.
+    """
+    people = wired.services.people
+    if people.empty:
+        typer.echo(
+            "Nobody is registered yet. Add the first partner with: "
+            'tallyagent users add "R. Mehta" --role partner',
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    pin = typer.prompt(f"PIN for {name}", hide_input=True)
+    try:
+        return people.authorise(action, name, pin)
+    except TallyAgentError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+
+@users_app.command("add")
+def users_add(
+    name: str,
+    role: str = typer.Option("clerk", help="clerk or partner."),
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Register a person. The first one has to be a partner, or nothing can ever
+    be approved."""
+    config = _load(config_path, policy_path)
+    wired = wiring.build(config)
+    people = wired.services.people
+    if people.empty and role != "partner":
+        typer.echo(
+            "The first user has to be a partner: with nobody able to approve, "
+            "the install can draft and never post.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    pin = typer.prompt("Choose a PIN (4-8 digits)", hide_input=True)
+    again = typer.prompt("Again", hide_input=True)
+    if pin != again:
+        typer.echo("those PINs do not match", err=True)
+        raise typer.Exit(code=1)
+    try:
+        user = people.add(name, role, pin, by="setup")
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"{user.name} registered as {user.role}.")
+
+
+@users_app.command("list")
+def users_list(
+    config_path: str = CONFIG_OPTION, policy_path: str = POLICY_OPTION
+) -> None:
+    """Who is registered."""
+    wired = wiring.build(_load(config_path, policy_path))
+    users = wired.services.people.list()
+    if not users:
+        typer.echo("nobody is registered yet")
+        return
+    for user in users:
+        typer.echo(f"  {user.name:<24} {user.role}")
+
+
+@users_app.command("role")
+def users_role(
+    name: str,
+    role: str = typer.Argument(..., help="clerk or partner."),
+    by: str = typer.Option(..., "--by", help="Which partner is making the change."),
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Change what somebody may decide. A partner's decision."""
+    wired = wiring.build(_load(config_path, policy_path))
+    partner = _partner(wired, by, action="change_policy")
+    try:
+        user = wired.services.people.set_role(name, role, by=partner.name)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"{user.name} is now a {user.role}.")
+
+
+@consent_app.command("list")
+def consent_list(
+    config_path: str = CONFIG_OPTION, policy_path: str = POLICY_OPTION
+) -> None:
+    """Which companies this install may write to."""
+    wired = wiring.build(_load(config_path, policy_path))
+    active = wired.services.consents.all_active()
+    if not active:
+        typer.echo(
+            "No company has been enabled. Live mode can write to companies this "
+            f"install created ({wired.config.live.write_prefix}...) and nothing "
+            "else."
+        )
+        return
+    for consent in active:
+        typer.echo(f"  {consent.describe()}")
+
+
+@consent_app.command("add")
+def consent_add(
+    company: str,
+    by: str = typer.Option(..., "--by", help="Which partner is enabling it."),
+    note: str = typer.Option("", "--note", help="Why, for the record."),
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+    fake: bool = FAKE_OPTION,
+) -> None:
+    """Let this install write to a client's real books.
+
+    Reads the company's GUID out of Tally first, so the grant is pinned to the
+    books rather than to the name. Tally has to be up with the company loaded.
+    """
+    config = _load(config_path, policy_path)
+    wired = _wire(config, fake)
+    partner = _partner(wired, by)
+
+    try:
+        guid = asyncio.run(wired.backend.company_guid(company))
+    except TallyAgentError as exc:
+        typer.echo(f"could not read the company from Tally: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    if not guid:
+        typer.echo(
+            f"Tally is not showing a company called {company!r}. Load it in "
+            "TallyPrime (Alt+F3 - Select Company) and run this again; the grant "
+            "has to record which books it is for.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(f"  company: {company}")
+    typer.echo(f"  Tally GUID: {guid}")
+    typer.echo(f"  enabling partner: {partner.name}")
+    if not typer.confirm("Let tallyagent post approved vouchers to these books?"):
+        typer.echo("nothing enabled")
+        raise typer.Exit(code=1)
+
+    consent = wired.services.consents.grant(company, guid, by=partner.name, note=note)
+    typer.echo(consent.describe())
+    typer.echo("Every write still stops for approval; this only ends the refusal.")
+
+
+@consent_app.command("revoke")
+def consent_revoke(
+    company: str,
+    by: str = typer.Option(..., "--by", help="Which partner is revoking it."),
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Stop writing to a company. Takes effect on the next write."""
+    wired = wiring.build(_load(config_path, policy_path))
+    partner = _partner(wired, by, action="revoke_consent")
+    closed = wired.services.consents.revoke(company, by=partner.name)
+    typer.echo(
+        f"{company}: consent revoked" if closed else f"{company} was not enabled"
+    )
 
 
 @app.command("fake-tally")
