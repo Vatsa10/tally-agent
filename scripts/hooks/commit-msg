@@ -1,0 +1,25 @@
+#!/bin/sh
+# Strip AI attribution from every commit message, whoever or whatever wrote it.
+#
+# Install into a clone with:
+#   git config core.hooksPath scripts/hooks
+#
+# This runs after the message is composed and before the commit object is
+# written, so it cannot be forgotten, skipped by a tool, or argued with.
+#
+# LC_ALL=C keeps sed byte-oriented: Windows sed aborts on a multi-byte
+# character (the robot emoji in a generated-with line) and would otherwise
+# leave the message untouched.
+
+LC_ALL=C
+export LC_ALL
+
+sed -i \
+  -e '/^[Cc]o-[Aa]uthored-[Bb]y:.*[Cc]laude/d' \
+  -e '/^[Cc]o-[Aa]uthored-[Bb]y:.*anthropic\.com/d' \
+  -e '/^[Cc]o-[Aa]uthored-[Bb]y:.*[Cc]opilot/d' \
+  -e '/Generated with \[/d' \
+  "$1"
+
+# Drop any blank lines left dangling at the end.
+printf '%s\n' "$(cat "$1")" > "$1"
