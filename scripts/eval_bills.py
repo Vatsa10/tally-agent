@@ -84,6 +84,8 @@ class BillScore:
     seconds: float = 0.0
     wrong: dict[str, tuple[str, str]] = field(default_factory=dict)
     error: str = ""
+    #: This scan cannot be read, and the only right answer is to say so.
+    unreadable: bool = False
 
     @property
     def clean(self) -> bool:
@@ -103,8 +105,17 @@ class Report:
 
     @property
     def queued_wrong(self) -> list[BillScore]:
-        """Drafted, and a field a partner would have had to catch."""
-        return [b for b in self.bills if b.status == bills.QUEUED and b.wrong]
+        """Drafted, and something a partner would have had to catch.
+
+        Includes a scan that cannot be read but was drafted from anyway: a
+        reader that invents figures for an unreadable document is worse than
+        one that refuses it.
+        """
+        return [
+            b
+            for b in self.bills
+            if b.status == bills.QUEUED and (b.wrong or b.unreadable)
+        ]
 
     @property
     def attention(self) -> list[BillScore]:
@@ -172,6 +183,18 @@ def _text(value: Any) -> str:
     return " ".join(str(value or "").split()).casefold()
 
 
+def _letters(value: Any) -> str:
+    """A name reduced to its letters and digits.
+
+    Character recognition on a photographed heading loses the spaces:
+    "BharatSupplies". The product resolves that to the ledger by the same rule
+    (``masters.resolve_ledger_alias``), so scoring it as a miss would count a
+    draft nobody has to correct - and what is being measured is what a partner
+    would have to catch. A different name still has different letters.
+    """
+    return "".join(ch for ch in _text(value) if ch.isalnum())
+
+
 def compare(got: dict[str, Any], truth: dict[str, Any]) -> dict[str, tuple[str, str]]:
     """Which fields disagree, as ``{field: (read, expected)}``.
 
@@ -190,6 +213,10 @@ def compare(got: dict[str, Any], truth: dict[str, Any]) -> dict[str, tuple[str, 
             continue
         if name == "invoice_date":
             if _as_date(actual) != _as_date(expected):
+                wrong[name] = (str(actual), str(expected))
+            continue
+        if name == "vendor":
+            if _letters(expected) and _letters(actual) != _letters(expected):
                 wrong[name] = (str(actual), str(expected))
             continue
         if _text(expected) and _text(actual) != _text(expected):
@@ -253,6 +280,12 @@ async def score(
                 cached.write_text(json.dumps(got, default=str, indent=2), "utf-8")
             outcome.seconds = time.monotonic() - started
             outcome.status = bills.QUEUED
+            if truth.get("_unreadable"):
+                outcome.unreadable = True
+                outcome.error = "drafted from a scan that cannot be read"
+                report.bills.append(outcome)
+                print(f"  {path.name:<18} {outcome.seconds:5.1f}s  {outcome.error}")
+                continue
             outcome.wrong = compare(got, truth)
             for name in FIELDS:
                 # A zero is a read field, not a missing one: on an inter-state
@@ -266,7 +299,9 @@ async def score(
                         report.fields[name].right += 1
         except Exception as exc:  # noqa: BLE001 - an unreadable scan is a result
             outcome.status = bills.ATTENTION
-            outcome.error = str(exc)[:120]
+            outcome.error = (
+                "refused, correctly" if truth.get("_unreadable") else str(exc)[:120]
+            )
             outcome.seconds = time.monotonic() - started
 
         report.bills.append(outcome)

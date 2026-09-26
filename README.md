@@ -234,12 +234,19 @@ wrong**, a bill it was confident enough to queue carrying a figure a partner
 would have had to catch. A bill it sends to the attention list is not counted
 against it; correctly refusing an unreadable scan is the reader working.
 
-Measured numbers live in `reports/`. Clean renders score high and are an upper
-bound, not a promise; the photographed set - skewed a couple of degrees, a
-shadow across the page, JPEG artefacts from being forwarded twice - is the
-honest one. Both runs paid for themselves immediately: they turned up a
-reasoning model answering with an empty string because it had spent its whole
-output budget thinking, and ledger names arriving with the spaces run together.
+Measured numbers live in `reports/`. As of the last run, on thirteen bills -
+twelve legible and one deliberately not - both the clean and the photographed
+pile read every field right, drafted twelve, and refused the unreadable one.
+The pile includes a vendor with no ledger in the books, which goes to a person
+rather than being invented.
+
+Clean renders are an upper bound, not a promise. The photographed set - skewed a
+couple of degrees, a shadow across the page, JPEG artefacts from being forwarded
+twice - is the honest one, and both runs paid for themselves immediately: they
+turned up a reasoning model answering with an empty string because it had spent
+its whole output budget thinking, and ledger names arriving with the spaces run
+together. Drafting figures for a scan nobody can read counts as a miss, not as a
+draft; a reader that guesses is worse than one that refuses.
 
 ## How it decides what to trust
 

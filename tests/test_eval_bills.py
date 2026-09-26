@@ -65,6 +65,12 @@ def test_a_different_vendor_is_caught():
     assert "vendor" in compare({**TRUTH, "vendor": "Bharat Supply Co"}, TRUTH)
 
 
+def test_a_vendor_with_the_spaces_lost_is_not_a_miss():
+    """What is being measured is what a partner would have to catch, and the
+    product resolves "BharatSupplies" to the ledger by the same rule."""
+    assert compare({**TRUTH, "vendor": "BharatSupplies"}, TRUTH) == {}
+
+
 def test_a_nil_tax_read_as_nil_is_correct():
     """On an inter-state bill CGST and SGST are genuinely nil, and reading them
     as nil must not count as a miss."""
@@ -113,3 +119,28 @@ def test_the_report_says_which_bill_and_which_field():
     assert "**1 drafted with something wrong**" in text
     assert "`b.png` total: read '1', should be '2'" in text
     assert "`c.png`: no text could be read" in text
+
+
+def test_drafting_from_an_unreadable_scan_counts_against_it():
+    """Inventing figures for a document nobody can read is worse than refusing
+    it, so it is counted with the misreads rather than praised as a draft."""
+    from eval_bills import BillScore
+
+    report = Report(label="t", folder="x")
+    report.bills = [
+        BillScore(name="junk.png", status=bills.QUEUED, unreadable=True),
+    ]
+
+    assert [b.name for b in report.queued_wrong] == ["junk.png"]
+
+
+def test_refusing_an_unreadable_scan_is_not_counted_against_it():
+    from eval_bills import BillScore
+
+    report = Report(label="t", folder="x")
+    report.bills = [
+        BillScore(name="junk.png", status=bills.ATTENTION, error="refused, correctly"),
+    ]
+
+    assert report.queued_wrong == []
+    assert [b.name for b in report.attention] == ["junk.png"]
