@@ -187,6 +187,24 @@ class FakeTally:
             return self._collection(
                 "COMPANY", [{"NAME": name} for name in self.companies]
             )
+        if ident == "TACompanies":
+            # A GUID per company, derived from the name so it is stable across
+            # restarts of the fake and different per company - the two
+            # properties the consent check depends on.
+            import hashlib
+
+            return self._collection(
+                "COMPANY",
+                [
+                    {
+                        "NAME": name,
+                        "GUID": hashlib.sha1(  # noqa: S324 - a fixture id, not a secret
+                            name.encode()
+                        ).hexdigest()[:32],
+                    }
+                    for name in self.companies
+                ],
+            )
         if ident in ("List of Ledgers", "Ledger"):
             # Real Tally's plain ledger collection returns names and nothing
             # else. Reproducing that is the point: code that assumes richer

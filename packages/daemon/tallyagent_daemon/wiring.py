@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import httpx
@@ -17,7 +17,9 @@ from sqlmodel import Session
 
 from tallyagent_agent.memory import Memory
 from tallyagent_approvals.audit import AuditLog
+from tallyagent_approvals.consent import ConsentStore
 from tallyagent_approvals.db import EgressRow, SqlIdempotencyStore, make_engine
+from tallyagent_approvals.people import People
 from tallyagent_approvals.queue import ApprovalQueue
 from tallyagent_approvals.voucher_index import VoucherIndex
 from tallyagent_channels.services import Services
@@ -72,13 +74,20 @@ def build(
     router = Router(provider, on_egress=_egress_writer(engine, config))
 
     queue = ApprovalQueue(engine, audit)
+    # The write guard stops being a name prefix here: a company is writable
+    # because a partner enabled it, and the guard asks the consent table.
+    consents = ConsentStore(engine, audit)
+    people = People(engine, audit)
+    live = replace(
+        config.live, consents=consents.refusal, consent_known=consents.known
+    )
     index = VoucherIndex(engine, config.company.name)
     memory = Memory(engine, config.company.name)
     tools = ToolContext(
         backend=backend,
         company=config.company,
         policy=config.policy,
-        live=config.live,
+        live=live,
         enqueue=queue.enqueue,
         ledger_aliases=queue.learned_aliases(config.company.name),
         voucher_index=index,
@@ -95,6 +104,8 @@ def build(
         router=router,
         memory=memory,
         max_steps=config.model.max_steps,
+        people=people,
+        consents=consents,
     )
     return Wired(config=config, services=services, backend=backend, engine=engine)
 

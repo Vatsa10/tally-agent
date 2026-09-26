@@ -48,6 +48,12 @@ class WriteScopeError(PolicyError):
 #: a callable so core keeps no dependency on the database layer.
 ConsentLookup = Callable[[str, str], str]
 
+#: Answers "is there a consent record for this company at all?" - granted or
+#: revoked. It exists so that consent always *decides*: once a company has been
+#: enabled and then revoked, the name-prefix shortcut below must not quietly
+#: let writes through again.
+ConsentKnown = Callable[[str], bool]
+
 
 @dataclass(frozen=True, slots=True)
 class LiveMode:
@@ -60,6 +66,8 @@ class LiveMode:
     #: is the right behaviour for a fresh install: it can demo itself and touch
     #: nothing else.
     consents: ConsentLookup | None = None
+    #: Companies the consent table has heard of. Paired with ``consents``.
+    consent_known: ConsentKnown | None = None
     #: What Tally currently reports as the open company's GUID, when it is
     #: known. Consent is granted to the books, so the check compares it.
     company_guid: str = ""
@@ -72,8 +80,17 @@ class LiveMode:
         """In fake mode, anything. In live mode, the prefix scope or a consent."""
         if not self.enabled:
             return True
-        if self.write_prefix and (company or "").startswith(self.write_prefix):
-            return True
+        # Consent decides whenever there is a record, either way: a company
+        # somebody revoked must not stay writable because of its name, and a
+        # company enabled for one set of books must not accept another set.
+        decided = (
+            self.consents is not None
+            and self.consent_known is not None
+            and self.consent_known(company or "")
+        )
+        if not decided and self.write_prefix:
+            if (company or "").startswith(self.write_prefix):
+                return True
         if self.consents is None:
             return False
         return not self.consents(company or "", self.company_guid)

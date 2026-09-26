@@ -108,8 +108,10 @@ def test_health_reports_status(client, services):
 
 
 async def test_approving_posts_and_clears_the_queue(client, services, fake_tally):
+    """With no user register wired - a fake-Tally install - the posted name is
+    taken as given. The staffed case below is what a firm runs."""
     await queue_a_sale(services)
-    response = client.post("/approvals/APR-0001/approve", data={"actor": "ca@firm.in"})
+    response = client.post("/approvals/APR-0001/approve", data={"who": "ca@firm.in"})
     assert response.status_code == 200
     assert "posted to Tally" in response.text
     assert "Nothing waiting" in response.text
@@ -223,3 +225,77 @@ def test_separate_conversations_do_not_share_history(client, services):
     client.post("/chat", data={"message": "cash position?", "conversation": "b"})
     assert set(services._agents) == {"a", "b"}
     assert services.agent("a") is not services.agent("b")
+
+
+# --- who decided it ----------------------------------------------------------
+
+
+@pytest.fixture
+def staffed(services, engine):
+    """The same services, with a partner and a clerk registered."""
+    from tallyagent_approvals.people import CLERK, PARTNER, People
+
+    people = People(engine, services.audit)
+    people.add("R. Mehta", PARTNER, "4821")
+    people.add("Nikhil", CLERK, "1199")
+    services.people = people
+    return services
+
+
+async def test_the_form_offers_the_registered_people(client, staffed):
+    await queue_a_sale(staffed)
+
+    page = client.get("/approvals").text
+
+    assert "R. Mehta (partner)" in page
+    assert 'name="pin"' in page
+
+
+async def test_an_approval_carries_the_partners_own_name(client, staffed, fake_tally):
+    """Before this the audit chain said "web" for every approval ever made."""
+    await queue_a_sale(staffed)
+
+    response = client.post(
+        "/approvals/APR-0001/approve", data={"who": "R. Mehta", "pin": "4821"}
+    )
+
+    assert "posted to Tally" in response.text
+    assert staffed.queue.get("APR-0001").decided_by == "R. Mehta"
+    assert len(fake_tally.vouchers) == 1
+
+
+async def test_a_wrong_pin_posts_nothing(client, staffed, fake_tally):
+    await queue_a_sale(staffed)
+
+    response = client.post(
+        "/approvals/APR-0001/approve", data={"who": "R. Mehta", "pin": "0000"}
+    )
+
+    assert "do not match" in response.text
+    assert fake_tally.vouchers == [], "and nothing reached Tally"
+    assert staffed.queue.get("APR-0001").status == "pending"
+
+
+async def test_a_clerks_pin_cannot_approve(client, staffed, fake_tally):
+    await queue_a_sale(staffed)
+
+    response = client.post(
+        "/approvals/APR-0001/approve", data={"who": "Nikhil", "pin": "1199"}
+    )
+
+    assert "partner" in response.text
+    assert fake_tally.vouchers == []
+    assert staffed.queue.get("APR-0001").status == "pending"
+
+
+async def test_a_rejection_also_names_who_rejected_it(client, staffed):
+    await queue_a_sale(staffed)
+
+    client.post(
+        "/approvals/APR-0001/reject",
+        data={"who": "R. Mehta", "pin": "4821", "reason": "wrong party"},
+    )
+
+    item = staffed.queue.get("APR-0001")
+    assert item.status == "rejected"
+    assert item.decided_by == "R. Mehta"

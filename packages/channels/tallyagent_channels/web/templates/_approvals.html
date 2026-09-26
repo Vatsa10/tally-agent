@@ -32,13 +32,41 @@
     <div id="detail-{{ item.ticket }}" class="mt-2"></div>
 
     <div class="mt-3 flex flex-wrap items-center gap-2">
-      <form hx-post="/approvals/{{ item.ticket }}/approve" hx-target="#approvals">
+      {# Who is deciding, proved at the moment of the decision. There is no
+         login session here; a name and that person's PIN is what puts a real
+         name on the ticket and in the audit chain. #}
+      <form hx-post="/approvals/{{ item.ticket }}/approve" hx-target="#approvals"
+            class="flex items-center gap-2">
+        {% if users %}
+        <select name="who" required
+                class="rounded border border-slate-300 px-2 py-1 text-xs">
+          <option value="">who is approving</option>
+          {% for user in users %}
+          <option value="{{ user.name }}">{{ user.name }} ({{ user.role }})</option>
+          {% endfor %}
+        </select>
+        <input name="pin" type="password" required placeholder="PIN" autocomplete="off"
+               inputmode="numeric" size="6"
+               class="rounded border border-slate-300 px-2 py-1 text-xs">
+        {% endif %}
         <button class="rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white">
           Approve &amp; post
         </button>
       </form>
       <form hx-post="/approvals/{{ item.ticket }}/reject" hx-target="#approvals"
-            class="flex gap-2">
+            class="flex items-center gap-2">
+        {% if users %}
+        <select name="who" required
+                class="rounded border border-slate-300 px-2 py-1 text-xs">
+          <option value="">who is rejecting</option>
+          {% for user in users %}
+          <option value="{{ user.name }}">{{ user.name }}</option>
+          {% endfor %}
+        </select>
+        <input name="pin" type="password" required placeholder="PIN" autocomplete="off"
+               inputmode="numeric" size="6"
+               class="rounded border border-slate-300 px-2 py-1 text-xs">
+        {% endif %}
         <input name="reason" required placeholder="reason for rejecting"
                class="rounded border border-slate-300 px-2 py-1 text-xs">
         <button class="rounded border border-rose-300 px-3 py-1.5 text-xs text-rose-700">

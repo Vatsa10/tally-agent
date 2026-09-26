@@ -151,6 +151,17 @@ class ConsentStore:
 
     # --- the guard -----------------------------------------------------------
 
+    def known(self, company: str) -> bool:
+        """Has this company ever been enabled or revoked here?
+
+        Paired with :meth:`refusal` in the live-mode guard: a company the table
+        has heard of is decided by the table, so revoking a grant actually stops
+        the writes even for a company whose name matches the install's own
+        prefix.
+        """
+        with Session(self.engine) as session:
+            return bool(self._rows(session, company))
+
     def allows(self, company: str, guid: str = "") -> bool:
         """May we write to this company, as it is loaded right now?
 

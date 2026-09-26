@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from tallyagent_channels.services import Services
+from tallyagent_core.errors import TallyAgentError
 from tallyagent_core.models import Voucher, VoucherLine
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -23,7 +24,14 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 def build_router(services: Services) -> APIRouter:
     router = APIRouter()
 
+    def _users() -> list[object]:
+        """Who may be picked in the decision form. Empty on a bare install, and
+        the form then falls back to a plain name field."""
+        people = getattr(services, "people", None)
+        return [] if people is None else list(people.list())
+
     def render(request: Request, template: str, **context: object) -> HTMLResponse:
+        context.setdefault("users", _users())
         return TEMPLATES.TemplateResponse(
             request=request, name=template, context={"services": services, **context}
         )
@@ -50,13 +58,38 @@ def build_router(services: Services) -> APIRouter:
         item = services.queue.get(ticket)
         return render(request, "_diff.html", item=item, diff=item.diff())
 
+    def _decider(action: str, name: str, pin: str) -> str:
+        """Who is making this decision, or raise.
+
+        There is no session to trust in an HTMX post, so the decision carries
+        the proof: a registered name and that person's PIN, checked here. The
+        old form took ``actor`` as a field the browser filled in, which meant
+        every approval in the audit chain said "web" and any tab could post one.
+        """
+        people = getattr(services, "people", None)
+        if people is None or people.empty:
+            return name or "web"
+        return people.authorise(action, name, pin).name
+
     @router.post("/approvals/{ticket}/approve", response_class=HTMLResponse)
     async def approve(
         request: Request,
         ticket: str,
-        actor: str = Form("web"),
+        who: str = Form(""),
+        pin: str = Form(""),
         reason: str = Form(""),
     ) -> HTMLResponse:
+        try:
+            actor = _decider("approve", who, pin)
+        except TallyAgentError as exc:
+            return render(
+                request,
+                "_approvals.html",
+                pending=services.queue.list("pending", services.company.name),
+                flash=str(exc),
+                flash_ok=False,
+                users=_users(),
+            )
         result = await services.queue.approve(ticket, actor, reason)
         message = (
             f"{ticket} posted to Tally"
@@ -77,12 +110,13 @@ def build_router(services: Services) -> APIRouter:
         request: Request,
         ticket: str,
         reason: str = Form(...),
-        actor: str = Form("web"),
+        who: str = Form(""),
+        pin: str = Form(""),
     ) -> HTMLResponse:
         try:
-            services.queue.reject(ticket, actor, reason)
+            services.queue.reject(ticket, _decider("reject", who, pin), reason)
             flash, ok = f"{ticket} rejected.", True
-        except ValueError as exc:
+        except (ValueError, TallyAgentError) as exc:
             flash, ok = str(exc), False
         return render(
             request,
@@ -96,7 +130,8 @@ def build_router(services: Services) -> APIRouter:
     async def edit_and_approve(
         request: Request,
         ticket: str,
-        actor: str = Form("web"),
+        who: str = Form(""),
+        pin: str = Form(""),
         reason: str = Form(""),
     ) -> HTMLResponse:
         """Replace ledger names and amounts line by line, then approve.
@@ -104,6 +139,17 @@ def build_router(services: Services) -> APIRouter:
         The form posts ``ledger_0``/``amount_0`` pairs; anything missing keeps
         the original line, so a partial form cannot silently zero a voucher.
         """
+        try:
+            actor = _decider("edit_and_approve", who, pin)
+        except TallyAgentError as exc:
+            return render(
+                request,
+                "_approvals.html",
+                pending=services.queue.list("pending", services.company.name),
+                flash=str(exc),
+                flash_ok=False,
+                users=_users(),
+            )
         item = services.queue.get(ticket)
         if item.voucher is None:
             return render(

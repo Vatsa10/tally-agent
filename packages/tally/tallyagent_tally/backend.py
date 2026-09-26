@@ -92,6 +92,36 @@ class TallyBackend:
     async def list_companies(self) -> list[str]:
         return await self.client.list_companies()
 
+    #: Tally's own identifier for a set of books, as opposed to their name.
+    #: Verified on TallyPrime 1.1.7.1: the Company collection answers with a
+    #: GUID like ``572ab262-5ece-4b08-adac-a7116ed50f49``, stable across renames
+    #: and different per restored copy - which is exactly what write consent has
+    #: to be pinned to.
+    COMPANY_TDL = (
+        '<COLLECTION NAME="TACompanies" ISMODIFY="No">'
+        "<TYPE>Company</TYPE>"
+        "<FETCH>NAME,GUID,MASTERID,STARTINGFROM,BOOKSFROM</FETCH>"
+        "</COLLECTION>"
+    )
+
+    async def company_guid(self, company: str | None = None) -> str:
+        """The GUID of the books Tally has open under this name, or "".
+
+        Empty means "could not be read" - Tally down, company not loaded - and
+        callers treat that as unknown rather than as a mismatch, because a guard
+        that refuses on an unreadable GUID would refuse every time Tally is
+        restarting anyway.
+        """
+        wanted = (company or "").strip()
+        rows = await self.client.export_collection(
+            "TACompanies", "COMPANY", company=company or None, tdl=self.COMPANY_TDL
+        )
+        for row in rows:
+            name = str(row.get("NAME") or row.get("@NAME") or "").strip()
+            if not wanted or name == wanted:
+                return str(row.get("GUID") or "").strip()
+        return ""
+
     #: Real Tally's plain "List of Ledgers" collection returns *names only* -
     #: no parent, no GSTIN, no opening balance. Fields have to be asked for
     #: explicitly with a TDL FETCH. Verified against TallyPrime 1.1.7.1; the

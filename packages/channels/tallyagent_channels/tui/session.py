@@ -119,6 +119,36 @@ class Session:
         self.tier3_approver: Tier3Approver | None = None
         self.last_probe: Any = None
 
+    # --- who is doing this --------------------------------------------------
+
+    @property
+    def people(self) -> Any:
+        """The user register, when one is wired. None on a bare test session."""
+        return getattr(self.services, "people", None)
+
+    @property
+    def signed_in(self) -> Any:
+        people = self.people
+        return None if people is None else people.current
+
+    @property
+    def who(self) -> str:
+        """The name that goes on a ticket and in the audit chain.
+
+        Falls back to the channel name only where no register is wired at all -
+        a scripted run against the fake. On a real install a decision without a
+        signed-in person is refused rather than attributed to "tui".
+        """
+        user = self.signed_in
+        return user.name if user is not None else self.actor
+
+    def require(self, action: str) -> None:
+        """Raise unless whoever is signed in may do this."""
+        people = self.people
+        if people is None or people.empty:
+            return
+        people.require(action)
+
     # --- entry point --------------------------------------------------------
 
     async def handle(self, text: str) -> Turn:
@@ -186,7 +216,8 @@ class Session:
     # --- approvals ----------------------------------------------------------
 
     async def approve(self, ticket: str, turn: Turn, reason: str = "") -> Turn:
-        result = await self.services.queue.approve(ticket, self.actor, reason)
+        self.require("approve")
+        result = await self.services.queue.approve(ticket, self.who, reason)
         if result.ok:
             self.stats.approved += 1
             self.stats.posted += 1
@@ -199,7 +230,8 @@ class Session:
         return turn
 
     def reject(self, ticket: str, reason: str, turn: Turn) -> Turn:
-        self.services.queue.reject(ticket, self.actor, reason)
+        self.require("reject")
+        self.services.queue.reject(ticket, self.who, reason)
         self.stats.rejected += 1
         return turn.say("approval", f"{ticket} rejected: {reason}")
 
@@ -515,6 +547,91 @@ class Session:
             "system", f"model is now {provider.name}/{provider.model}"
         )
 
+    async def cmd_signin(self, args: list[str], turn: Turn) -> Turn:
+        """/signin <name> <pin> - who is at the keyboard.
+
+        The PIN is on the same line rather than a hidden prompt because this
+        window is a transcript: a masked prompt inside a Textual app is a
+        second input mode to build, and the transcript is on the user's own
+        machine. What matters is that the ticket carries a name.
+        """
+        people = self.people
+        if people is None:
+            return turn.say("error", "no user register is wired into this session")
+        if len(args) < 2:
+            if people.empty:
+                return turn.say(
+                    "error",
+                    'nobody is registered yet. Run: tallyagent users add "Name" '
+                    "--role partner",
+                )
+            return turn.say("error", "usage: /signin <name> <pin>")
+
+        pin = args[-1]
+        name = " ".join(args[:-1])
+        try:
+            user = people.sign_in(name, pin)
+        except TallyAgentError as exc:
+            return turn.say("error", str(exc))
+        return turn.say(
+            "system",
+            f"signed in as {user.name} ({user.role}). "
+            + (
+                "You can approve."
+                if user.is_partner
+                else "Drafting and reports only - approving is a partner's decision."
+            ),
+        )
+
+    async def cmd_signout(self, args: list[str], turn: Turn) -> Turn:
+        people = self.people
+        if people is None or people.current is None:
+            return turn.say("system", "nobody was signed in")
+        name = people.current.name
+        people.sign_out()
+        return turn.say("system", f"{name} signed out")
+
+    async def cmd_users(self, args: list[str], turn: Turn) -> Turn:
+        """Who is registered, and who is at the keyboard now."""
+        people = self.people
+        if people is None:
+            return turn.say("error", "no user register is wired into this session")
+        rows = [
+            f"  {user.name:<24} {user.role}"
+            + ("   <- signed in" if self.signed_in and user.name == self.who else "")
+            for user in people.list()
+        ]
+        if not rows:
+            return turn.say(
+                "system",
+                'nobody is registered. Run: tallyagent users add "Name" --role partner',
+            )
+        return turn.say("system", "Users:\n" + "\n".join(rows))
+
+    async def cmd_consent(self, args: list[str], turn: Turn) -> Turn:
+        """Which client companies this install may write to.
+
+        Listing only. Enabling one needs the company's GUID read out of Tally
+        and a partner's PIN typed where it is not being recorded in a
+        transcript, so it lives in the CLI: `tallyagent consent add`.
+        """
+        consents = getattr(self.services, "consents", None)
+        if consents is None:
+            return turn.say("error", "no consent register is wired into this session")
+        active = consents.all_active()
+        if not active:
+            return turn.say(
+                "system",
+                "No client company has been enabled. Live mode can write to the "
+                "companies this install created and nothing else. A partner "
+                'enables one with: tallyagent consent add "Company" --by "Name"',
+            )
+        return turn.say(
+            "system",
+            "Enabled for writing:\n"
+            + "\n".join(f"  {consent.describe()}" for consent in active),
+        )
+
     async def cmd_monthend(self, args: list[str], turn: Turn) -> Turn:
         """/monthend 2026-06 [bank.csv] [2b.json] - the whole close, one pack."""
         if not args:
@@ -601,6 +718,10 @@ def _render_findings(findings: list[dict[str, str]]) -> str:
 
 COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
     "help": Session.cmd_help,
+    "signin": Session.cmd_signin,
+    "signout": Session.cmd_signout,
+    "users": Session.cmd_users,
+    "consent": Session.cmd_consent,
     "probe": Session.cmd_probe,
     "enable-server": Session.cmd_enable_server,
     "company": Session.cmd_company,
@@ -623,6 +744,10 @@ COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
 
 HELP = {
     "help": "this list",
+    "signin": "<name> <pin> - who is deciding; a ticket carries this name",
+    "signout": "stop acting as the signed-in person",
+    "users": "who is registered here",
+    "consent": "which client companies may be written to",
     "probe": "is Tally reachable, which edition, what is loaded",
     "enable-server": "turn on TallyPrime's XML interface and restart it",
     "company": "show or switch the active company",

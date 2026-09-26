@@ -29,6 +29,11 @@ class Services:
     router: Router
     memory: Memory | None = None
     max_steps: int = 12
+    #: Who works here and who is signed in. Typed loosely so channels do not
+    #: depend on the approvals package's internals.
+    people: Any = None
+    #: Which client companies a partner has enabled for writing.
+    consents: Any = None
     #: Tier router and the latest Tier 2 observation, when perception is on.
     #: Typed loosely so channels do not depend on the agent package's internals.
     tiers: Any = None

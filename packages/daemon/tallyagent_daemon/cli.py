@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -523,13 +524,24 @@ def approvals_reject(
     typer.echo(f"{ticket} rejected.")
 
 
-def _partner(wired: wiring.Wired, name: str, action: str = "grant_consent"):  # type: ignore[no-untyped-def]
-    """Check a PIN at the keyboard and return the partner, or exit.
+#: A PIN for a scripted run - setup automation, a service, this project's own
+#: live tests. Read from the environment for the same reason every other secret
+#: is: a command-line option ends up in shell history and in the screenshots
+#: people paste into support chats.
+PIN_ENV = "TALLYAGENT_PIN"
 
-    The PIN is asked for here rather than passed as an option on purpose: an
-    option ends up in shell history and in the screenshots people paste into
-    support chats.
-    """
+
+def _ask_pin(prompt: str) -> str:
+    from os import environ
+
+    from_env = environ.get(PIN_ENV, "")
+    if from_env:
+        return from_env
+    return typer.prompt(prompt, hide_input=True)
+
+
+def _partner(wired: wiring.Wired, name: str, action: str = "grant_consent"):  # type: ignore[no-untyped-def]
+    """Check a PIN and return the partner, or exit."""
     people = wired.services.people
     if people.empty:
         typer.echo(
@@ -538,7 +550,7 @@ def _partner(wired: wiring.Wired, name: str, action: str = "grant_consent"):  # 
             err=True,
         )
         raise typer.Exit(code=2)
-    pin = typer.prompt(f"PIN for {name}", hide_input=True)
+    pin = _ask_pin(f"PIN for {name}")
     try:
         return people.authorise(action, name, pin)
     except TallyAgentError as exc:
@@ -565,9 +577,8 @@ def users_add(
             err=True,
         )
         raise typer.Exit(code=2)
-    pin = typer.prompt("Choose a PIN (4-8 digits)", hide_input=True)
-    again = typer.prompt("Again", hide_input=True)
-    if pin != again:
+    pin = _ask_pin("Choose a PIN (4-8 digits)")
+    if not os.environ.get(PIN_ENV) and pin != typer.prompt("Again", hide_input=True):
         typer.echo("those PINs do not match", err=True)
         raise typer.Exit(code=1)
     try:
