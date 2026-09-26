@@ -567,3 +567,59 @@ async def test_company_without_a_period_still_validates(backend):
     # period_open degrades to a warning, so the draft still reaches a human.
     assert result.validation.ok
     assert any(r.rule == "period_open" for r in result.validation.warnings)
+
+
+# --- what policy posts without asking anyone ---------------------------------
+
+
+async def test_a_policy_posting_is_on_the_audit_chain_with_who_asked(ctx, fake_tally):
+    """Policy can post without an approval, and that write never touches the
+    queue - so this is the only record that it happened at all."""
+    from tallyagent_approvals.audit import AuditLog
+    from tallyagent_approvals.db import make_engine
+    from tallyagent_core.policy import ActionPolicy, ApprovalMode, Policy
+
+    audit = AuditLog(make_engine(":memory:"))
+    ctx.audit = audit
+    ctx.actor = "Nikhil"
+    # The standing instruction a partner wrote into policy.toml.
+    ctx.policy = Policy(
+        actions={"create_receipt": ActionPolicy(mode=ApprovalMode.AUTO)}
+    )
+
+    result = await vouchers.create_receipt(
+        ctx,
+        party_name="Acme Industries",
+        amount=Decimal("500.00"),
+        voucher_date=date(2026, 6, 2),
+        bank_ledger="Bank - HDFC 1234",
+    )
+
+    assert "automatically under policy" in result.message
+    entry = next(e for e in audit.entries() if e.event == "auto_posted")
+    assert entry.actor == "policy (asked by Nikhil)"
+    assert entry.payload["action_type"] == "create_receipt"
+    assert audit.verify().ok
+
+
+async def test_a_posting_is_not_lost_when_the_log_cannot_be_written(ctx, fake_tally):
+    from tallyagent_core.policy import ActionPolicy, ApprovalMode, Policy
+
+    class Broken:
+        def append(self, *args: object, **kwargs: object) -> None:
+            raise RuntimeError("disk full")
+
+    ctx.audit = Broken()
+    ctx.policy = Policy(
+        actions={"create_receipt": ActionPolicy(mode=ApprovalMode.AUTO)}
+    )
+
+    result = await vouchers.create_receipt(
+        ctx,
+        party_name="Acme Industries",
+        amount=Decimal("500.00"),
+        voucher_date=date(2026, 6, 2),
+        bank_ledger="Bank - HDFC 1234",
+    )
+
+    assert result.write is not None and result.write.ok

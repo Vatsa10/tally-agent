@@ -8,6 +8,7 @@ enforces "validate, then queue, then maybe write".
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import date
@@ -26,6 +27,8 @@ from tallyagent_core.validation import (
     validate,
 )
 from tallyagent_tally.xml import builders
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -126,6 +129,14 @@ class ToolContext:
     # alias -> canonical ledger, learned from approver edits (agent memory)
     ledger_aliases: dict[str, str] = field(default_factory=dict)
     source: str = "chat"
+    #: Who is doing this, when a channel knows. Policy can post without an
+    #: approval, and a posting with nobody's name on it is the one thing the
+    #: audit chain must never contain.
+    actor: str = ""
+    #: The audit chain, so a policy posting is recorded even though it never
+    #: reaches the approval queue. Typed loosely to keep tools independent of
+    #: the approvals package.
+    audit: Any = None
     _masters_cache: Any = None
     _stock_cache: Any = None
 
@@ -240,6 +251,32 @@ class ToolContext:
         return list(grouped.values())
 
 
+def record_auto_post(
+    ctx: ToolContext,
+    action_type: str,
+    summary: str,
+    amount: Any,
+    result: WriteResult,
+) -> None:
+    """Put a policy-promoted write on the audit chain."""
+    if ctx.audit is None:
+        return
+    try:
+        ctx.audit.append(
+            "auto_posted",
+            actor=f"policy (asked by {ctx.actor})" if ctx.actor else "policy",
+            action_type=action_type,
+            company=ctx.company.name,
+            summary=summary,
+            amount=str(amount),
+            ok=result.ok,
+            voucher_number=result.voucher_number,
+            source=ctx.source,
+        )
+    except Exception:  # noqa: BLE001 - a posting must not fail on its own log
+        log.exception("could not record an automatic posting")
+
+
 async def submit(
     ctx: ToolContext,
     action_type: str,
@@ -284,6 +321,11 @@ async def submit(
     if not ctx.policy.requires_approval(action_type, voucher.amount):
         result = await ctx.backend.create_voucher(voucher, key, ctx.company.name)
         verb = "Replayed (no-op)" if result.replayed else "Posted"
+        # It never passed through the queue, so this is the only record that it
+        # happened at all. A standing instruction is still somebody's decision:
+        # the partner who wrote the policy, carried out on behalf of whoever
+        # asked. Both names belong in the chain.
+        record_auto_post(ctx, action_type, summary, voucher.amount, result)
         return ToolResult(
             message=(
                 f"{verb} automatically under policy: {summary}"

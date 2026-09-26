@@ -167,6 +167,9 @@ class Session:
             return turn
         self.stats.turns += 1
         turn.say("user", text)
+        # Carried into the tools so a policy posting - which never reaches the
+        # approval queue - still records who asked for it.
+        self.services.tools.actor = self.who
 
         try:
             if text.startswith("/"):
@@ -592,6 +595,7 @@ class Session:
             # Same person, same practice; only the books changed.
             services.people.current = signed_in
         self.client_slug = register.get(args[0]).slug
+        self.services.tools.actor = self.who
         self.services.reset(self.conversation)
         waiting = len(self.pending())
         return turn.say(
@@ -628,6 +632,10 @@ class Session:
             user = people.sign_in(name, pin)
         except TallyAgentError as exc:
             return turn.say("error", str(exc))
+        # Set here as well as at the top of a turn: signing in happens *during*
+        # a turn, and anything posted later in that same turn would otherwise
+        # be recorded against whoever was there before.
+        self.services.tools.actor = user.name
         return turn.say(
             "system",
             f"signed in as {user.name} ({user.role}). "

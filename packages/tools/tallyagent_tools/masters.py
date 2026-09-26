@@ -10,7 +10,12 @@ from tallyagent_core import idempotency
 from tallyagent_core.models import Ledger, Party, Voucher, VoucherLine, VoucherType
 from tallyagent_core.validation import gstin as gstin_mod
 from tallyagent_tally.xml import builders
-from tallyagent_tools.base import PendingAction, ToolContext, ToolResult
+from tallyagent_tools.base import (
+    PendingAction,
+    ToolContext,
+    ToolResult,
+    record_auto_post,
+)
 
 
 async def list_ledgers(
@@ -116,6 +121,9 @@ async def _submit_master(
 
     if not ctx.policy.requires_approval(action_type, Decimal("0")):
         result = await _execute_master(ctx, pending)
+        # Same as a voucher posted under policy: it never reaches the queue, so
+        # this is the only record that it happened.
+        record_auto_post(ctx, action_type, summary, Decimal("0"), result)
         return ToolResult(
             message=(
                 f"Created automatically under policy: {summary}"

@@ -773,3 +773,19 @@ async def queue_a_pending(services) -> None:  # type: ignore[no-untyped-def]
         voucher_date=date(2026, 6, 2),
         bank_ledger="Bank - HDFC 1234",
     )
+
+
+async def test_what_policy_posts_is_recorded_against_whoever_asked(services, engine):
+    """Policy can post without an approval, and signing in happens during a
+    turn - so the name has to be right from that moment, not from the next."""
+    from tallyagent_approvals.people import CLERK, PARTNER, People
+
+    people = People(engine, services.audit)
+    people.add("R. Mehta", PARTNER, "4821")
+    people.add("Nikhil", CLERK, "1199")
+    services.people = people
+    session = Session(services)
+
+    await session.handle("/signin Nikhil 1199")
+
+    assert services.tools.actor == "Nikhil"

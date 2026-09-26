@@ -106,6 +106,7 @@ def build(
         voucher_index=index,
         vision=router,
         memory=memory,
+        audit=audit,
     )
     queue.executor = _executor(backend, tools, config)
 
