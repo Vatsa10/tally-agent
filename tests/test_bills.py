@@ -361,3 +361,62 @@ async def test_ocr_text_is_what_leaves_the_machine_not_the_image(tmp_path):
 
     assert any("Bharat Supplies" in text for text in sent)
     assert not any("secret-pixels" in text for text in sent)
+
+
+# --- reading with a model that thinks before it answers ----------------------
+
+
+class Thinker:
+    """A reasoning model: it needs room to think before it writes anything.
+
+    Measured against DeepSeek on a photographed bill - the reply came back with
+    a full page of reasoning and an empty content field, which the batch then
+    reported as an unreadable document.
+    """
+
+    name = "thinker"
+    model = "thinker-1"
+
+    def __init__(self, needs: int = 2000) -> None:
+        self.needs = needs
+        self.budgets: list[int] = []
+
+    async def complete(self, messages, max_tokens=800, **kwargs):  # type: ignore[no-untyped-def]
+        from tallyagent_llm.provider import Completion
+
+        self.budgets.append(max_tokens)
+        if max_tokens < self.needs:
+            return Completion(text="")
+        return Completion(
+            text='{"vendor": "Bharat Supplies", "taxable_value": 1000, '
+            '"igst": 180, "total": 1180, "invoice_no": "BS/1", '
+            '"invoice_date": "2026-06-01"}'
+        )
+
+
+async def test_a_thinking_model_is_retried_with_room_to_answer(tmp_path):
+    from tallyagent_tools.bills import EXTRACT_BUDGETS, ModelExtractor
+
+    bill = tmp_path / "bill.png"
+    bill.write_bytes(b"not really a png")
+    router = Thinker(needs=2000)
+    reader = ModelExtractor(router)
+    reader.read = lambda path: "Bharat Supplies\nTotal 1180.00"  # type: ignore[assignment]
+
+    extracted = await reader.extract(bill)
+
+    assert extracted["vendor"] == "Bharat Supplies"
+    assert router.budgets == list(EXTRACT_BUDGETS[: len(router.budgets)])
+    assert router.budgets[-1] > router.budgets[0], "a bigger budget, not the same twice"
+
+
+async def test_a_model_that_answers_nothing_at_any_budget_says_so(tmp_path):
+    from tallyagent_tools.bills import OcrExtractor
+
+    bill = tmp_path / "bill.png"
+    bill.write_bytes(b"not really a png")
+    reader = OcrExtractor(Thinker(needs=10_000))
+    reader.read = lambda path: "Bharat Supplies"  # type: ignore[assignment]
+
+    with pytest.raises(ValueError, match="the model rather than the document"):
+        await reader.extract(bill)

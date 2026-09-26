@@ -42,6 +42,11 @@ BILL_SUFFIXES = (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff")
 #: batch of 429s.
 READ_AT_ONCE = 4
 
+#: Output budgets for one extraction, tried in order. The first is enough for
+#: the JSON itself; the second is enough for a reasoning model to think its way
+#: there first and still have room to answer.
+EXTRACT_BUDGETS = (1200, 2400)
+
 MEDIA_TYPES = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -150,18 +155,25 @@ class ModelExtractor:
         from tallyagent_tools.ingest import INVOICE_SCHEMA_PROMPT, parse_invoice_json
 
         media = MEDIA_TYPES.get(path.suffix.lower(), "image/png")
-        completion = await self.router.complete(
-            [
-                Message(role="system", content=INVOICE_SCHEMA_PROMPT),
-                Message(
-                    role="user",
-                    content="Read this invoice.",
-                    images=[Image(data=path.read_bytes(), media_type=media)],
-                ),
-            ],
-            max_tokens=800,
+        messages = [
+            Message(role="system", content=INVOICE_SCHEMA_PROMPT),
+            Message(
+                role="user",
+                content="Read this invoice.",
+                images=[Image(data=path.read_bytes(), media_type=media)],
+            ),
+        ]
+        # Same escalation as the OCR path: a reasoning model spends its output
+        # allowance thinking and answers with an empty string when there is
+        # nothing left.
+        for budget in EXTRACT_BUDGETS:
+            completion = await self.router.complete(messages, max_tokens=budget)
+            if completion.text.strip():
+                return asdict(parse_invoice_json(completion.text))
+            log.warning("empty reply looking at %s at %d tokens", path.name, budget)
+        raise ValueError(
+            f"the model returned nothing for {path.name} at any budget"
         )
-        return asdict(parse_invoice_json(completion.text))
 
 
 class OcrExtractor:
@@ -208,15 +220,19 @@ class OcrExtractor:
             ),
         ]
 
-        # One retry on an empty reply. Providers do occasionally answer with
-        # nothing, and a blank came back as a bill with no vendor - which reads
-        # as an unreadable document and sends someone to look at a scan that was
-        # perfectly legible.
-        for attempt in (1, 2):
-            completion = await self.router.complete(messages, max_tokens=800)
+        # Retried with a bigger budget, not the same one twice. A reasoning
+        # model spends its output allowance on thinking first and only then
+        # writes the answer, so a budget that fits the JSON comfortably still
+        # comes back empty on a longer bill - the reply was all reasoning and
+        # the content field was blank. Measured on a photographed pile: at 800
+        # tokens most bills came back empty, at 2400 none did.
+        for budget in EXTRACT_BUDGETS:
+            completion = await self.router.complete(messages, max_tokens=budget)
             if completion.text.strip():
                 return asdict(parse_invoice_json(completion.text))
-            log.warning("empty reply reading %s (attempt %d)", path.name, attempt)
+            log.warning(
+                "empty reply reading %s at %d tokens", path.name, budget
+            )
 
         raise ValueError(
             f"the model returned nothing for {path.name}; the text was read off "

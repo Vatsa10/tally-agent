@@ -27,3 +27,8 @@ demo/out/
 
 # nested upstream clone - never commit it into this repo
 deepseek-harness/
+tests/fixtures/bill_pile/*.png
+tests/fixtures/bill_pile_photo/
+tests/fixtures/bills_real/*.jpg
+data/
+config/clients.toml

@@ -126,14 +126,62 @@ keyring, under service name `tallyagent`):
 | `WHATSAPP_ACCESS_TOKEN` | sending replies and fetching media |
 | `TALLYAGENT_MCP_TOKEN` | the MCP HTTP transport |
 
-### 4. Run
+### 4. Register the people who work here
+
+Two roles. A **clerk** drafts, reads, runs the bill batch, the reconciliations
+and the month-end close. A **partner** decides: approves, rejects, edits and
+approves, enables a client's books, changes policy, turns the keyboard tier on.
+
+```bash
+uv run tallyagent users add "R. Mehta" --role partner
+uv run tallyagent users add "Nikhil"                  # a clerk
+uv run tallyagent users list
+```
+
+A PIN, hashed with scrypt, kept in the local database. It is not there to keep
+an attacker off a machine they are sitting at - it is there so an approval
+carries the name of somebody who will stand behind it, in the audit chain,
+rather than the string "web". In the TUI, `/signin R. Mehta 4821`; in the web
+UI, a name and PIN on the decision itself.
+
+### 5. Enable the client's books
+
+Live mode refuses to write to any company nobody has enabled - including a
+client's real books sitting on the same machine. A partner enables one, once:
+
+```bash
+uv run tallyagent consent add "Sharma Textiles" --by "R. Mehta"
+uv run tallyagent consent list
+```
+
+The grant is pinned to Tally's own company GUID, not to the name. Rename the
+company, restore a different client's backup over it, or point the install at
+another machine's Tally, and writes refuse until a partner looks again.
+
+### 6. For a practice: one entry per client
+
+```bash
+cp config/clients.example.toml config/clients.toml   # slug, company, host, port
+uv run tallyagent clients list
+uv run tallyagent clients check        # which are reachable, loaded, enabled
+uv run tallyagent tui --client sharma  # or /client sharma inside the TUI
+```
+
+Each client gets its own database under `data/`: their approval queue, audit
+chain, idempotency keys, learned ledger aliases and write consent. One client's
+ticket cannot be approved against another client's books, because it is not in
+the same file. Clients on their own machines are the same entry with a `host`;
+an unreachable one is a line in `clients check`, not a stoppage. The people who
+work at the firm stay firm-wide - registered once, not once per client.
+
+### 7. Run
 
 ```bash
 uv run tallyagent probe     # confirm Tally is reachable and the company is open
 uv run tallyagent serve     # web UI + tray icon at http://127.0.0.1:8787
 ```
 
-### 5. Connect WhatsApp (optional)
+### 8. Connect WhatsApp (optional)
 
 1. Create a Meta app with the **WhatsApp** product, and note the phone number ID.
 2. Expose the daemon over HTTPS (a tunnel or a reverse proxy). The webhook URL is
@@ -155,7 +203,7 @@ phone_number_id = "123456789012345"
 
 Numbers not in the allowlist get a fixed refusal. One number maps to one company.
 
-### 6. Connect an MCP client (optional)
+### 9. Connect an MCP client (optional)
 
 ```bash
 uv run tallyagent mcp --transport stdio          # for a desktop MCP client
@@ -166,6 +214,32 @@ Write tools return an approval ticket rather than mutating. `--read-only` hides
 them entirely.
 
 ---
+
+## How often the bill reader is right
+
+A batch queues drafts and a partner approves them, so nothing posts unchecked -
+but "a human checks it" is not an answer to "how often is it right", and that is
+the question a firm asks before handing over a folder of forty scans.
+
+```bash
+uv run python scripts/eval_bills.py --folder tests/fixtures/bill_pile
+uv run python scripts/degrade_bills.py          # the same bills, photographed
+uv run python scripts/eval_bills.py --folder tests/fixtures/bill_pile_photo
+```
+
+It runs the real reader - local character recognition, then the model on the
+text it produced - against bills whose correct answer sits beside them, and
+reports per field, plus the number that matters: **drafted with something
+wrong**, a bill it was confident enough to queue carrying a figure a partner
+would have had to catch. A bill it sends to the attention list is not counted
+against it; correctly refusing an unreadable scan is the reader working.
+
+Measured numbers live in `reports/`. Clean renders score high and are an upper
+bound, not a promise; the photographed set - skewed a couple of degrees, a
+shadow across the page, JPEG artefacts from being forwarded twice - is the
+honest one. Both runs paid for themselves immediately: they turned up a
+reasoning model answering with an empty string because it had spent its whole
+output budget thinking, and ledger names arriving with the spaces run together.
 
 ## How it decides what to trust
 

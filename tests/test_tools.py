@@ -201,6 +201,24 @@ async def test_resolve_ledger_alias_exact_alias_and_suggestion(ctx):
     assert "Acme Industries" in fuzzy.data["suggestions"]
 
 
+async def test_a_name_with_the_spaces_lost_resolves_to_the_ledger(ctx):
+    """Character recognition on a photographed bill runs words together, and
+    "AcmeIndustries" went to a person as an unknown party - on a pile of forty
+    that is forty interruptions for a spelling nobody got wrong."""
+    result = await masters.resolve_ledger_alias(ctx, "AcmeIndustries")
+
+    assert result.data["resolved"] == "Acme Industries"
+    assert result.data["how"] == "spacing"
+
+
+async def test_a_genuinely_different_name_still_goes_to_a_person(ctx):
+    """Matching on letters alone must not become a licence to guess."""
+    result = await masters.resolve_ledger_alias(ctx, "Acme Industrial Co")
+
+    assert result.data["resolved"] is None
+    assert "Acme Industries" in result.data["suggestions"]
+
+
 async def test_create_ledger_is_queued_and_then_executes(queued_ctx, queue, fake_tally):
     result = await masters.create_ledger(queued_ctx, "Rent", "Indirect Expenses")
     assert "Queued for approval" in result.message

@@ -616,7 +616,7 @@ def _ask_pin(prompt: str) -> str:
     from_env = environ.get(PIN_ENV, "")
     if from_env:
         return from_env
-    return typer.prompt(prompt, hide_input=True)
+    return str(typer.prompt(prompt, hide_input=True))
 
 
 def _partner(wired: wiring.Wired, name: str, action: str = "grant_consent"):  # type: ignore[no-untyped-def]

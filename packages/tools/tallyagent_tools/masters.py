@@ -27,6 +27,13 @@ async def list_ledgers(
     return ToolResult(message=f"{len(ledgers)} ledger(s){where}.", data=ledgers)
 
 
+def _letters(name: str) -> str:
+    """A name reduced to its letters and digits, for comparing two spellings of
+    the same one. Not for display and never stored: a ledger is written the way
+    the books write it."""
+    return "".join(ch for ch in (name or "").lower() if ch.isalnum())
+
+
 async def resolve_ledger_alias(ctx: ToolContext, name: str) -> ToolResult:
     """Map what someone typed to a real ledger.
 
@@ -48,6 +55,20 @@ async def resolve_ledger_alias(ctx: ToolContext, name: str) -> ToolResult:
         return ToolResult(
             message=f"{name!r} is a known alias for {alias!r}.",
             data={"resolved": alias, "how": "alias"},
+        )
+
+    # Character recognition on a photographed bill runs words together:
+    # "BharatSupplies" for "Bharat Supplies", "TA-DemoTraders" for
+    # "TA-Demo Traders". Matching on the letters alone is not a guess between
+    # two candidates - it is the same name with the spaces lost - so it
+    # resolves rather than going to a person. Anything genuinely different
+    # still falls through to suggestions below.
+    squashed = {_letters(existing): existing for existing in names}
+    same_letters = squashed.get(_letters(name))
+    if same_letters and _letters(name):
+        return ToolResult(
+            message=f"{name!r} is {same_letters!r} with the spacing lost.",
+            data={"resolved": same_letters, "how": "spacing"},
         )
 
     suggestions = difflib.get_close_matches(name, sorted(names), n=5, cutoff=0.5)

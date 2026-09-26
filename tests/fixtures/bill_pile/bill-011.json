@@ -1,0 +1,18 @@
+{
+  "vendor": "Sharma Trading Co",
+  "gstin": "27AAPFU0939F1ZV",
+  "invoice_no": "ST/2026/011",
+  "invoice_date": "2026-06-01",
+  "line_items": [
+    {
+      "description": "Printing and stationery",
+      "amount": 1600.0
+    }
+  ],
+  "taxable_value": 1600.0,
+  "cgst": 0,
+  "sgst": 0,
+  "igst": 288.0,
+  "total": 1888.0,
+  "place_of_supply": "27"
+}

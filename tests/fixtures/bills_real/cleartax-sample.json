@@ -1,0 +1,19 @@
+{
+  "_source": "https://cleartax.in/s/gst-invoice - a published sample tax invoice, labelled here by hand from what is legible on the scan. The GSTIN, invoice number and dates are redacted in the original, so they are left empty and are not scored.",
+  "vendor": "Shri Ganesh Catering Services",
+  "gstin": "",
+  "invoice_no": "",
+  "invoice_date": "",
+  "line_items": [
+    {"description": "Dry Fruits Pack", "amount": 0.0},
+    {"description": "freight @ 12%", "amount": 500.0},
+    {"description": "Saffron", "amount": 4000.0},
+    {"description": "Freight @ 5%", "amount": 200.0}
+  ],
+  "taxable_value": 4700.0,
+  "cgst": 135.0,
+  "sgst": 135.0,
+  "igst": 0.0,
+  "total": 4970.0,
+  "place_of_supply": "37"
+}
