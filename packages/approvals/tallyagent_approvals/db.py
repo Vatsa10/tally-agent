@@ -112,6 +112,51 @@ class MemoryRow(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=_now)
 
 
+class ConsentRow(SQLModel, table=True):
+    """Permission to write to one real company, granted by one named person.
+
+    Live mode used to be gated on a name prefix, which no real company has: a
+    firm's books are called "Sharma Textiles", so either the guard was turned
+    off or the books were renamed to suit us. Consent replaces it, and is
+    granted to the *books* rather than the name - see ``guid``.
+    """
+
+    __tablename__ = "company_consent"
+
+    id: int | None = Field(default=None, primary_key=True)
+    company: str = Field(index=True)
+    #: Tally's own company GUID. Consent follows this, not the name, so a
+    #: company renamed or swapped underneath us stops being writable.
+    guid: str = Field(default="", index=True)
+    granted_by: str = ""
+    granted_at: datetime = Field(default_factory=_now)
+    machine: str = ""
+    note: str = ""
+    revoked_at: datetime | None = None
+    revoked_by: str = ""
+
+
+class UserRow(SQLModel, table=True):
+    """Who works here, and what they are allowed to decide.
+
+    A PIN rather than a password, and a local table rather than an account
+    system, because the people this is for are three to ten in one office with
+    no IT department. The point is not to keep an attacker out of the machine -
+    it is that an approval carries a name somebody will stand behind, instead
+    of the string "web".
+    """
+
+    __tablename__ = "users"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True)
+    role: str = Field(default="clerk", index=True)  # clerk | partner
+    pin_hash: str = ""
+    pin_salt: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    disabled: bool = Field(default=False)
+
+
 class EgressRow(SQLModel, table=True):
     """What left the machine, per model request. See docs/SECURITY.md."""
 
