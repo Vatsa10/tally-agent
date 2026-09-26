@@ -56,7 +56,8 @@ def test_a_write_outside_the_scope_is_refused_with_advice():
         LIVE.require_write_scope("Real Client Pvt Ltd")
     message = str(caught.value)
     assert "Real Client Pvt Ltd" in message
-    assert "protects books tallyagent did not create" in message
+    assert "nobody has enabled it" in message
+    assert "consent add" in message, "and it says how to enable it"
 
 
 def test_an_empty_prefix_allows_nothing_rather_than_everything():
@@ -331,3 +332,56 @@ def test_the_example_config_ships_in_fake_mode():
     assert config.mode == "fake"
     assert not config.is_live
     assert config.tally_is_placeholder
+
+
+# --- consent: the way a real client's books become writable -------------------
+
+
+def test_a_consented_company_is_writable_without_being_renamed():
+    """The prefix alone left a firm choosing between renaming a client's books
+    and turning the guard off."""
+    live = LiveMode(enabled=True, consents=lambda company, guid: "")
+
+    assert live.may_write_to("Sharma Textiles")
+
+
+def test_the_refusal_reason_is_the_one_the_consent_store_gave():
+    live = LiveMode(
+        enabled=True,
+        consents=lambda company, guid: f"{company} was restored from a backup",
+    )
+
+    assert not live.may_write_to("Sharma Textiles")
+    with pytest.raises(WriteScopeError, match="restored from a backup"):
+        live.require_write_scope("Sharma Textiles")
+
+
+def test_the_guid_tally_has_open_is_what_gets_checked():
+    seen: list[tuple[str, str]] = []
+
+    def consents(company: str, guid: str) -> str:
+        seen.append((company, guid))
+        return ""
+
+    live = LiveMode(enabled=True, consents=consents).for_company("abc-123")
+    live.require_write_scope("Sharma Textiles")
+
+    assert seen == [("Sharma Textiles", "abc-123")]
+
+
+def test_telling_the_guard_a_guid_does_not_change_the_shared_one():
+    """for_company is used per request; mutating the process-wide guard would
+    leave one client's GUID in place while another client is being written to."""
+    live = LiveMode(enabled=True, consents=lambda c, g: "")
+
+    live.for_company("abc-123")
+
+    assert live.company_guid == ""
+
+
+def test_an_install_with_no_consent_store_can_still_only_touch_its_own():
+    """A fresh install demos itself and reaches nothing else."""
+    live = LiveMode(enabled=True)
+
+    assert live.may_write_to("TA-Demo Traders")
+    assert not live.may_write_to("Sharma Textiles")
