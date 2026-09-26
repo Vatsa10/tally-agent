@@ -57,6 +57,19 @@ def build(
     engine = make_engine(config.db_path)
     audit = AuditLog(engine)
 
+    # Who works at the practice is firm-wide; what has been approved is not.
+    # So the user register lives in the firm database and everything about a
+    # client's books - the queue, the audit chain, idempotency, learned
+    # aliases, write consent - lives in that client's own file. With one client
+    # the two are the same file, and then it is the same engine: two engines on
+    # one SQLite file would both be numbering the same audit chain.
+    firm_engine = (
+        engine
+        if Path(config.firm_db_path) == Path(config.db_path)
+        else make_engine(config.firm_db_path)
+    )
+    firm_audit = audit if firm_engine is engine else AuditLog(firm_engine)
+
     # A repairer only in live mode with a real socket. A crashed Tally, a
     # licence screen or an unopened company are the three things that end a real
     # session, and none of them should need a person who knows what a TDL is.
@@ -77,7 +90,7 @@ def build(
     # The write guard stops being a name prefix here: a company is writable
     # because a partner enabled it, and the guard asks the consent table.
     consents = ConsentStore(engine, audit)
-    people = People(engine, audit)
+    people = People(firm_engine, firm_audit)
     live = replace(
         config.live, consents=consents.refusal, consent_known=consents.known
     )

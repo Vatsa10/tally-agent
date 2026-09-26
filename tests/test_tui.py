@@ -647,3 +647,129 @@ async def test_monthend_says_so_when_the_month_is_not_a_month(session, tmp_path,
     turn = await session.handle("/monthend June")
     assert turn.lines[-1].kind == "error"
     assert "not a month" in turn.text
+
+
+# --- clients -----------------------------------------------------------------
+
+
+@pytest.fixture
+def two_clients(engine, backend, company):
+    """Two wired services on two databases, and a register over them."""
+    from tallyagent_approvals.consent import ConsentStore
+    from tallyagent_approvals.people import PARTNER, People
+    from tallyagent_daemon.clients import Client, Register
+
+    def build(name: str):  # type: ignore[no-untyped-def]
+        own = make_engine(":memory:")
+        audit = AuditLog(own)
+        queue = ApprovalQueue(own, audit)
+        tools = ToolContext(
+            backend=backend,
+            company=company.model_copy(update={"name": name}),
+            policy=Policy.default(),
+            enqueue=queue.enqueue,
+            source="tui",
+        )
+        queue.executor = build_executor(tools)
+        services = Services(
+            company=tools.company,
+            tools=tools,
+            queue=queue,
+            audit=audit,
+            router=Router(mock.MockProvider()),
+            memory=Memory(own, name),
+            consents=ConsentStore(own, audit),
+        )
+        # The people register is firm-wide: registered once, not once per client.
+        services.people = shared_people
+        return services
+
+    shared_engine = make_engine(":memory:")
+    shared_people = People(shared_engine, AuditLog(shared_engine))
+    shared_people.add("R. Mehta", PARTNER, "4821")
+
+    built = {"sharma": build("Sharma Textiles"), "gupta": build("Gupta Transport")}
+    register = Register(
+        clients=[
+            Client(slug="sharma", name="Sharma", company="Sharma Textiles"),
+            Client(slug="gupta", name="Gupta", company="Gupta Transport"),
+        ]
+    )
+    return built, register
+
+
+async def test_listing_clients_marks_the_one_this_window_is_on(two_clients):
+    built, register = two_clients
+    session = Session(
+        built["sharma"], clients=register, switch=lambda slug: built[slug]
+    )
+    session.client_slug = "sharma"
+
+    turn = await session.handle("/client")
+
+    assert "sharma" in turn.text and "gupta" in turn.text
+    assert "this window" in turn.text
+
+
+async def test_switching_client_changes_the_company_and_the_queue(two_clients):
+    """A ticket drafted for one client must not be visible - let alone
+    approvable - while working on another."""
+    built, register = two_clients
+    session = Session(
+        built["sharma"], clients=register, switch=lambda slug: built[slug]
+    )
+    session.client_slug = "sharma"
+    await queue_a_pending(built["sharma"])
+    assert len(session.pending()) == 1
+
+    await session.handle("/client gupta")
+
+    assert session.services.company.name == "Gupta Transport"
+    assert session.pending() == [], "the other client's queue is another file"
+
+
+async def test_the_signed_in_person_carries_across_a_switch(two_clients):
+    """They are registered for the practice, not for one client - being asked to
+    sign in again per client is how a PIN ends up on a sticky note."""
+    built, register = two_clients
+    session = Session(
+        built["sharma"], clients=register, switch=lambda slug: built[slug]
+    )
+    await session.handle("/signin R. Mehta 4821")
+
+    await session.handle("/client gupta")
+
+    assert session.who == "R. Mehta"
+    assert session.signed_in.is_partner
+
+
+async def test_an_unknown_client_changes_nothing(two_clients):
+    built, register = two_clients
+    session = Session(
+        built["sharma"], clients=register, switch=lambda slug: built[slug]
+    )
+    session.client_slug = "sharma"
+
+    turn = await session.handle("/client nobody")
+
+    assert turn.lines[-1].kind == "error"
+    assert session.services.company.name == "Sharma Textiles"
+
+
+async def test_a_single_company_install_says_so(session):
+    turn = await session.handle("/client")
+
+    assert "works on one company" in turn.text
+
+
+async def queue_a_pending(services) -> None:  # type: ignore[no-untyped-def]
+    """One pending ticket, through the real tool path - which queues it itself."""
+    from tallyagent_tools import vouchers
+
+    await vouchers.create_receipt(
+        services.tools,
+        party_name="Acme Industries",
+        amount=Decimal("1000.00"),
+        voucher_date=date(2026, 6, 2),
+        bank_ledger="Bank - HDFC 1234",
+    )

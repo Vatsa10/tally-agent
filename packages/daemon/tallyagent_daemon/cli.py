@@ -25,7 +25,7 @@ from pathlib import Path
 import typer
 
 from tallyagent_core.errors import TallyAgentError
-from tallyagent_daemon import wiring
+from tallyagent_daemon import clients, wiring
 from tallyagent_daemon.config import Config, load
 
 log = logging.getLogger(__name__)
@@ -37,23 +37,52 @@ approvals_app = typer.Typer(help="Inspect and decide queued actions.")
 audit_app = typer.Typer(help="The append-only audit log.")
 consent_app = typer.Typer(help="Which client companies may be written to.")
 users_app = typer.Typer(help="Who works here, and what they may decide.")
+clients_app = typer.Typer(help="The practice's clients, one set of books each.")
 app.add_typer(approvals_app, name="approvals")
 app.add_typer(audit_app, name="audit")
 app.add_typer(consent_app, name="consent")
 app.add_typer(users_app, name="users")
+app.add_typer(clients_app, name="clients")
 
 CONFIG_OPTION = typer.Option("config/config.toml", "--config", "-c", help="Path to config.toml.")
 POLICY_OPTION = typer.Option("config/policy.toml", "--policy", help="Path to policy.toml.")
 FAKE_OPTION = typer.Option(
     False, "--fake-tally", help="Run against the in-process fake Tally instead of a real one."
 )
+CLIENTS_OPTION = typer.Option(
+    "config/clients.toml", "--clients", help="Path to the client register."
+)
+CLIENT_OPTION = typer.Option(
+    "", "--client", help="Which client to work on, from the register."
+)
 
 
-def _load(config_path: str, policy_path: str) -> Config:
+def _load(
+    config_path: str,
+    policy_path: str,
+    client: str = "",
+    clients_path: str = "config/clients.toml",
+) -> Config:
+    """Config, pointed at one client when the register names one.
+
+    A firm has many sets of books and the connection, the company and the
+    database have to move together; ``clients.apply`` is what moves them. With
+    no register, or no --client, this is the single-company install as before.
+    """
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
-    return load(config_path, policy_path)
+    config = load(config_path, policy_path)
+    if not client:
+        return config
+    register = clients.load(clients_path)
+    try:
+        chosen = register.get(client)
+    except TallyAgentError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    log.info("client %s: %s at %s:%s", chosen.slug, chosen.company, chosen.host, chosen.port)
+    return clients.apply(config, chosen, register.data_dir)
 
 
 def _wire(config: Config, fake: bool) -> wiring.Wired:
@@ -110,12 +139,14 @@ def _wire_fallback(wired: wiring.Wired) -> None:
 
 @app.command()
 def probe(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
 ) -> None:
     """Check the Tally connection, edition, server mode and open companies."""
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     if config.tally_is_placeholder and not fake:
         typer.echo(
             f"[tally] host is still the placeholder {config.tally.host!r}. Edit "
@@ -137,6 +168,8 @@ def probe(
 
 @app.command()
 def doctor(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     repair: bool = typer.Option(
@@ -149,7 +182,7 @@ def doctor(
     can act on, and the things this can fix on its own - a crashed Tally, the
     licence screen, a company that is not open - it fixes rather than reports.
     """
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     problems: list[str] = []
 
     typer.echo(f"config      {config_path}")
@@ -225,6 +258,8 @@ def doctor(
 
 @app.command()
 def chat(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
@@ -233,7 +268,7 @@ def chat(
     ),
 ) -> None:
     """A REPL. Type a question; 'quit' to leave. --script runs a scenario."""
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake)
     _wire_fallback(wired)
     services = wired.services
@@ -283,6 +318,8 @@ def chat(
 
 @app.command()
 def tui(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
@@ -290,14 +327,36 @@ def tui(
     """The terminal UI: chat, Tally status, and the approval queue."""
     from tallyagent_channels.tui.app import run as run_tui
 
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     # The TUI owns the screen, so logging must not scribble over it.
     logging.getLogger().handlers.clear()
     logging.getLogger().addHandler(logging.NullHandler())
 
     wired = _wire(config, fake)
     _wire_fallback(wired)
-    run_tui(wired.services, config.live)
+
+    register = clients.load(clients_path)
+    base = load(config_path, policy_path)
+
+    def switch(slug: str):  # type: ignore[no-untyped-def]
+        """Point the window at another client, wiring included.
+
+        Built fresh rather than mutated: the connection, the company and the
+        database have to move together, and a half-switched session would put
+        one client's voucher in another's queue.
+        """
+        chosen = register.get(slug)
+        switched = _wire(clients.apply(base, chosen, register.data_dir), fake)
+        _wire_fallback(switched)
+        return switched.services
+
+    run_tui(
+        wired.services,
+        config.live,
+        clients=register,
+        switch=switch,
+        client_slug=register.find(client).slug if register.find(client) else "",
+    )
 
 
 @app.command("close-month")
@@ -307,6 +366,8 @@ def close_month(
     bank_ledger: str = typer.Option("", help="Which bank ledger the statement is."),
     gstr2b: str = typer.Option("", help="GSTR-2B JSON from the portal, if downloaded."),
     out_dir: str = typer.Option("reports/close", help="Where the pack is written."),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
@@ -314,7 +375,7 @@ def close_month(
     """Run the month-end checks and write the close pack. Posts nothing."""
     from tallyagent_tools import close as close_tool
 
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake)
     result = asyncio.run(
         close_tool.month_end_close(
@@ -334,13 +395,15 @@ def close_month(
 @app.command("enable-server")
 def enable_server(
     port: int = typer.Option(9000, help="The port Tally should listen on."),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
 ) -> None:
     """Turn on TallyPrime's XML interface, restart it, and verify the port."""
     from tallyagent_tools import tally_admin
 
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake=False)
     _wire_fallback(wired)
     result = asyncio.run(
@@ -353,6 +416,8 @@ def enable_server(
 
 @app.command()
 def serve(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
@@ -363,7 +428,7 @@ def serve(
     from tallyagent_daemon.app import build_app
     from tallyagent_daemon.tray import run_tray
 
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake)
     _wire_fallback(wired)
     url = f"http://{config.daemon.host}:{config.daemon.port}/"
@@ -384,6 +449,8 @@ def serve(
 
 @app.command()
 def mcp(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
@@ -393,7 +460,7 @@ def mcp(
     """Serve the tool registry over MCP."""
     from tallyagent_mcp_server import server as mcp_server
 
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake)
     # A request arriving over MCP - from an editor's MCP client, say - reaches the same
     # fallback the TUI has, so Tally comes to the front and the red cursor
@@ -421,10 +488,12 @@ def mcp(
 
 @audit_app.command("verify")
 def audit_verify(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION, policy_path: str = POLICY_OPTION
 ) -> None:
     """Recompute the hash chain and report any break."""
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = wiring.build(config)
     result = wired.services.audit.verify()
     typer.echo(str(result))
@@ -435,11 +504,13 @@ def audit_verify(
 @audit_app.command("log")
 def audit_log(
     limit: int = typer.Option(20, help="How many recent records to show."),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
 ) -> None:
     """Print recent audit records."""
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = wiring.build(config)
     for entry in wired.services.audit.entries(limit=limit):
         typer.echo(
@@ -451,11 +522,13 @@ def audit_log(
 @approvals_app.command("list")
 def approvals_list(
     status: str = typer.Option("pending", help="pending, approved, rejected or failed."),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
 ) -> None:
     """List queued actions."""
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = wiring.build(config)
     items = wired.services.queue.list(status, config.company.name)
     if not items:
@@ -468,10 +541,12 @@ def approvals_list(
 
 @approvals_app.command("stats")
 def approvals_stats(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION, policy_path: str = POLICY_OPTION
 ) -> None:
     """Per-action-type history, to inform a policy promotion decision."""
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = wiring.build(config)
     stats = wired.services.queue.stats(config.company.name)
     if not stats:
@@ -493,12 +568,14 @@ def approvals_approve(
     ticket: str,
     actor: str = typer.Option(..., "--actor", help="Who is approving."),
     reason: str = typer.Option("", "--reason"),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
 ) -> None:
     """Approve a queued action and post it."""
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake)
     result = asyncio.run(wired.services.queue.approve(ticket, actor, reason))
     if result.ok:
@@ -514,11 +591,13 @@ def approvals_reject(
     ticket: str,
     reason: str = typer.Option(..., "--reason", help="Why. Required, and logged."),
     actor: str = typer.Option(..., "--actor"),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
 ) -> None:
     """Reject a queued action."""
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = wiring.build(config)
     wired.services.queue.reject(ticket, actor, reason)
     typer.echo(f"{ticket} rejected.")
@@ -624,10 +703,12 @@ def users_role(
 
 @consent_app.command("list")
 def consent_list(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION, policy_path: str = POLICY_OPTION
 ) -> None:
     """Which companies this install may write to."""
-    wired = wiring.build(_load(config_path, policy_path))
+    wired = wiring.build(_load(config_path, policy_path, client, clients_path))
     active = wired.services.consents.all_active()
     if not active:
         typer.echo(
@@ -645,6 +726,8 @@ def consent_add(
     company: str,
     by: str = typer.Option(..., "--by", help="Which partner is enabling it."),
     note: str = typer.Option("", "--note", help="Why, for the record."),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
@@ -654,7 +737,7 @@ def consent_add(
     Reads the company's GUID out of Tally first, so the grant is pinned to the
     books rather than to the name. Tally has to be up with the company loaded.
     """
-    config = _load(config_path, policy_path)
+    config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake)
     partner = _partner(wired, by)
 
@@ -688,16 +771,77 @@ def consent_add(
 def consent_revoke(
     company: str,
     by: str = typer.Option(..., "--by", help="Which partner is revoking it."),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
 ) -> None:
     """Stop writing to a company. Takes effect on the next write."""
-    wired = wiring.build(_load(config_path, policy_path))
+    wired = wiring.build(_load(config_path, policy_path, client, clients_path))
     partner = _partner(wired, by, action="revoke_consent")
     closed = wired.services.consents.revoke(company, by=partner.name)
     typer.echo(
         f"{company}: consent revoked" if closed else f"{company} was not enabled"
     )
+
+
+@clients_app.command("list")
+def clients_list(clients_path: str = CLIENTS_OPTION) -> None:
+    """Every client this practice works on."""
+    register = clients.load(clients_path)
+    if register.empty:
+        typer.echo(
+            f"No client register at {clients_path}. This install works on the "
+            "one company in config.toml. Add clients to work on several - see "
+            "config/clients.example.toml."
+        )
+        return
+    for client in register.clients:
+        typer.echo(f"  {client.describe()}")
+    typer.echo(f"  databases under {register.data_dir}/")
+
+
+@clients_app.command("check")
+def clients_check(
+    clients_path: str = CLIENTS_OPTION,
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Try every client's Tally and say what each one is ready for.
+
+    The point of running it in the morning: one unreachable client - a machine
+    that is off, a VPN that dropped - must not be discovered halfway through
+    somebody's work, and must not stop the other thirty being worked on.
+    """
+    register = clients.load(clients_path)
+    if register.empty:
+        typer.echo(f"no client register at {clients_path}", err=True)
+        raise typer.Exit(code=2)
+
+    base = _load(config_path, policy_path)
+    ready = 0
+    for client in register.clients:
+        config = clients.apply(base, client, register.data_dir)
+        wired = wiring.build(config)
+        try:
+            info = asyncio.run(wired.backend.probe())
+            companies = asyncio.run(wired.backend.list_companies())
+        except Exception as exc:  # noqa: BLE001 - one dead client is not a failure
+            typer.echo(f"  {client.slug:<16} unreachable: {str(exc)[:70]}")
+            continue
+        loaded = client.company in companies
+        consent = wired.services.consents.active(client.company)
+        state = "loaded" if loaded else f"not loaded (open: {', '.join(companies) or 'none'})"
+        writable = (
+            f"writable, enabled by {consent.granted_by}"
+            if consent
+            else "read-only until a partner enables it"
+        )
+        typer.echo(
+            f"  {client.slug:<16} {info.get('edition', 'Tally')} - {state}; {writable}"
+        )
+        ready += int(loaded)
+    typer.echo(f"{ready} of {len(register.clients)} client(s) ready to work on.")
 
 
 @app.command("fake-tally")

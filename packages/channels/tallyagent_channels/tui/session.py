@@ -108,6 +108,8 @@ class Session:
         conversation: str = "tui",
         actor: str = "tui",
         auto_approve: bool = False,
+        clients: Any = None,
+        switch: Any = None,
     ) -> None:
         self.services = services
         self.live = live or LiveMode()
@@ -118,6 +120,12 @@ class Session:
         self.stats = SessionStats()
         self.tier3_approver: Tier3Approver | None = None
         self.last_probe: Any = None
+        # The practice's client register, and how to point this session at one
+        # of them. Injected rather than imported: the channels package must not
+        # depend on the daemon that does the wiring.
+        self.clients = clients
+        self.switch = switch
+        self.client_slug = ""
 
     # --- who is doing this --------------------------------------------------
 
@@ -547,6 +555,53 @@ class Session:
             "system", f"model is now {provider.name}/{provider.model}"
         )
 
+    async def cmd_client(self, args: list[str], turn: Turn) -> Turn:
+        """/client [slug] - which set of books this window is working on.
+
+        Switching swaps the Tally connection, the company and the database
+        together, because any one of them left behind is how one client's
+        voucher lands in another client's approval queue. The signed-in person
+        carries over: they are registered for the practice, not per client.
+        """
+        register = self.clients
+        if register is None or register.empty:
+            return turn.say(
+                "system",
+                "This install works on one company: "
+                f"{self.services.company.name or 'none configured'}. Add "
+                "config/clients.toml to work on several.",
+            )
+        if not args:
+            rows = [
+                f"  {client.describe()}"
+                + ("   <- this window" if client.slug == self.client_slug else "")
+                for client in register.clients
+            ]
+            return turn.say("system", "Clients:\n" + "\n".join(rows))
+
+        if self.switch is None:
+            return turn.say("error", "this session cannot switch clients")
+        try:
+            services = self.switch(args[0])
+        except TallyAgentError as exc:
+            return turn.say("error", str(exc))
+
+        signed_in = self.signed_in
+        self.services = services
+        if signed_in is not None and getattr(services, "people", None) is not None:
+            # Same person, same practice; only the books changed.
+            services.people.current = signed_in
+        self.client_slug = register.get(args[0]).slug
+        self.services.reset(self.conversation)
+        waiting = len(self.pending())
+        return turn.say(
+            "system",
+            f"now working on {self.services.company.name} "
+            f"({self.client_slug}). {waiting} ticket(s) waiting here. "
+            "Nothing from the previous client is visible - separate books, "
+            "separate queue.",
+        )
+
     async def cmd_signin(self, args: list[str], turn: Turn) -> Turn:
         """/signin <name> <pin> - who is at the keyboard.
 
@@ -718,6 +773,7 @@ def _render_findings(findings: list[dict[str, str]]) -> str:
 
 COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
     "help": Session.cmd_help,
+    "client": Session.cmd_client,
     "signin": Session.cmd_signin,
     "signout": Session.cmd_signout,
     "users": Session.cmd_users,
@@ -744,6 +800,7 @@ COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
 
 HELP = {
     "help": "this list",
+    "client": "[slug] - list the practice's clients, or switch to one",
     "signin": "<name> <pin> - who is deciding; a ticket carries this name",
     "signout": "stop acting as the signed-in person",
     "users": "who is registered here",

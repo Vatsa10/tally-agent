@@ -1,0 +1,18 @@
+# This machine's register. Two clients: the demo books that TallyPrime has open,
+# and one whose Tally is not up - the everyday case for a practice.
+[storage]
+data_dir = "data"
+
+[[client]]
+slug = "demo"
+name = "Demo Traders"
+company = "TA-Demo Traders"
+state_code = "24"
+bills_dir = "demo/bills"
+bank_ledger = "Bank - HDFC 1234"
+
+[[client]]
+slug = "sharma"
+name = "Sharma Textiles"
+company = "Sharma Textiles"
+state_code = "24"

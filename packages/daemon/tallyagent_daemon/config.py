@@ -64,6 +64,10 @@ class Config:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     policy: Policy = field(default_factory=Policy.default)
     db_path: str = "./tallyagent.db"
+    #: Where the firm-wide tables live - at present the user register. A client
+    #: switch changes ``db_path`` and leaves this alone, so the people who work
+    #: here do not have to be registered once per client.
+    firm_db_path: str = "./tallyagent.db"
 
     @property
     def tally_is_placeholder(self) -> bool:
@@ -199,4 +203,9 @@ def from_dict(
         ),
         policy=policy,
         db_path=str(storage_raw.get("db_path") or "./tallyagent.db"),
+        firm_db_path=str(
+            storage_raw.get("firm_db_path")
+            or storage_raw.get("db_path")
+            or "./tallyagent.db"
+        ),
     )

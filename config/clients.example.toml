@@ -1,0 +1,44 @@
+# The client register: one entry per set of books this practice works on.
+#
+#   cp config/clients.example.toml config/clients.toml
+#   uv run tallyagent clients list
+#   uv run tallyagent clients check          # is each one reachable and loaded?
+#   uv run tallyagent tui --client sharma    # work on one of them
+#
+# Each client gets its own database under [storage] data_dir, holding that
+# client's approval queue, audit chain, idempotency keys, learned ledger aliases
+# and write consent. One client's ticket cannot be approved against another
+# client's books because it is not in the same file.
+#
+# Nothing secret belongs here. The Tally password and the model key come from
+# the environment or the OS keyring, the same for every client.
+
+[storage]
+data_dir = "data"
+
+[[client]]
+# The id typed at a prompt and used as the database filename: lower case
+# letters, digits and hyphens.
+slug = "sharma"
+name = "Sharma Textiles"
+# The name TallyPrime knows the books by, exactly.
+company = "Sharma Textiles"
+# The state the company is registered in - GST is split CGST+SGST or charged as
+# IGST from this against the party's state, so it is per client.
+state_code = "24"
+gstin = "24AABCS1234A1Z5"
+# Where this client's scanned purchase bills arrive.
+bills_dir = "clients/sharma/bills"
+# Which bank ledger their statement belongs to, for the month-end close.
+bank_ledger = "Bank - HDFC 4411"
+
+[[client]]
+slug = "gupta"
+name = "Gupta Transport"
+company = "Gupta Transport Pvt Ltd"
+# A client whose Tally runs on their own machine. Same everything else; an
+# unreachable host is reported by `clients check` and stops nothing else.
+host = "192.168.1.40"
+port = 9000
+state_code = "27"
+bills_dir = "clients/gupta/bills"

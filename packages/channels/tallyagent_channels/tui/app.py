@@ -220,11 +220,15 @@ class TallyAgentTUI(App[None]):
         services: Services,
         live: LiveMode | None = None,
         status_interval: float = 5.0,
+        clients: Any = None,
+        switch: Any = None,
+        client_slug: str = "",
     ) -> None:
         super().__init__()
         self.services = services
         self.live = live or LiveMode()
-        self.session = Session(services, live=self.live)
+        self.session = Session(services, live=self.live, clients=clients, switch=switch)
+        self.session.client_slug = client_slug
         self.session.tier3_approver = self._approve_tier3_step
         self.status_interval = status_interval
 
@@ -451,8 +455,16 @@ class TallyAgentTUI(App[None]):
         )
 
 
-def run(services: Services, live: LiveMode | None = None) -> None:
-    TallyAgentTUI(services, live).run()
+def run(
+    services: Services,
+    live: LiveMode | None = None,
+    clients: Any = None,
+    switch: Any = None,
+    client_slug: str = "",
+) -> None:
+    TallyAgentTUI(
+        services, live, clients=clients, switch=switch, client_slug=client_slug
+    ).run()
 
 
 async def run_async(services: Services, live: LiveMode | None = None) -> None:

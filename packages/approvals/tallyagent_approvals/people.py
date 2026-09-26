@@ -160,7 +160,7 @@ class People:
 
     def list(self) -> list[User]:
         with Session(self.engine) as session:
-            rows = session.exec(select(UserRow).order_by(UserRow.name)).all()  # type: ignore[arg-type]
+            rows = session.exec(select(UserRow).order_by(UserRow.name)).all()
         return [User(name=r.name, role=r.role) for r in rows if not r.disabled]
 
     @property
