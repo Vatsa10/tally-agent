@@ -100,7 +100,7 @@ class TallyBackend:
     COMPANY_TDL = (
         '<COLLECTION NAME="TACompanies" ISMODIFY="No">'
         "<TYPE>Company</TYPE>"
-        "<FETCH>NAME,GUID,MASTERID,STARTINGFROM,BOOKSFROM</FETCH>"
+        "<FETCH>NAME,GUID,MASTERID,STARTINGFROM,BOOKSFROM,ISEDITLOGON</FETCH>"
         "</COLLECTION>"
     )
 
@@ -121,6 +121,32 @@ class TallyBackend:
             if not wanted or name == wanted:
                 return str(row.get("GUID") or "").strip()
         return ""
+
+    async def edit_log_on(self, company: str | None = None) -> bool | None:
+        """Is Tally keeping its edit log for these books?
+
+        Companies Act Rule 3(1) has required an audit trail that cannot be
+        switched off since April 2023, and Rule 11(g) makes the auditor report
+        on it. In Tally that is the edit log, reported per company as
+        ``ISEDITLOGON`` - verified against TallyPrime 1.1.7.1, which answers
+        "No" for a company without it. None means Tally did not say, which is
+        reported as unknown rather than guessed either way.
+        """
+        wanted = (company or "").strip()
+        rows = await self.client.export_collection(
+            "TACompanies", "COMPANY", company=company or None, tdl=self.COMPANY_TDL
+        )
+        for row in rows:
+            name = str(row.get("NAME") or row.get("@NAME") or "").strip()
+            if wanted and name != wanted:
+                continue
+            raw = str(row.get("ISEDITLOGON") or "").strip().lower()
+            if raw in ("yes", "true", "1"):
+                return True
+            if raw in ("no", "false", "0"):
+                return False
+            return None
+        return None
 
     #: Real Tally's plain "List of Ledgers" collection returns *names only* -
     #: no parent, no GSTIN, no opening balance. Fields have to be asked for

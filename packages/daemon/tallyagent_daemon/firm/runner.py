@@ -172,6 +172,7 @@ class FirmRunner:
             report.reason = reason
             return report
 
+        report.outcomes.extend(await compliance(wired, client))
         ctx = wired.services.tools
         for job in self.jobs:
             if not (force or job.due(client, today)):
@@ -207,3 +208,38 @@ async def health(wired: Any, client: Any) -> str:
         loaded = ", ".join(companies) or "nothing"
         return f"{client.company} is not loaded in Tally (open: {loaded})"
     return ""
+
+
+async def compliance(wired: Any, client: Any) -> list[Outcome]:
+    """Things about the books themselves a partner must know before trusting them.
+
+    Today, one: Rule 3(1) of the Companies (Accounts) Rules requires an audit
+    trail that cannot be disabled, since April 2023, and Rule 11(g) makes the
+    auditor report on it. In Tally that is the edit log. A company client
+    without it is a qualified audit report waiting to happen - and anything the
+    agent posts into those books would be posted without one.
+    """
+    if not getattr(client, "needs_edit_log", False):
+        return []
+    try:
+        on = await wired.backend.edit_log_on(client.company)
+    except Exception as exc:  # noqa: BLE001 - an unanswered check is not a crash
+        log.info("could not read the edit log flag for %s: %s", client.slug, exc)
+        return []
+    if on is True:
+        return []
+    state = "is off" if on is False else "could not be confirmed"
+    return [
+        Outcome(
+            job="compliance",
+            kind=EXCEPTION,
+            title=f"Tally's edit log {state} for {client.company}",
+            detail=(
+                "Companies Act Rule 3(1) requires an audit trail that cannot be "
+                "switched off, and the auditor reports on it under Rule 11(g). "
+                "Use a TallyPrime release with Edit Log and keep it on for this "
+                "company before its books are audited."
+            ),
+            subject="edit-log",
+        )
+    ]

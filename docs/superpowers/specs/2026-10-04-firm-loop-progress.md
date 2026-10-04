@@ -14,8 +14,8 @@ moves from gated to hands-off on a measured record and falls back on a miss.
 | 1 | FirmRunner, Job protocol, Outcome, Firm Inbox, Morning Brief | **done** |
 | 2 | Earned autonomy ramp and no-touch metric | **done** |
 | 3 | `reconcile_2b` job: mismatch classification, vendor follow-ups, deferred-ITC ledger, IMS suggestions | **done** |
-| 4 | Edit Log edition check, local model option | next |
-| 5 | Wiring: scheduler, TUI `/inbox`, web home page, CLI `firm run` | |
+| 4 | Edit Log edition check, local model option | **done** |
+| 5 | Wiring: scheduler, TUI `/inbox`, web home page, CLI `firm run` | next |
 
 ## 1. Firm loop core - done
 
@@ -91,3 +91,19 @@ Bugs found and fixed while building it:
 Live, against TA-Demo Traders: `/reco gstr2b` and `/monthend` agree on Rs 43,110 at risk; one value difference and one bill not entered are found; and an April bill the supplier reported late is matched.
 
 Tests: `tests/test_itc.py` (19), `tests/test_reconcile_job.py` (10), `tests/test_close.py` (+1).
+
+## 4. Local model and the edit-log check - done
+
+- **`provider = "local"`** (`packages/llm/tallyagent_llm/local.py`): any OpenAI-compatible
+  server on the firm's own hardware (Ollama by default, LM Studio, vLLM). It needs no
+  key. It **refuses** an endpoint that is not loopback or private-network: a "local"
+  model on an internet host would make the egress log claim nothing left the office.
+  `stays_on_premises()` answers that question for the egress log.
+- **Edit log** (`TallyBackend.edit_log_on`): reads `ISEDITLOGON` from the Company
+  object. This was verified live: TallyPrime 1.1.7.1 answers "No" for TA-Demo Traders.
+  Other candidate field names return nothing and are not relied on. The morning run
+  flags a company client without it, citing Companies Act Rule 3(1) and Rule 11(g).
+  Proprietorships and partnerships are not nagged. `companies_act` in the register
+  overrides the name heuristic ("Ltd", "Limited", "Pvt").
+
+Tests: `tests/test_onprem_and_editlog.py` (21).

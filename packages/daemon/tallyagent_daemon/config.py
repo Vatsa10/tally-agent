@@ -171,7 +171,12 @@ def from_dict(
         company=company,
         model=ModelConfig(
             provider=str(model_raw.get("provider") or "deepseek"),
-            model=str(model_raw.get("model") or "deepseek-flash"),
+            # Each provider has its own sensible default; a local one asked for
+            # "deepseek-flash" would ask Ollama for a model nobody pulled.
+            model=str(
+                model_raw.get("model")
+                or ("" if str(model_raw.get("provider") or "") == "local" else "deepseek-flash")
+            ),
             base_url=str(model_raw.get("base_url") or ""),
             max_steps=int(model_raw.get("max_steps") or 12),
         ),

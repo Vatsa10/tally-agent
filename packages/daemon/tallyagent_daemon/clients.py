@@ -65,6 +65,24 @@ class Client:
     #: Where this client's GSTR-2B downloads are put, for the monthly
     #: reconciliation. Defaults to clients/<slug>/gstr2b.
     gstr2b_dir: str = ""
+    #: A company under the Companies Act, so Rule 3(1)'s audit trail applies.
+    #: None means "judge by the name" - see ``needs_edit_log``.
+    companies_act: bool | None = None
+
+    @property
+    def needs_edit_log(self) -> bool:
+        """Is an edit log a legal requirement for these books?
+
+        Rule 3(1) applies to companies. Proprietorships, partnerships and most
+        of a practice's small clients are not companies, and nagging about an
+        edit log they do not need would bury the one warning that matters. The
+        register can say so outright; otherwise "Ltd" or "Limited" in the name
+        is taken as a company.
+        """
+        if self.companies_act is not None:
+            return self.companies_act
+        name = f" {self.company.lower().replace('.', ' ')} "
+        return any(mark in name for mark in (" ltd ", " limited ", " pvt "))
     #: Overrides the derived path only when somebody has a reason to.
     db_path: str = ""
     notes: str = ""
@@ -158,6 +176,9 @@ def parse(data: dict[str, Any], path: str = DEFAULT_REGISTER) -> Register:
                 bills_dir=str(item.get("bills_dir") or ""),
                 bank_ledger=str(item.get("bank_ledger") or ""),
                 gstr2b_dir=str(item.get("gstr2b_dir") or ""),
+                companies_act=(
+                    bool(item["companies_act"]) if "companies_act" in item else None
+                ),
                 db_path=str(item.get("db_path") or ""),
                 notes=str(item.get("notes") or ""),
             )

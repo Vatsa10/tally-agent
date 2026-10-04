@@ -103,13 +103,26 @@ def build_provider(
         from tallyagent_llm.mock import MockProvider
 
         return MockProvider(**kwargs)
+    if name == "local":
+        # No key to look up: a model on the firm's own hardware has none.
+        from tallyagent_llm.local import DEFAULT_BASE_URL as LOCAL_URL
+        from tallyagent_llm.local import DEFAULT_MODEL as LOCAL_MODEL
+        from tallyagent_llm.local import LocalProvider
+
+        return LocalProvider(
+            api_key,
+            config.model or LOCAL_MODEL,
+            config.base_url or LOCAL_URL,
+            max(config.timeout, 300.0),
+            **kwargs,
+        )
 
     if name not in ENV_KEYS:
         # Reject an unknown name before asking for its key, so the error names
         # the real problem rather than a missing variable nobody has heard of.
         raise NotConfiguredError(
             f"unknown model provider {config.provider!r}. "
-            f"Known: mock, {', '.join(sorted(ENV_KEYS))}."
+            f"Known: mock, local, {', '.join(sorted(ENV_KEYS))}."
         )
 
     key = api_key_for(name, api_key)
@@ -215,6 +228,20 @@ class Router:
 def _destination_for(provider: Provider) -> str:
     base = getattr(provider, "base_url", "")
     return base or f"local:{provider.name}"
+
+
+def stays_on_premises(destination: str) -> bool:
+    """Did a request to this destination stay inside the firm?
+
+    What the egress log needs to answer for a CA asking "did anything about my
+    client leave this office": a mock or a model on a private address, yes;
+    anything else, no.
+    """
+    if destination.startswith("local:"):
+        return True
+    from tallyagent_llm.local import is_private
+
+    return is_private(destination)
 
 
 #: Message roles and shapes, summarised for the egress log. Deliberately not the

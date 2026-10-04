@@ -79,6 +79,10 @@ class FakeVoucher:
 
 
 class FakeTally:
+    #: Companies whose edit log is on. Empty by default, like an install that
+    #: predates the Edit Log releases.
+    edit_log: set[str]
+
     """In-memory Tally. Not thread-safe; one instance per test."""
 
     def __init__(
@@ -99,6 +103,7 @@ class FakeTally:
         # TallyPrime 1.1.7.1 refuses company creation over XML. Flipping this
         # off reproduces that refusal, so both paths are testable.
         self.supports_company_create = supports_company_create
+        self.edit_log = set()
         self.ledgers: dict[str, FakeLedger] = {}
         self.stock_items: dict[str, FakeStockItem] = {}
         self.units: dict[str, str] = {}
@@ -201,6 +206,7 @@ class FakeTally:
                         "GUID": hashlib.sha1(  # noqa: S324 - a fixture id, not a secret
                             name.encode()
                         ).hexdigest()[:32],
+                        "ISEDITLOGON": "Yes" if name in self.edit_log else "No",
                     }
                     for name in self.companies
                 ],
