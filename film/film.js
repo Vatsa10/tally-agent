@@ -141,6 +141,11 @@ function stepsPanel(t, s) {
   </div>`;
 }
 
+const SALE = (() => {
+  const a = (scene("sale")[0] || { lines: [] }).lines.find((l) => l.kind === "agent") || { text: "" };
+  const m = a.text.match(/ to (.+?), .*= ([\d.]+), dated/) || [];
+  return { party: m[1] || "", total: Number(m[2] || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }) };
+})();
 const STATUS = `LIVE · ${D.company} · writes limited to enabled companies`;
 
 // --- scenes ----------------------------------------------------------------------
@@ -153,6 +158,164 @@ function logo(t, at) {
 }
 
 const SCENES = {
+  act(t, s) {
+    const p = prog(t, 0.15, 1.0);
+    return `<div style="position:absolute;left:0;right:0;top:330px;text-align:center">
+        <div style="font-size:30px;letter-spacing:.35em;color:var(--saffron);text-transform:uppercase;${enter(t, 0.2, { dy: 16 })}">${esc(s.clock || "")}</div>
+        <div style="font-size:92px;font-weight:800;margin-top:22px;${enter(t, 0.45, { dy: 40, blur: 14 })}">${esc(s.act || "")}</div>
+        <div style="height:4px;margin:34px auto 0;width:${p * 520}px;background:linear-gradient(90deg,transparent,var(--saffron),transparent)"></div>
+        <div style="font-size:30px;color:var(--dim);margin-top:30px;${enter(t, 1.0)}">${esc(s.title || "")}</div></div>`;
+  },
+
+  plainwords(t) {
+    t /= 1.3;
+    const tr = turn("sale", 0);
+    const said = tr.input;
+    const a = lineOf("sale", 0, "agent");
+    const m = a.match(/(FILM-\d+) to (.+?), (\d+) (\w+) @ ([\d.]+) = ([\d.]+) taxable \+ IGST (\d+)% ([\d.]+) = ([\d.]+), dated ([\d-]+)/) || [];
+    const [, ref, party, qty, item, rate, taxable, pct, igst, total, when] = m;
+    const inr = (v) => Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+    const CW = 17.4, SX = 140, SY = 236;
+    const at = (needle) => Math.max(0, said.indexOf(needle));
+    const fields = [
+      ["Party", party, at(party || "")],
+      ["Item", `${qty} × ${item}`, at(`${qty} ${item}`)],
+      ["Rate", inr(rate), at(String(Math.round(rate)))],
+      ["GST", `${pct}% IGST`, at("18%")],
+      ["Date", when, at("dated")],
+      ["Reference", ref, at("reference")],
+    ];
+    const cards = fields.map(([label, value, idx], i) => {
+      const x1 = 140 + (i % 3) * 560, y1 = 400 + Math.floor(i / 3) * 150;
+      const x0 = SX + idx * CW, y0 = SY;
+      const k = easeInOut(clamp((t - 2.0 - i * 0.35) / 0.9));
+      const x = lerp(x0, x1, k), y = lerp(y0, y1, k);
+      return `<div class="card" style="left:${x}px;top:${y}px;width:${lerp(220, 520, k)}px;padding:${lerp(6, 22, k)}px ${lerp(10, 26, k)}px;opacity:${clamp((t - 2.0 - i * 0.35) * 4)};border-color:var(--saffron)">
+        <div class="src" style="margin:0;opacity:${k}">${label}</div>
+        <div style="font-size:${lerp(22, 34, k)}px;font-weight:700">${esc(value || "")}</div></div>`;
+    }).join("");
+    const rows = [["Dr", party, total], ["Cr", "Sales - GST 18%", taxable], ["Cr", "Output IGST", igst]];
+    const voucher = rows.map(([side, led, amt], i) => `<div class="row" style="padding:8px 0;font-size:25px;${enter(t, 6.6 + i * 0.35, { dy: 10, over: 0.5, blur: 2, scale: 1 })}">
+        <span><b style="color:${side === "Dr" ? "var(--teal)" : "var(--saffron)"}">${side}</b>&nbsp; ${esc(led || "")}</span><span class="amt" style="color:var(--ink)">${inr(amt)}</span></div>`).join("");
+    return chapter(0, "Plain words in, a GST voucher out", t) +
+      `<div style="position:absolute;left:${SX - 30}px;top:${SY - 26}px;width:1700px;padding:22px 30px;border-radius:14px;background:rgba(255,255,255,.04);font-family:var(--mono);font-size:29px;${enter(t, 0.2)}">
+        <span style="color:var(--saffron)">›</span> ${esc(typed(said, t, 0.4, 70).text)}</div>` +
+      cards +
+      `<div class="card" style="left:140px;top:720px;width:1640px;padding:16px 28px;${enter(t, 6.2)}">
+        <div class="cardhead" style="display:flex">Drafted sales voucher<span style="margin-left:auto;color:var(--teal);opacity:${prog(t, 7.9, 0.5)}">Dr ${inr(total)} = Cr ${inr(total)} ✓</span></div>${voucher}</div>`;
+  },
+
+  duplicate(t) {
+    const tr = turn("duplicate", 0);
+    const reply = money(lineOf("duplicate", 0, "agent")).split("\n\n")[0];
+    return chapter(0, "It notices the same bill twice", t) +
+      terminal({
+        x: 96, y: 170, w: 1728, h: 520, t, title: "tallyagent · TUI", status: STATUS,
+        blocks: [
+          { at: 0.5, input: tr.input, cps: 70 },
+          { at: 2.4, every: 0.45, lines: tr.lines.filter((l) => l.kind === "tool").slice(0, 4).map(toolLine) },
+          { at: 4.6, lines: [line("agent", `<span class="bad">⚠</span> ${md(esc(reply))}`)] },
+        ],
+      });
+  },
+
+  lockout(t) {
+    const tries = scene("lockout");
+    const wrong = tries.slice(0, 5), locked = tries[4] || tries[0];
+    const msg = (locked.lines[0] || {}).text || "";
+    const dots = wrong.map((_, i) => {
+      const at = 1.0 + i * 0.7, p = prog(t, at, 0.4);
+      return `<div style="width:120px;height:120px;border-radius:60px;border:3px solid var(--risk);display:flex;align-items:center;justify-content:center;font-size:54px;color:var(--risk);opacity:${p};transform:scale(${lerp(1.6, 1, p)})">✗</div>`;
+    }).join("");
+    return chapter(0, "A guessed PIN is a locked door", t) +
+      `<div style="position:absolute;left:96px;top:230px;display:flex;gap:34px">${dots}</div>` +
+      `<div class="card" style="left:96px;top:440px;width:1728px;${enter(t, 4.8)}">
+        <div class="big" style="font-size:60px;color:var(--risk)">🔒 Locked</div>
+        <div class="label">${esc(msg.replace(/Asha \d+/, "Asha"))}</div>
+        <div class="src">Even the right PIN is refused until the lock lifts. Every attempt is on the audit trail.</div></div>`;
+  },
+
+  backup(t) {
+    const none = turn("backup", 0), done = turn("backup", 1);
+    return chapter(0, "A backup before the books change", t) +
+      terminal({
+        x: 96, y: 170, w: 1728, h: 600, t, title: "tallyagent · signed in as R. Mehta (partner)", status: STATUS,
+        blocks: [
+          { at: 0.5, input: none.input },
+          { at: 1.3, lines: textLines("system", lineOf("backup", 0, "system"), 2) },
+          { at: 4.2, input: done.input, cps: 60 },
+          { at: 5.6, lines: [plain("approval", lineOf("backup", 1, "system"))] },
+        ],
+      });
+  },
+
+  reports(t) {
+    const tb = money(lineOf("reports", 0, "agent"));
+    const rows = tb.split("\n").filter((l) => /^\| [A-Z]/.test(l) && !/Ledger \|/.test(l)).slice(0, 8)
+      .map((l) => l.split("|").map((c) => c.trim()).filter(Boolean));
+    const head = tb.split("\n")[0];
+    const owed = money(lineOf("reports", 1, "agent")).split("\n").filter((l) => /^\| [A-Z]/.test(l) && !/Party \|/.test(l))
+      .map((l) => l.split("|").map((c) => c.trim()).filter(Boolean));
+    return chapter(0, "Ask, and Tally answers", t) +
+      `<div class="card" style="left:96px;top:160px;width:1060px;${enter(t, 0.4)}">
+        <div class="cardhead">“trial balance please” · ${esc(head)}</div>
+        ${rows.map(([led, grp, bal], i) => `<div class="row" style="padding:6px 0;font-size:22px;${enter(t, 1 + i * 0.22, { dy: 8, over: 0.4, blur: 2, scale: 1 })}"><span>${esc(led)} <span style="color:var(--dim);font-size:18px">${esc(grp)}</span></span><span class="amt" style="color:${/Cr/.test(bal) ? "var(--saffron)" : "var(--teal)"}">${esc(bal)}</span></div>`).join("")}</div>` +
+      `<div class="card" style="left:1200px;top:160px;width:624px;${enter(t, 4.4)}">
+        <div class="cardhead">“who owes us money?”</div>
+        ${owed.map(([p, amt, age], i) => `<div style="${enter(t, 5 + i * 0.4)};margin:14px 0">
+          <div style="display:flex;font-size:26px"><span>${esc(p)}</span><b style="margin-left:auto">${esc(amt)}</b></div>
+          <div class="bar2" style="width:100%;margin-top:8px"><i style="width:${prog(t, 5.3 + i * 0.4, 1) * 100}%;background:var(--risk)"></i></div>
+          <div class="src" style="margin-top:6px">${esc(age)}</div></div>`).join("")}</div>`;
+  },
+
+  stock(t, s) {
+    return chapter(0, "Tally's own Stock Summary", t) +
+      clipFrame(t, "Stock Summary · read where it lives", s.speed) + stepsPanel(t, s);
+  },
+
+  gstr1(t) {
+    const line1 = lineOf("close", 1, "system");
+    const n = Number((line1.match(/(\d+) supply/) || [0, 0])[1]);
+    const file = (line1.match(/written to (.+)\.$/) || ["", ""])[1];
+    const steps = ["Sales vouchers read from Tally", "Split into B2B, B2CS, HSN", "Portal JSON written"];
+    return chapter(0, "GSTR-1, ready to upload", t) +
+      steps.map((x, i) => `<div class="card" style="left:${96 + i * 584}px;top:250px;width:548px;${enter(t, 0.6 + i * 1.1)}">
+        <div class="big" style="font-size:64px;color:${i === 2 ? "var(--teal)" : "var(--saffron)"}">${i === 0 ? count(t, 0.8, n) : i === 1 ? "3" : "✓"}</div>
+        <div class="label">${x}</div></div>`).join("") +
+      steps.slice(0, 2).map((_, i) => `<div style="position:absolute;left:${644 + i * 584}px;top:340px;width:36px;height:4px;background:var(--saffron);opacity:${prog(t, 1.3 + i * 1.1, 0.4)}"></div>`).join("") +
+      `<div class="card" style="left:96px;top:560px;width:1728px;font-family:var(--mono);font-size:24px;${enter(t, 4.2)}">${esc(file.replace(/\\/g, "/"))}
+        <div class="src" style="font-family:var(--sans)">The file the GST portal's offline tool accepts. Nothing is filed on anyone's behalf.</div></div>`;
+  },
+
+  privacy(t) {
+    const opts = [
+      ["Vision", "The model reads the bill image. Fastest: 3.9 s a bill.", "var(--saffron)"],
+      ["Local OCR only", "Text is read on this machine. No image ever leaves the office.", "var(--teal)"],
+    ];
+    return chapter(0, "Your client's data, your choice", t) +
+      opts.map(([h, b, c], i) => `<div class="card" style="left:${96 + i * 884}px;top:220px;width:844px;height:330px;border-color:${c};${enter(t, 0.5 + i * 0.9)}">
+        <div class="trusthead" style="color:${c}">${h}</div><div class="label" style="font-size:28px">${b}</div>
+        <div class="src" style="font-family:var(--mono)">[bills] reader = "${i ? "ocr" : "vision"}"</div></div>`).join("") +
+      `<div class="card" style="left:96px;top:600px;width:1728px;${enter(t, 2.6)}">
+        <div class="label" style="font-size:28px">Every byte that leaves the machine is on the egress log — which model, how many bytes, which fields.</div></div>`;
+  },
+
+  doors(t) {
+    const doors = [["Terminal", "for the clerk at the desk"], ["Web", "client picker, inbox, approvals"], ["WhatsApp", "a partner approves from the phone"], ["MCP", "other AI tools call the same agent"]];
+    const cx = 960, cy = 560;
+    const core = prog(t, 0.3, 0.8);
+    return chapter(0, "One agent, every door", t) +
+      `<div style="position:absolute;left:${cx - 150}px;top:${cy - 150}px;width:300px;height:300px;border-radius:150px;background:radial-gradient(circle,#3a2408,#0b1222);border:3px solid var(--saffron);display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:800;opacity:${core};transform:scale(${lerp(0.7, 1, core)});box-shadow:0 0 ${60 * core}px rgba(255,153,51,.35)">tally<span style="color:var(--saffron)">agent</span></div>` +
+      doors.map(([h, b], i) => {
+        const ang = -Math.PI / 2 + i * Math.PI / 2 + Math.PI / 4;
+        const x = cx + Math.cos(ang) * 560, y = cy + Math.sin(ang) * 300;
+        const p = prog(t, 1.2 + i * 0.5, 0.7);
+        return `<svg style="position:absolute;left:0;top:0" width="1920" height="1080"><line x1="${cx}" y1="${cy}" x2="${lerp(cx, x, p)}" y2="${lerp(cy, y, p)}" stroke="var(--saffron)" stroke-width="2" stroke-dasharray="6 8" opacity=".7"/></svg>
+          <div class="card" style="left:${x - 210}px;top:${y - 70}px;width:420px;text-align:center;${enter(t, 1.5 + i * 0.5)}"><div class="trusthead" style="margin:0">${h}</div><div class="src" style="margin-top:6px">${b}</div></div>`;
+      }).join("") +
+      `<div class="src" style="position:absolute;left:0;right:0;top:880px;text-align:center;font-size:24px;${enter(t, 4)}">Same tools, same approvals, same audit log — whichever door the request comes in by.</div>`;
+  },
+
   title(t) {
     return `<div class="title-xl">${logo(t, 0.35)}</div>
       <div class="sweep" style="width:${prog(t, 1.3, 1.2) * 860}px"></div>
@@ -217,7 +380,7 @@ const SCENES = {
           { at: 0.5, input: tr.input, cps: 64 },
           { at: 3.0, every: 0.42, lines: tr.lines.filter((l) => l.kind === "tool").map(toolLine) },
           { at: 7.0, lines: [line("agent", md(esc(first)))] },
-          { at: 10.4, lines: [line("agent", `<span class="hl">⚠</span> ${md(esc(warning))}`)] },
+          ...(warning.trim() ? [{ at: 10.4, lines: [line("agent", `<span class="hl">⚠</span> ${md(esc(warning))}`)] }] : []),
           { at: 13.4, lines: [plain("approval", lineOf("sale", 0, "approval"))] },
         ],
       });
@@ -243,7 +406,7 @@ const SCENES = {
         <div class="top">TallyPrime <span>Day Book</span></div>
         <div class="sub"><span>${esc(D.company)}</span><span>2-Jun-2026</span></div>
         <table><tr><th>Particulars</th><th>Type</th><th>Ref</th><th class="num">Debit</th></tr>
-        <tr class="new" style="box-shadow:inset 4px 0 0 rgba(245,165,36,${0.4 + 0.6 * pulse})"><td>Acme Industries</td><td>Sales</td><td>${esc(ref)}</td><td class="num">7,552.00</td></tr></table>
+        <tr class="new" style="box-shadow:inset 4px 0 0 rgba(245,165,36,${0.4 + 0.6 * pulse})"><td>${esc(SALE.party)}</td><td>Sales</td><td>${esc(ref)}</td><td class="num">${esc(SALE.total)}</td></tr></table>
         <div class="note2">Read back from Tally after the approval. Approver on the audit trail: R. Mehta.</div></div>`;
   },
 
@@ -504,14 +667,14 @@ const SCENES = {
   end(t) {
     return `<div class="title-xl" style="top:300px">${logo(t, 0.2)}</div>
       <div class="sweep" style="top:470px;width:${prog(t, 1, 1.1) * 860}px"></div>
-      <div class="tag" style="top:510px;${enter(t, 1.4)}">Your Tally. Two clients. Two weeks.</div>`;
+      <div class="tag" style="top:510px;${enter(t, 1.4)}">The typing stops. The judgement stays.</div>`;
   },
 };
 
 // --- the frame -----------------------------------------------------------------
 
 const SPELLED = [
-  [/G S T R two B/g, "GSTR-2B"], [/G S T R one/g, "GSTR-1"], [/\bG S T\b/g, "GST"],
+  [/G S T R two B/g, "GSTR-2B"], [/G S T R one/g, "GSTR-1"], [/GSTR one/g, "GSTR-1"], [/\bG S T\b/g, "GST"],
   [/\bA I\b/g, "AI"], [/\bC A\b/g, "CA"], [/\bX M L\b/g, "XML"], [/Ctrl A/g, "Ctrl+A"],
   [/hands off/g, "hands-off"], [/hash chained/g, "hash-chained"], [/follow up/g, "follow-up"],
   [/bill wise/g, "bill-wise"], [/Sixty five percent/g, "65%"],
@@ -540,7 +703,7 @@ const TRANSITION = 0.7;
 
 function layer(s, local, alpha, out) {
   CURRENT = s.id;
-  const body = (SCENES[s.id] || (() => ""))(Math.max(0, local), s);
+  const body = (SCENES[s.act ? "act" : s.id] || (() => ""))(Math.max(0, local), s);
   const scale = out ? lerp(1, 0.97, 1 - alpha) : lerp(1.015, 1, alpha);
   return `<div class="layer" style="opacity:${alpha};transform:scale(${scale});filter:blur(${(1 - alpha) * 10}px)">${body}</div>`;
 }
@@ -563,7 +726,10 @@ window.render = function render(time) {
   }
 
   const total = T.total;
-  html += `<div class="brand">tally<i>agent</i></div>
+  const pay = s.payoff && s.id !== "act" ? prog(local, Math.max(2.5, s.duration - 3.6), 0.6) * (1 - prog(local, s.duration - 0.35, 0.3)) : 0;
+  if (s.clock && !s.act) html += `<div class="clock" style="opacity:${prog(local, 0.2, 0.6)}">${esc(s.clock)} · Mehta &amp; Co.</div>`;
+  if (pay > 0) html += `<div class="payoff" style="opacity:${pay};transform:translateY(${(1 - pay) * -18}px) scale(${lerp(0.94, 1, pay)})">${esc(s.payoff)}</div>`;
+  html += `<div class="brand" style="opacity:${1 - pay}">tally<i>agent</i></div>
     <div class="caption">${captionHtml(s, local)}</div>
     <div class="progress" style="width:${(time / total) * 100}%"></div>
     <div class="ticks">${scenes.map((x) => `<i style="left:${(x.start / total) * 100}%;opacity:${time >= x.start ? 0.9 : 0.25}"></i>`).join("")}</div>`;

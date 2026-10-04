@@ -1,5 +1,5 @@
 {
-  "total": 318.487,
+  "total": 454.777,
   "scenes": [
     {
       "id": "title",
@@ -15,7 +15,8 @@
       "duration": 13.995,
       "say": "Sixty five percent of practices say staffing is their biggest problem. And every month, for every client, someone reconciles G S T R two B by hand, while input credit quietly goes at risk.",
       "voice_at": 9.575,
-      "voice_seconds": 12.645
+      "voice_seconds": 12.645,
+      "payoff": "The work grows. The people don't."
     },
     {
       "id": "live",
@@ -23,43 +24,125 @@
       "duration": 11.99,
       "say": "Everything you are about to see ran against a real TallyPrime. When we filmed it, Tally was down. The agent restarted it, cleared the licence screen, and carried on.",
       "voice_at": 23.57,
-      "voice_seconds": 10.64
+      "voice_seconds": 10.64,
+      "clock": "7:55 AM",
+      "payoff": "Self-healing: zero people touched the machine"
+    },
+    {
+      "id": "act1",
+      "start": 35.11,
+      "duration": 4.0,
+      "say": "Follow one day at a CA firm.",
+      "voice_at": 35.56,
+      "voice_seconds": 2.24,
+      "clock": "8:00 AM",
+      "act": "The overnight run",
+      "title": "Before anyone arrives"
+    },
+    {
+      "id": "firm",
+      "start": 39.11,
+      "duration": 15.015,
+      "say": "Then the headline. Every morning, the agent runs every client. It reconciles G S T R two B, drafts the missing bills, and puts everything that needs a person in one inbox, money at risk first.",
+      "voice_at": 39.56,
+      "voice_seconds": 13.665,
+      "clock": "8:00 AM",
+      "payoff": "Every client reconciled before 9"
+    },
+    {
+      "id": "act2",
+      "start": 54.125,
+      "duration": 4.282,
+      "say": "Nine o'clock. The clerk sits down.",
+      "voice_at": 54.575,
+      "voice_seconds": 2.932,
+      "clock": "9:00 AM",
+      "act": "Writing to Tally",
+      "title": "Plain words in. A checked voucher out."
     },
     {
       "id": "people",
-      "start": 35.11,
+      "start": 58.407,
       "duration": 8.879,
       "say": "Every person has a role. A clerk drafts. A partner decides. And the software knows the difference.",
-      "voice_at": 35.56,
-      "voice_seconds": 7.529
+      "voice_at": 58.857,
+      "voice_seconds": 7.529,
+      "clock": "9:00 AM",
+      "payoff": "Clerk drafts. Partner decides."
     },
     {
       "id": "sale",
-      "start": 43.989,
-      "duration": 16.202,
-      "say": "A clerk asks for a sale in plain words. The agent checks the ledgers and the stock, works out integrated G S T from both G S T numbers, and before anyone approves, it notices six identical invoices already on that date, and says so.",
-      "voice_at": 44.439,
-      "voice_seconds": 14.852
+      "start": 67.286,
+      "duration": 12.141,
+      "say": "The clerk asks for a sale, in plain words. No voucher screen, no ledger codes. The agent checks the party, the item and the ledgers in the live books first.",
+      "voice_at": 67.736,
+      "voice_seconds": 10.791,
+      "clock": "9:01 AM",
+      "payoff": "Checked against the live books first"
+    },
+    {
+      "id": "plainwords",
+      "start": 79.427,
+      "duration": 15.18,
+      "say": "Watch the sentence become a voucher. The party, the quantity, the rate, the tax and the date each land in their field. Zenith debited, sales and output IGST credited, debits equal to credits.",
+      "voice_at": 79.877,
+      "voice_seconds": 13.83,
+      "clock": "9:01 AM",
+      "payoff": "One sentence, a valid GST voucher"
+    },
+    {
+      "id": "refusal",
+      "start": 94.607,
+      "duration": 9.724,
+      "say": "There is no Baroda branch in these books. There is Vadodara, the same city by its other name. So it asks, instead of guessing.",
+      "voice_at": 95.057,
+      "voice_seconds": 8.374,
+      "clock": "9:02 AM",
+      "payoff": "Wrong data never reaches Tally"
+    },
+    {
+      "id": "duplicate",
+      "start": 104.331,
+      "duration": 12.829,
+      "say": "Now the same Acme bill, asked for again. The agent finds the voucher already in the books, same party, date and goods, and blocks it as a duplicate instead of booking it twice.",
+      "voice_at": 104.781,
+      "voice_seconds": 11.479,
+      "clock": "9:03 AM",
+      "payoff": "Double entries caught before they happen"
     },
     {
       "id": "approval",
-      "start": 60.191,
-      "duration": 11.0,
-      "say": "The clerk cannot approve it. A partner signs in with a PIN, approves, and the voucher lands in Tally, with the partner's name on the audit trail.",
-      "voice_at": 60.641,
-      "voice_seconds": 9.126
+      "start": 117.16,
+      "duration": 12.164,
+      "say": "Nothing is posted yet. The clerk tries to approve and is refused. The partner signs in with a PIN, approves, and the voucher is read back from Tally's own Day Book.",
+      "voice_at": 117.61,
+      "voice_seconds": 10.814,
+      "clock": "9:05 AM",
+      "payoff": "Nothing posts without a partner"
+    },
+    {
+      "id": "lockout",
+      "start": 129.324,
+      "duration": 10.343,
+      "say": "And a PIN cannot be guessed. Five wrong tries and the account locks, even against the right PIN, and every attempt is on the record.",
+      "voice_at": 129.774,
+      "voice_seconds": 8.993,
+      "clock": "9:06 AM",
+      "payoff": "Five wrong PINs, locked"
     },
     {
       "id": "lands",
-      "start": 71.191,
-      "duration": 23.95,
+      "start": 139.667,
+      "duration": 18.435,
       "say": "This is the real TallyPrime. The agent opens the Day Book on its own, the partner approves, and the new sale appears on Tally's own screen.",
-      "voice_at": 71.641,
+      "voice_at": 140.117,
       "voice_seconds": 8.78,
+      "clock": "9:06 AM",
+      "payoff": "In Tally's own Day Book, seconds later",
       "clip": "lands",
       "speed": 2.0,
-      "clip_at": 71.791,
-      "clip_seconds": 45.1,
+      "clip_at": 140.267,
+      "clip_seconds": 34.07,
       "events": [
         {
           "t": 1.2,
@@ -67,87 +150,56 @@
           "text": "opening Day Book"
         },
         {
-          "t": 24.86,
+          "t": 19.28,
           "kind": "say",
           "text": "opening Day Book"
         }
       ]
     },
     {
-      "id": "refusal",
-      "start": 95.141,
-      "duration": 9.724,
-      "say": "There is no Baroda branch in these books. There is Vadodara, the same city by its other name. So it asks, instead of guessing.",
-      "voice_at": 95.591,
-      "voice_seconds": 8.374
-    },
-    {
-      "id": "clients",
-      "start": 104.865,
-      "duration": 11.813,
-      "say": "One install serves the whole practice. Each client has its own books, its own queue, and its own consent. A client nobody has enabled cannot be written to at all.",
-      "voice_at": 105.315,
-      "voice_seconds": 10.463
+      "id": "act3",
+      "start": 158.102,
+      "duration": 4.0,
+      "say": "Ten o'clock. The bills arrive.",
+      "voice_at": 158.552,
+      "voice_seconds": 2.539,
+      "clock": "10:00 AM",
+      "act": "Bills and bank",
+      "title": "Paper in, entries out, every rupee matched"
     },
     {
       "id": "bills",
-      "start": 116.678,
+      "start": 162.102,
       "duration": 14.924,
       "say": "A pile of scanned bills. Each one is read on this machine, and drafted, or set aside for a person. On bills photographed the way clients send them, every field read right, and the unreadable one was refused.",
-      "voice_at": 117.128,
-      "voice_seconds": 13.574
+      "voice_at": 162.552,
+      "voice_seconds": 13.574,
+      "clock": "10:00 AM",
+      "payoff": "Unreadable bills refused, not guessed"
     },
     {
       "id": "invoice",
-      "start": 131.602,
+      "start": 177.026,
       "duration": 22.007,
       "say": "Here is one of those bills, read field by field: the supplier, the GSTIN, the invoice number, the taxable value and the tax. From it the agent drafts the purchase. Purchases and input IGST debited, the supplier credited, debits equal to credits, every check passed. Then it waits for a partner.",
-      "voice_at": 132.052,
-      "voice_seconds": 20.657
-    },
-    {
-      "id": "matching",
-      "start": 153.609,
-      "duration": 22.936,
-      "say": "Then the matching. Each line on the bank statement is matched to its voucher in Tally on the exact amount, then the date. A credit with no voucher becomes a proposed receipt, a debit a proposed payment. And G S T R two B is matched to the purchase register on the supplier's GSTIN and invoice number, so a supplier who has not filed is caught before the credit is claimed.",
-      "voice_at": 154.059,
-      "voice_seconds": 21.586
-    },
-    {
-      "id": "firm",
-      "start": 176.545,
-      "duration": 15.015,
-      "say": "Then the headline. Every morning, the agent runs every client. It reconciles G S T R two B, drafts the missing bills, and puts everything that needs a person in one inbox, money at risk first.",
-      "voice_at": 176.995,
-      "voice_seconds": 13.665
-    },
-    {
-      "id": "followup",
-      "start": 191.56,
-      "duration": 9.597,
-      "say": "A supplier who has not filed is not just flagged. The credit goes on a deferred ledger, and the follow up letter is already written.",
-      "voice_at": 192.01,
-      "voice_seconds": 8.247
-    },
-    {
-      "id": "autonomy",
-      "start": 201.157,
-      "duration": 16.636,
-      "say": "This is how throughput grows. A partner lets a client's work earn hands off posting. After a run of clean approvals, that kind of entry posts by itself, never above what a person has approved. One correction, and it goes back to waiting.",
-      "voice_at": 201.607,
-      "voice_seconds": 15.286
+      "voice_at": 177.476,
+      "voice_seconds": 20.657,
+      "clock": "10:05 AM",
+      "payoff": "Scan to balanced voucher, every check passed"
     },
     {
       "id": "keyed",
-      "start": 217.793,
-      "duration": 61.165,
+      "start": 199.033,
+      "duration": 35.75,
       "say": "Where X M L is not enough, the agent works Tally's own screens. The red ring goes to each field before it types, the caption names every key first, and a partner approves before Ctrl A accepts the voucher.",
-      "voice_at": 218.243,
+      "voice_at": 199.483,
       "voice_seconds": 13.794,
+      "clock": "11:00 AM",
+      "payoff": "Where the API stops, it types, and you watch every key",
       "clip": "payment",
       "speed": 2.0,
-      "clip_at": 218.393,
-      "clip_seconds": 119.53,
+      "clip_at": 199.633,
+      "clip_seconds": 68.7,
       "events": [
         {
           "t": 1.2,
@@ -155,168 +207,463 @@
           "text": "opening Create Voucher"
         },
         {
-          "t": 13.31,
+          "t": 15.38,
           "kind": "say",
           "text": "choose the Payment voucher type: f5"
         },
         {
-          "t": 18.07,
+          "t": 16.97,
           "kind": "done",
           "text": "choose the Payment voucher type: f5"
         },
         {
-          "t": 20.35,
+          "t": 17.14,
           "kind": "say",
           "text": "open the date field: f2"
         },
         {
-          "t": 25.12,
+          "t": 18.73,
           "kind": "done",
           "text": "open the date field: f2"
         },
         {
-          "t": 27.77,
+          "t": 20.9,
           "kind": "say",
           "text": "the voucher date: type \"02-06-2026\""
         },
         {
-          "t": 33.52,
+          "t": 23.06,
           "kind": "done",
           "text": "the voucher date: type \"02-06-2026\""
         },
         {
-          "t": 35.75,
+          "t": 25.39,
           "kind": "say",
           "text": "the account to pay from: type \"Cash\""
         },
         {
-          "t": 40.69,
+          "t": 27.15,
+          "kind": "see",
+          "text": "Accounting Voucher Creation - cursor in Account - Enter ledger account"
+        },
+        {
+          "t": 27.36,
           "kind": "done",
           "text": "the account to pay from: type \"Cash\""
         },
         {
-          "t": 43.79,
+          "t": 30.5,
           "kind": "say",
           "text": "what it is being spent on: type \"Bank Charges\""
         },
         {
-          "t": 49.63,
+          "t": 32.72,
           "kind": "done",
           "text": "what it is being spent on: type \"Bank Charges\""
         },
         {
-          "t": 51.99,
+          "t": 32.89,
           "kind": "say",
           "text": "the amount: type \"150.00\""
         },
         {
-          "t": 57.34,
+          "t": 34.8,
           "kind": "done",
           "text": "the amount: type \"150.00\""
         },
         {
-          "t": 59.61,
+          "t": 37.5,
           "kind": "say",
           "text": "the cost category: type \"Branches\""
         },
         {
-          "t": 64.63,
+          "t": 39.57,
           "kind": "done",
           "text": "the cost category: type \"Branches\""
         },
         {
-          "t": 64.63,
+          "t": 39.57,
           "kind": "say",
           "text": "the cost centre: type \"Ahmedabad\""
         },
         {
-          "t": 69.73,
+          "t": 41.58,
           "kind": "done",
           "text": "the cost centre: type \"Ahmedabad\""
         },
         {
-          "t": 69.73,
+          "t": 41.58,
           "kind": "say",
           "text": "the amount against it: type \"150.00\""
         },
         {
-          "t": 74.67,
+          "t": 43.53,
           "kind": "done",
           "text": "the amount against it: type \"150.00\""
         },
         {
-          "t": 74.67,
+          "t": 43.53,
           "kind": "say",
           "text": "finish the allocation: enter"
         },
         {
-          "t": 79.25,
+          "t": 45.11,
           "kind": "done",
           "text": "finish the allocation: enter"
         },
         {
-          "t": 92.22,
+          "t": 48.13,
           "kind": "say",
           "text": "no more lines: enter"
         },
         {
-          "t": 97.76,
+          "t": 49.86,
           "kind": "done",
           "text": "no more lines: enter"
         },
         {
-          "t": 100.17,
+          "t": 50.02,
           "kind": "say",
           "text": "the narration: type \"keyed by the agent on camera\""
         },
         {
-          "t": 105.88,
+          "t": 55.07,
           "kind": "done",
           "text": "the narration: type \"keyed by the agent on camera\""
         },
         {
-          "t": 108.16,
+          "t": 55.23,
           "kind": "say",
           "text": "accept the voucher: ctrl+a"
         },
         {
-          "t": 115.61,
+          "t": 61.66,
+          "kind": "done",
+          "text": "accept the voucher: ctrl+a"
+        },
+        {
+          "t": 66.64,
+          "kind": "see",
+          "text": "Cost Allocations for : Bank Charges - cursor in Name of Cost Centre - accept the cost allocation entry (A: Accept) or add another cost centre"
+        }
+      ]
+    },
+    {
+      "id": "billwise",
+      "start": 234.783,
+      "duration": 34.715,
+      "say": "When Tally interrupts with a bill wise screen, the agent recognises it, allocates on account, and carries on. Anything it does not recognise, it stops on, instead of typing into it.",
+      "voice_at": 235.233,
+      "voice_seconds": 11.613,
+      "clock": "11:02 AM",
+      "payoff": "It recognises Tally's popups, or it stops",
+      "clip": "receipt",
+      "speed": 2.0,
+      "clip_at": 235.383,
+      "clip_seconds": 66.63,
+      "events": [
+        {
+          "t": 1.2,
+          "kind": "say",
+          "text": "opening Create Voucher"
+        },
+        {
+          "t": 12.28,
+          "kind": "say",
+          "text": "choose the Receipt voucher type: f6"
+        },
+        {
+          "t": 13.87,
+          "kind": "done",
+          "text": "choose the Receipt voucher type: f6"
+        },
+        {
+          "t": 16.48,
+          "kind": "say",
+          "text": "open the date field: f2"
+        },
+        {
+          "t": 18.17,
+          "kind": "done",
+          "text": "open the date field: f2"
+        },
+        {
+          "t": 20.98,
+          "kind": "say",
+          "text": "the voucher date: type \"02-06-2026\""
+        },
+        {
+          "t": 23.08,
+          "kind": "done",
+          "text": "the voucher date: type \"02-06-2026\""
+        },
+        {
+          "t": 25.32,
+          "kind": "say",
+          "text": "the account received into: type \"Cash\""
+        },
+        {
+          "t": 27.34,
+          "kind": "done",
+          "text": "the account received into: type \"Cash\""
+        },
+        {
+          "t": 30.39,
+          "kind": "say",
+          "text": "who or what it came from: type \"Zenith Exports\""
+        },
+        {
+          "t": 32.7,
+          "kind": "done",
+          "text": "who or what it came from: type \"Zenith Exports\""
+        },
+        {
+          "t": 32.87,
+          "kind": "say",
+          "text": "the amount: type \"250.00\""
+        },
+        {
+          "t": 34.85,
+          "kind": "done",
+          "text": "the amount: type \"250.00\""
+        },
+        {
+          "t": 37.97,
+          "kind": "say",
+          "text": "allocate it on account: type \"On Account\""
+        },
+        {
+          "t": 39.99,
+          "kind": "done",
+          "text": "allocate it on account: type \"On Account\""
+        },
+        {
+          "t": 39.99,
+          "kind": "say",
+          "text": "accept the amount: enter"
+        },
+        {
+          "t": 41.57,
+          "kind": "done",
+          "text": "accept the amount: enter"
+        },
+        {
+          "t": 42.11,
+          "kind": "say",
+          "text": "finish the bill allocation: enter"
+        },
+        {
+          "t": 43.77,
+          "kind": "done",
+          "text": "finish the bill allocation: enter"
+        },
+        {
+          "t": 46.15,
+          "kind": "say",
+          "text": "no more lines: enter"
+        },
+        {
+          "t": 47.94,
+          "kind": "done",
+          "text": "no more lines: enter"
+        },
+        {
+          "t": 48.09,
+          "kind": "say",
+          "text": "the narration: type \"receipt keyed by the agent on camera\""
+        },
+        {
+          "t": 53.22,
+          "kind": "done",
+          "text": "the narration: type \"receipt keyed by the agent on camera\""
+        },
+        {
+          "t": 53.38,
+          "kind": "say",
+          "text": "accept the voucher: ctrl+a"
+        },
+        {
+          "t": 58.55,
+          "kind": "see",
+          "text": "Accounting Voucher Creation - cursor in Narration - entering narration text or accepting the voucher"
+        },
+        {
+          "t": 59.5,
           "kind": "done",
           "text": "accept the voucher: ctrl+a"
         }
       ]
     },
     {
+      "id": "matching",
+      "start": 269.498,
+      "duration": 22.936,
+      "say": "Then the matching. Each line on the bank statement is matched to its voucher in Tally on the exact amount, then the date. A credit with no voucher becomes a proposed receipt, a debit a proposed payment. And G S T R two B is matched to the purchase register on the supplier's GSTIN and invoice number, so a supplier who has not filed is caught before the credit is claimed.",
+      "voice_at": 269.948,
+      "voice_seconds": 21.586,
+      "clock": "12:00 PM",
+      "payoff": "Matched on amount, date, GSTIN and invoice number"
+    },
+    {
+      "id": "followup",
+      "start": 292.434,
+      "duration": 9.597,
+      "say": "A supplier who has not filed is not just flagged. The credit goes on a deferred ledger, and the follow up letter is already written.",
+      "voice_at": 292.884,
+      "voice_seconds": 8.247,
+      "clock": "2:00 PM",
+      "payoff": "Supplier chased, credit not lost"
+    },
+    {
+      "id": "act4",
+      "start": 302.031,
+      "duration": 4.388,
+      "say": "Three o'clock. The partner has questions.",
+      "voice_at": 302.481,
+      "voice_seconds": 3.038,
+      "clock": "3:00 PM",
+      "act": "Answers and returns",
+      "title": "Reports, GSTR-1, the month-end close"
+    },
+    {
+      "id": "reports",
+      "start": 306.419,
+      "duration": 13.947,
+      "say": "Ask for the trial balance, and Tally answers, eighteen ledgers, debits equal to credits. Ask who owes money, and the ageing comes back with it. Read live, never from the model's memory.",
+      "voice_at": 306.869,
+      "voice_seconds": 12.597,
+      "clock": "3:00 PM",
+      "payoff": "Read live from Tally, not from memory"
+    },
+    {
+      "id": "stock",
+      "start": 320.366,
+      "duration": 14.133,
+      "say": "The same for stock. The agent opens Tally's own Stock Summary, so the partner sees it where it lives.",
+      "voice_at": 320.816,
+      "voice_seconds": 6.263,
+      "clock": "3:05 PM",
+      "payoff": "Tally's own screen, opened for you",
+      "clip": "stock",
+      "speed": 1.5,
+      "clip_at": 320.966,
+      "clip_seconds": 19.1,
+      "events": [
+        {
+          "t": 1.2,
+          "kind": "say",
+          "text": "opening Stock Summary"
+        }
+      ]
+    },
+    {
       "id": "close",
-      "start": 278.958,
+      "start": 334.499,
       "duration": 12.67,
       "say": "On the first of the month, one close pack. Negative cash, duplicate bills, and input credit at risk in rupees. And G S T R one, checked before it is filed.",
-      "voice_at": 279.408,
-      "voice_seconds": 11.32
+      "voice_at": 334.949,
+      "voice_seconds": 11.32,
+      "clock": "4:00 PM",
+      "payoff": "Close pack ready, nothing posted"
+    },
+    {
+      "id": "gstr1",
+      "start": 347.169,
+      "duration": 12.142,
+      "say": "GSTR one is built from the sales vouchers in Tally, split for the return, and written as the JSON the portal's offline tool accepts. Nothing is filed on anyone's behalf.",
+      "voice_at": 347.619,
+      "voice_seconds": 10.792,
+      "clock": "4:30 PM",
+      "payoff": "GSTR-1 JSON, ready to upload"
+    },
+    {
+      "id": "backup",
+      "start": 359.311,
+      "duration": 9.0,
+      "say": "Before the books change, a backup. The agent knows when the last one was taken, and a partner puts a new one on the record.",
+      "voice_at": 359.761,
+      "voice_seconds": 7.544,
+      "clock": "5:00 PM",
+      "payoff": "Backed up before the books change"
+    },
+    {
+      "id": "act5",
+      "start": 368.311,
+      "duration": 4.54,
+      "say": "Six o'clock. The firm, as a whole.",
+      "voice_at": 368.761,
+      "voice_seconds": 3.19,
+      "clock": "6:00 PM",
+      "act": "The whole firm",
+      "title": "Every client, every door, every action on record"
+    },
+    {
+      "id": "clients",
+      "start": 372.851,
+      "duration": 11.813,
+      "say": "One install serves the whole practice. Each client has its own books, its own queue, and its own consent. A client nobody has enabled cannot be written to at all.",
+      "voice_at": 373.301,
+      "voice_seconds": 10.463,
+      "clock": "6:00 PM",
+      "payoff": "A client nobody enabled can't be written to"
+    },
+    {
+      "id": "autonomy",
+      "start": 384.664,
+      "duration": 16.636,
+      "say": "This is how throughput grows. A partner lets a client's work earn hands off posting. After a run of clean approvals, that kind of entry posts by itself, never above what a person has approved. One correction, and it goes back to waiting.",
+      "voice_at": 385.114,
+      "voice_seconds": 15.286,
+      "clock": "6:10 PM",
+      "payoff": "Trust earned, not assumed"
+    },
+    {
+      "id": "privacy",
+      "start": 401.3,
+      "duration": 12.658,
+      "say": "Each firm decides how bills are read. Vision is fastest. Local OCR keeps every image inside the office. Either way, every byte that leaves the machine is logged.",
+      "voice_at": 401.75,
+      "voice_seconds": 11.308,
+      "clock": "6:20 PM",
+      "payoff": "Your client's data, your choice"
+    },
+    {
+      "id": "doors",
+      "start": 413.958,
+      "duration": 13.96,
+      "say": "The clerk uses the terminal. The partner approves from the web, or from WhatsApp. Other AI tools reach it through MCP. One agent, the same approvals and the same log behind every door.",
+      "voice_at": 414.408,
+      "voice_seconds": 12.61,
+      "clock": "6:30 PM",
+      "payoff": "One agent, every door"
     },
     {
       "id": "audit",
-      "start": 291.628,
+      "start": 427.918,
       "duration": 9.839,
       "say": "Every sign in, every grant, every approval, is on a hash chained log. It verifies, so you know nobody altered it.",
-      "voice_at": 292.078,
-      "voice_seconds": 8.489
+      "voice_at": 428.368,
+      "voice_seconds": 8.489,
+      "clock": "7:00 PM",
+      "payoff": "Every action on a tamper-evident log"
     },
     {
       "id": "trust",
-      "start": 301.467,
+      "start": 437.757,
       "duration": 10.02,
       "say": "Writes are pinned to the books a partner enabled. The model can run inside your office. And nothing reaches a client's books without a name on it.",
-      "voice_at": 301.917,
-      "voice_seconds": 8.67
+      "voice_at": 438.207,
+      "voice_seconds": 8.67,
+      "clock": "7:00 PM",
+      "payoff": "Safe by default"
     },
     {
       "id": "end",
-      "start": 311.487,
+      "start": 447.777,
       "duration": 7.0,
-      "say": "Your Tally. Two clients. Two weeks. tallyagent.",
-      "voice_at": 311.937,
-      "voice_seconds": 4.985
+      "say": "The typing stops. The judgement stays. tallyagent.",
+      "voice_at": 448.227,
+      "voice_seconds": 4.398
     }
   ]
 }

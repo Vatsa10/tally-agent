@@ -13,108 +13,250 @@
     {
       "id": "problem",
       "min": 9,
-      "say": "Sixty five percent of practices say staffing is their biggest problem. And every month, for every client, someone reconciles G S T R two B by hand, while input credit quietly goes at risk."
+      "say": "Sixty five percent of practices say staffing is their biggest problem. And every month, for every client, someone reconciles G S T R two B by hand, while input credit quietly goes at risk.",
+      "payoff": "The work grows. The people don't."
     },
     {
       "id": "live",
       "min": 7,
-      "say": "Everything you are about to see ran against a real TallyPrime. When we filmed it, Tally was down. The agent restarted it, cleared the licence screen, and carried on."
+      "say": "Everything you are about to see ran against a real TallyPrime. When we filmed it, Tally was down. The agent restarted it, cleared the licence screen, and carried on.",
+      "payoff": "Self-healing: zero people touched the machine",
+      "clock": "7:55 AM"
+    },
+    {
+      "id": "act1",
+      "act": "The overnight run",
+      "clock": "8:00 AM",
+      "title": "Before anyone arrives",
+      "say": "Follow one day at a CA firm.",
+      "min": 4
+    },
+    {
+      "id": "firm",
+      "min": 14,
+      "say": "Then the headline. Every morning, the agent runs every client. It reconciles G S T R two B, drafts the missing bills, and puts everything that needs a person in one inbox, money at risk first.",
+      "clock": "8:00 AM",
+      "payoff": "Every client reconciled before 9"
+    },
+    {
+      "id": "act2",
+      "act": "Writing to Tally",
+      "clock": "9:00 AM",
+      "title": "Plain words in. A checked voucher out.",
+      "say": "Nine o'clock. The clerk sits down.",
+      "min": 4
     },
     {
       "id": "people",
       "min": 7,
-      "say": "Every person has a role. A clerk drafts. A partner decides. And the software knows the difference."
+      "say": "Every person has a role. A clerk drafts. A partner decides. And the software knows the difference.",
+      "clock": "9:00 AM",
+      "payoff": "Clerk drafts. Partner decides."
     },
     {
       "id": "sale",
-      "min": 15,
-      "say": "A clerk asks for a sale in plain words. The agent checks the ledgers and the stock, works out integrated G S T from both G S T numbers, and before anyone approves, it notices six identical invoices already on that date, and says so."
+      "say": "The clerk asks for a sale, in plain words. No voucher screen, no ledger codes. The agent checks the party, the item and the ledgers in the live books first.",
+      "clock": "9:01 AM",
+      "min": 10,
+      "payoff": "Checked against the live books first"
+    },
+    {
+      "id": "plainwords",
+      "say": "Watch the sentence become a voucher. The party, the quantity, the rate, the tax and the date each land in their field. Zenith debited, sales and output IGST credited, debits equal to credits.",
+      "clock": "9:01 AM",
+      "min": 13,
+      "payoff": "One sentence, a valid GST voucher"
+    },
+    {
+      "id": "refusal",
+      "min": 7,
+      "say": "There is no Baroda branch in these books. There is Vadodara, the same city by its other name. So it asks, instead of guessing.",
+      "clock": "9:02 AM",
+      "payoff": "Wrong data never reaches Tally"
+    },
+    {
+      "id": "duplicate",
+      "say": "Now the same Acme bill, asked for again. The agent finds the voucher already in the books, same party, date and goods, and blocks it as a duplicate instead of booking it twice.",
+      "clock": "9:03 AM",
+      "min": 10,
+      "payoff": "Double entries caught before they happen"
     },
     {
       "id": "approval",
-      "min": 11,
-      "say": "The clerk cannot approve it. A partner signs in with a PIN, approves, and the voucher lands in Tally, with the partner's name on the audit trail."
+      "say": "Nothing is posted yet. The clerk tries to approve and is refused. The partner signs in with a PIN, approves, and the voucher is read back from Tally's own Day Book.",
+      "clock": "9:05 AM",
+      "min": 10,
+      "payoff": "Nothing posts without a partner"
+    },
+    {
+      "id": "lockout",
+      "say": "And a PIN cannot be guessed. Five wrong tries and the account locks, even against the right PIN, and every attempt is on the record.",
+      "clock": "9:06 AM",
+      "min": 8,
+      "payoff": "Five wrong PINs, locked"
     },
     {
       "id": "lands",
       "clip": "lands",
       "speed": 2.0,
       "min": 8,
-      "say": "This is the real TallyPrime. The agent opens the Day Book on its own, the partner approves, and the new sale appears on Tally's own screen."
+      "say": "This is the real TallyPrime. The agent opens the Day Book on its own, the partner approves, and the new sale appears on Tally's own screen.",
+      "clock": "9:06 AM",
+      "payoff": "In Tally's own Day Book, seconds later"
     },
     {
-      "id": "refusal",
-      "min": 7,
-      "say": "There is no Baroda branch in these books. There is Vadodara, the same city by its other name. So it asks, instead of guessing."
-    },
-    {
-      "id": "clients",
-      "min": 9,
-      "say": "One install serves the whole practice. Each client has its own books, its own queue, and its own consent. A client nobody has enabled cannot be written to at all."
+      "id": "act3",
+      "act": "Bills and bank",
+      "clock": "10:00 AM",
+      "title": "Paper in, entries out, every rupee matched",
+      "say": "Ten o'clock. The bills arrive.",
+      "min": 4
     },
     {
       "id": "bills",
       "min": 10,
-      "say": "A pile of scanned bills. Each one is read on this machine, and drafted, or set aside for a person. On bills photographed the way clients send them, every field read right, and the unreadable one was refused."
+      "say": "A pile of scanned bills. Each one is read on this machine, and drafted, or set aside for a person. On bills photographed the way clients send them, every field read right, and the unreadable one was refused.",
+      "clock": "10:00 AM",
+      "payoff": "Unreadable bills refused, not guessed"
     },
     {
       "id": "invoice",
       "min": 12,
-      "say": "Here is one of those bills, read field by field: the supplier, the GSTIN, the invoice number, the taxable value and the tax. From it the agent drafts the purchase. Purchases and input IGST debited, the supplier credited, debits equal to credits, every check passed. Then it waits for a partner."
-    },
-    {
-      "id": "matching",
-      "min": 12,
-      "say": "Then the matching. Each line on the bank statement is matched to its voucher in Tally on the exact amount, then the date. A credit with no voucher becomes a proposed receipt, a debit a proposed payment. And G S T R two B is matched to the purchase register on the supplier's GSTIN and invoice number, so a supplier who has not filed is caught before the credit is claimed."
-    },
-    {
-      "id": "firm",
-      "min": 14,
-      "say": "Then the headline. Every morning, the agent runs every client. It reconciles G S T R two B, drafts the missing bills, and puts everything that needs a person in one inbox, money at risk first."
-    },
-    {
-      "id": "followup",
-      "min": 9,
-      "say": "A supplier who has not filed is not just flagged. The credit goes on a deferred ledger, and the follow up letter is already written."
-    },
-    {
-      "id": "autonomy",
-      "min": 14,
-      "say": "This is how throughput grows. A partner lets a client's work earn hands off posting. After a run of clean approvals, that kind of entry posts by itself, never above what a person has approved. One correction, and it goes back to waiting."
+      "say": "Here is one of those bills, read field by field: the supplier, the GSTIN, the invoice number, the taxable value and the tax. From it the agent drafts the purchase. Purchases and input IGST debited, the supplier credited, debits equal to credits, every check passed. Then it waits for a partner.",
+      "clock": "10:05 AM",
+      "payoff": "Scan to balanced voucher, every check passed"
     },
     {
       "id": "keyed",
       "clip": "payment",
       "speed": 2.0,
       "min": 8,
-      "say": "Where X M L is not enough, the agent works Tally's own screens. The red ring goes to each field before it types, the caption names every key first, and a partner approves before Ctrl A accepts the voucher."
+      "say": "Where X M L is not enough, the agent works Tally's own screens. The red ring goes to each field before it types, the caption names every key first, and a partner approves before Ctrl A accepts the voucher.",
+      "clock": "11:00 AM",
+      "payoff": "Where the API stops, it types, and you watch every key"
     },
     {
       "id": "billwise",
       "clip": "receipt",
       "speed": 2.0,
       "min": 8,
-      "say": "When Tally interrupts with a bill wise screen, the agent recognises it, allocates on account, and carries on. Anything it does not recognise, it stops on, instead of typing into it."
+      "say": "When Tally interrupts with a bill wise screen, the agent recognises it, allocates on account, and carries on. Anything it does not recognise, it stops on, instead of typing into it.",
+      "clock": "11:02 AM",
+      "payoff": "It recognises Tally's popups, or it stops"
+    },
+    {
+      "id": "matching",
+      "min": 12,
+      "say": "Then the matching. Each line on the bank statement is matched to its voucher in Tally on the exact amount, then the date. A credit with no voucher becomes a proposed receipt, a debit a proposed payment. And G S T R two B is matched to the purchase register on the supplier's GSTIN and invoice number, so a supplier who has not filed is caught before the credit is claimed.",
+      "clock": "12:00 PM",
+      "payoff": "Matched on amount, date, GSTIN and invoice number"
+    },
+    {
+      "id": "followup",
+      "min": 9,
+      "say": "A supplier who has not filed is not just flagged. The credit goes on a deferred ledger, and the follow up letter is already written.",
+      "clock": "2:00 PM",
+      "payoff": "Supplier chased, credit not lost"
+    },
+    {
+      "id": "act4",
+      "act": "Answers and returns",
+      "clock": "3:00 PM",
+      "title": "Reports, GSTR-1, the month-end close",
+      "say": "Three o'clock. The partner has questions.",
+      "min": 4
+    },
+    {
+      "id": "reports",
+      "say": "Ask for the trial balance, and Tally answers, eighteen ledgers, debits equal to credits. Ask who owes money, and the ageing comes back with it. Read live, never from the model's memory.",
+      "clock": "3:00 PM",
+      "min": 12,
+      "payoff": "Read live from Tally, not from memory"
+    },
+    {
+      "id": "stock",
+      "say": "The same for stock. The agent opens Tally's own Stock Summary, so the partner sees it where it lives.",
+      "clip": "stock",
+      "speed": 1.5,
+      "clock": "3:05 PM",
+      "min": 7,
+      "payoff": "Tally's own screen, opened for you"
     },
     {
       "id": "close",
       "min": 9,
-      "say": "On the first of the month, one close pack. Negative cash, duplicate bills, and input credit at risk in rupees. And G S T R one, checked before it is filed."
+      "say": "On the first of the month, one close pack. Negative cash, duplicate bills, and input credit at risk in rupees. And G S T R one, checked before it is filed.",
+      "clock": "4:00 PM",
+      "payoff": "Close pack ready, nothing posted"
+    },
+    {
+      "id": "gstr1",
+      "say": "GSTR one is built from the sales vouchers in Tally, split for the return, and written as the JSON the portal's offline tool accepts. Nothing is filed on anyone's behalf.",
+      "clock": "4:30 PM",
+      "min": 10,
+      "payoff": "GSTR-1 JSON, ready to upload"
+    },
+    {
+      "id": "backup",
+      "say": "Before the books change, a backup. The agent knows when the last one was taken, and a partner puts a new one on the record.",
+      "clock": "5:00 PM",
+      "min": 9,
+      "payoff": "Backed up before the books change"
+    },
+    {
+      "id": "act5",
+      "act": "The whole firm",
+      "clock": "6:00 PM",
+      "title": "Every client, every door, every action on record",
+      "say": "Six o'clock. The firm, as a whole.",
+      "min": 4
+    },
+    {
+      "id": "clients",
+      "min": 9,
+      "say": "One install serves the whole practice. Each client has its own books, its own queue, and its own consent. A client nobody has enabled cannot be written to at all.",
+      "clock": "6:00 PM",
+      "payoff": "A client nobody enabled can't be written to"
+    },
+    {
+      "id": "autonomy",
+      "min": 14,
+      "say": "This is how throughput grows. A partner lets a client's work earn hands off posting. After a run of clean approvals, that kind of entry posts by itself, never above what a person has approved. One correction, and it goes back to waiting.",
+      "clock": "6:10 PM",
+      "payoff": "Trust earned, not assumed"
+    },
+    {
+      "id": "privacy",
+      "say": "Each firm decides how bills are read. Vision is fastest. Local OCR keeps every image inside the office. Either way, every byte that leaves the machine is logged.",
+      "clock": "6:20 PM",
+      "min": 10,
+      "payoff": "Your client's data, your choice"
+    },
+    {
+      "id": "doors",
+      "say": "The clerk uses the terminal. The partner approves from the web, or from WhatsApp. Other AI tools reach it through MCP. One agent, the same approvals and the same log behind every door.",
+      "clock": "6:30 PM",
+      "min": 11,
+      "payoff": "One agent, every door"
     },
     {
       "id": "audit",
       "min": 8,
-      "say": "Every sign in, every grant, every approval, is on a hash chained log. It verifies, so you know nobody altered it."
+      "say": "Every sign in, every grant, every approval, is on a hash chained log. It verifies, so you know nobody altered it.",
+      "clock": "7:00 PM",
+      "payoff": "Every action on a tamper-evident log"
     },
     {
       "id": "trust",
       "min": 9,
-      "say": "Writes are pinned to the books a partner enabled. The model can run inside your office. And nothing reaches a client's books without a name on it."
+      "say": "Writes are pinned to the books a partner enabled. The model can run inside your office. And nothing reaches a client's books without a name on it.",
+      "clock": "7:00 PM",
+      "payoff": "Safe by default"
     },
     {
       "id": "end",
       "min": 7,
-      "say": "Your Tally. Two clients. Two weeks. tallyagent."
+      "say": "The typing stops. The judgement stays. tallyagent."
     }
   ]
 }

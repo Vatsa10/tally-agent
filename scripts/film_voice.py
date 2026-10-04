@@ -67,6 +67,9 @@ async def main() -> int:
             "say": scene["say"], "voice_at": round(cursor + LEAD_IN, 3),
             "voice_seconds": round(seconds, 3),
         }
+        # What the frame draws around the scene: the time of day in the
+        # firm's story, the one-line payoff, an act's title.
+        entry.update({k: scene[k] for k in ("clock", "payoff", "act", "title") if k in scene})
         if clip:
             speed = float(scene.get("speed", 1.0))
             # The footage sets the floor: the scene lasts as long as the clip

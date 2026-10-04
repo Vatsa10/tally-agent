@@ -80,7 +80,7 @@ async def main() -> int:
     # 2. a sale, drafted by a clerk, refused, approved by a partner
     sale = await say(
         "sale",
-        "raise a sales invoice to Acme Industries for 2 Widget at 3200 each, 18% GST, "
+        "raise a sales invoice to Zenith Exports for 3 Widget at 3100 each, 18% GST, "
         f"dated 2 June 2026, reference FILM-{stamp}",
     )
     ticket = next((str(t) for line in sale for t in [line["text"]]
@@ -90,8 +90,10 @@ async def main() -> int:
     await say("sale", "/signin R. Mehta 4821")
     await say("sale", f"/approve {ticket}")
 
-    # 3. what it refuses
+    # 3. what it refuses, and what it questions
     await say("refusal", "book 100 rent to the Baroda branch")
+    await say("duplicate", "raise a sales invoice to Acme Industries for 2 Widget at 3200 "
+                           "each, 18% GST, dated 2 June 2026")
 
     # 4. many clients, and consent
     await say("clients", "/client")
@@ -99,6 +101,21 @@ async def main() -> int:
     await say("clients", "/client sharma")
     await say("clients", "/consent")
     await say("clients", "/client demo")
+
+    # 4b. a PIN guessed at is a locked account. A throwaway film user, so the
+    # real clerk and partner are never locked out, disabled straight after.
+    people = wired.services.people
+    temp = f"Asha {stamp}"
+    people.add(temp, "clerk", "2468", by="film")
+    for _ in range(5):
+        await say("lockout", f"/signin {temp} 1111")
+    await say("lockout", f"/signin {temp} 2468")
+    people.disable(temp, by="film")
+    await say("lockout", "/signin R. Mehta 4821")
+
+    # 4c. a backup before the books are written to
+    await say("backup", "/backup")
+    await say("backup", "/backup confirm D:/TallyBackups/TA-Demo-Traders-2026-06-03")
 
     # 5. reports read live
     await say("reports", "trial balance please")

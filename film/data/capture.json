@@ -31,73 +31,55 @@
     ],
     "sale": [
       {
-        "input": "raise a sales invoice to Acme Industries for 2 Widget at 3200 each, 18% GST, dated 2 June 2026, reference FILM-19665",
-        "seconds": 47.2,
+        "input": "raise a sales invoice to Zenith Exports for 3 Widget at 3100 each, 18% GST, dated 2 June 2026, reference FILM-27281",
+        "seconds": 11.8,
         "lines": [
           {
             "kind": "tool",
-            "text": "resolve_ledger_alias  2156ms  5876+170 tok  22681B",
+            "text": "resolve_ledger_alias  1835ms  5876+109 tok  22680B",
             "tool": "resolve_ledger_alias",
-            "detail": "'Acme Industries' is an existing ledger."
+            "detail": "'Zenith Exports' is an existing ledger."
           },
           {
             "kind": "tool",
-            "text": "list_stock_items  2156ms  5876+170 tok  22681B",
+            "text": "list_stock_items  1835ms  5876+109 tok  22680B",
             "tool": "list_stock_items",
             "detail": "2 stock item(s)."
           },
           {
             "kind": "tool",
-            "text": "list_ledgers  2156ms  5876+170 tok  22681B",
-            "tool": "list_ledgers",
-            "detail": "1 ledger(s) under Sales Accounts."
-          },
-          {
-            "kind": "tool",
-            "text": "party_transactions  1944ms  6228+242 tok  23938B",
-            "tool": "party_transactions",
-            "detail": "5 recent transaction(s) with Acme Industries."
-          },
-          {
-            "kind": "tool",
-            "text": "find_voucher  3535ms  6864+666 tok  25474B",
-            "tool": "find_voucher",
-            "detail": "1 voucher(s): Sales 11 (DEMO-1)"
-          },
-          {
-            "kind": "tool",
-            "text": "gstr1_data  3535ms  6864+666 tok  25474B",
-            "tool": "gstr1_data",
-            "detail": "GSTR-1: 8 outward supply voucher(s), total 78352.00."
-          },
-          {
-            "kind": "tool",
-            "text": "list_ledgers  6489ms  8358+1091 tok  28264B",
+            "text": "list_ledgers  1532ms  6127+168 tok  23629B",
             "tool": "list_ledgers",
             "detail": "2 ledger(s) under Sundry Debtors."
           },
           {
             "kind": "tool",
-            "text": "create_sales_voucher  1964ms  9540+283 tok  28779B",
+            "text": "list_ledgers  2203ms  6386+272 tok  24144B",
+            "tool": "list_ledgers",
+            "detail": "1 ledger(s) under Sales Accounts."
+          },
+          {
+            "kind": "tool",
+            "text": "create_sales_voucher  2238ms  6704+385 tok  24549B",
             "tool": "create_sales_voucher",
-            "detail": "Queued for approval as APR-0009: Sales invoice FILM-19665 to Acme Industries for 7552.00 on 2026-06-02"
+            "detail": "Queued for approval as APR-0018: Sales invoice FILM-27281 to Zenith Exports for 10974.00 on 2026-06-02"
           },
           {
             "kind": "agent",
-            "text": "Queued for approval as **APR-0009** — Sales invoice FILM-19665, Acme Industries, ₹7,552.00 (taxable ₹6,400.00 + IGST ₹1,152.00), 2026-06-02. IGST, not CGST/SGST, because Acme's GSTIN is 27AAPFU0939F1ZV (Maharashtra) against your Gujarat 24.\n\nOne thing to check before approving: that date already carries six invoices to Acme Industries for exactly ₹7,552.00 each (refs DEMO-1, DEMO-35146, TUI-E2E-01, DEMO-88462, DEMO-88991, DEMO-94902). If FILM-19665 is one of those re-entered, say so and I'll withdraw APR-0009.",
+            "text": "Queued as APR-0018 (awaiting approval): sales invoice FILM-27281 to Zenith Exports, 3 Widget @ 3100.00 = 9300.00 taxable + IGST 18% 1674.00 = 10974.00, dated 2026-06-02.",
             "tool": "",
             "detail": ""
           },
           {
             "kind": "approval",
-            "text": "Queued for your approval: APR-0009. Nothing has been posted to Tally yet.",
+            "text": "Queued for your approval: APR-0018. Nothing has been posted to Tally yet.",
             "tool": "",
             "detail": ""
           }
         ]
       },
       {
-        "input": "/approve APR-0009",
+        "input": "/approve APR-0018",
         "seconds": 0.0,
         "lines": [
           {
@@ -121,12 +103,12 @@
         ]
       },
       {
-        "input": "/approve APR-0009",
+        "input": "/approve APR-0018",
         "seconds": 0.3,
         "lines": [
           {
             "kind": "approval",
-            "text": "APR-0009 posted to Tally as 78.",
+            "text": "APR-0018 posted to Tally as 92.",
             "tool": "",
             "detail": ""
           }
@@ -136,29 +118,55 @@
     "refusal": [
       {
         "input": "book 100 rent to the Baroda branch",
-        "seconds": 5.4,
+        "seconds": 6.3,
         "lines": [
           {
             "kind": "tool",
-            "text": "resolve_ledger_alias  1904ms  8141+175 tok  30180B",
-            "tool": "resolve_ledger_alias",
-            "detail": "'Rent' is an existing ledger."
-          },
-          {
-            "kind": "tool",
-            "text": "list_cost_centres  1904ms  8141+175 tok  30180B",
+            "text": "list_cost_centres  2592ms  6790+110 tok  25892B",
             "tool": "list_cost_centres",
             "detail": "3 cost centre(s)."
           },
           {
             "kind": "tool",
-            "text": "cash_position  2182ms  8432+259 tok  31006B",
-            "tool": "cash_position",
-            "detail": "Cash and bank: 285674.00 across 2 account(s)."
+            "text": "resolve_ledger_alias  2592ms  6790+110 tok  25892B",
+            "tool": "resolve_ledger_alias",
+            "detail": "'Rent' is an existing ledger."
+          },
+          {
+            "kind": "tool",
+            "text": "resolve_ledger_alias  2243ms  7016+280 tok  26718B",
+            "tool": "resolve_ledger_alias",
+            "detail": "No ledger named 'Baroda' and nothing close to it."
           },
           {
             "kind": "agent",
-            "text": "\"Rent\" resolves, and there is no Baroda cost centre — the nearest is **Vadodara** under Branches. Confirm that's the one, and tell me whether the ₹100.00 is paid from Bank - HDFC 1234 or Cash, or owed as a payable.",
+            "text": "\"Baroda\" isn't a cost centre here — the only ones are Ahmedabad, Surat and Vadodara. Do you mean Vadodara, and should the ₹100.00 credit side go to a bank/cash ledger or to a rent payable ledger?",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      }
+    ],
+    "duplicate": [
+      {
+        "input": "raise a sales invoice to Acme Industries for 2 Widget at 3200 each, 18% GST, dated 2 June 2026",
+        "seconds": 7.2,
+        "lines": [
+          {
+            "kind": "tool",
+            "text": "create_sales_voucher  2326ms  7142+411 tok  27495B",
+            "tool": "create_sales_voucher",
+            "detail": "Not queued. 1 check(s) failed: - not_duplicate: looks like a duplicate of voucher 11 dated 2026-06-02: same party, amount 7552.00 on the same date, and neither carries an invoice reference to tell them apart"
+          },
+          {
+            "kind": "tool",
+            "text": "find_voucher  1593ms  7624+132 tok  28575B",
+            "tool": "find_voucher",
+            "detail": "13 voucher(s): Sales 5 (INV-STOCK-OUT-1), Sales 11 (DEMO-1), Sales 12 (DEMO-35146), Sales 14 (TUI-E2E-01), Sales 15 (DEMO-88462)"
+          },
+          {
+            "kind": "agent",
+            "text": "Voucher 11 (ref DEMO-1) is an identical 2 Widget @ 3200.00 / 7552.00 Acme sale on the same date — and there are five other near-identical Acme entries that day (DEMO-35146, DEMO-88462, DEMO-88991, DEMO-94902, FILM-19665).\n\nWhat's the invoice number for this one? With a distinct reference the duplicate check should clear; without it I can't tell it apart from voucher 11.",
             "tool": "",
             "detail": ""
           }
@@ -220,7 +228,119 @@
         "lines": [
           {
             "kind": "system",
-            "text": "now working on TA-Demo Traders (demo). 2 ticket(s) waiting here. Nothing from the previous client is visible - separate books, separate queue.",
+            "text": "now working on TA-Demo Traders (demo). 6 ticket(s) waiting here. Nothing from the previous client is visible - separate books, separate queue.",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      }
+    ],
+    "lockout": [
+      {
+        "input": "/signin Asha 27281 ****",
+        "seconds": 0.1,
+        "lines": [
+          {
+            "kind": "error",
+            "text": "that name and PIN do not match a user here",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "input": "/signin Asha 27281 ****",
+        "seconds": 0.0,
+        "lines": [
+          {
+            "kind": "error",
+            "text": "that name and PIN do not match a user here",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "input": "/signin Asha 27281 ****",
+        "seconds": 0.0,
+        "lines": [
+          {
+            "kind": "error",
+            "text": "that name and PIN do not match a user here",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "input": "/signin Asha 27281 ****",
+        "seconds": 0.0,
+        "lines": [
+          {
+            "kind": "error",
+            "text": "that name and PIN do not match a user here",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "input": "/signin Asha 27281 ****",
+        "seconds": 0.1,
+        "lines": [
+          {
+            "kind": "error",
+            "text": "Asha 27281 is locked after 5 wrong PINs in a row. Try again after 21:06.",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "input": "/signin Asha 27281 ****",
+        "seconds": 0.0,
+        "lines": [
+          {
+            "kind": "error",
+            "text": "Asha 27281 is locked after 5 wrong PINs in a row. Try again after 21:06.",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "input": "/signin R. Mehta ****",
+        "seconds": 0.0,
+        "lines": [
+          {
+            "kind": "system",
+            "text": "signed in as R. Mehta (partner). You can approve.",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      }
+    ],
+    "backup": [
+      {
+        "input": "/backup",
+        "seconds": 0.0,
+        "lines": [
+          {
+            "kind": "system",
+            "text": "Last backup: TA-Demo Traders: attested Tally backup by R. Mehta at 2026-10-04 20:50 - D:/TallyBackups/TA-Demo-Traders-2026-06-03\nTake Tally's own backup of TA-Demo Traders (Alt+Y in TallyPrime), then a partner records it with /backup confirm <where you saved it>, or tallyagent backup take --client <client> --by \"<partner name>\" --confirm \"<where you saved it>\".",
+            "tool": "",
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "input": "/backup confirm D:/TallyBackups/TA-Demo-Traders-2026-06-03",
+        "seconds": 0.0,
+        "lines": [
+          {
+            "kind": "system",
+            "text": "backup recorded. TA-Demo Traders: attested Tally backup by R. Mehta at 2026-10-04 20:51 - D:/TallyBackups/TA-Demo-Traders-2026-06-03",
             "tool": "",
             "detail": ""
           }
@@ -230,17 +350,17 @@
     "reports": [
       {
         "input": "trial balance please",
-        "seconds": 3.6,
+        "seconds": 3.8,
         "lines": [
           {
             "kind": "tool",
-            "text": "trial_balance  892ms  5843+24 tok  22585B",
+            "text": "trial_balance  1283ms  5843+24 tok  22585B",
             "tool": "trial_balance",
-            "detail": "Trial balance: 18 ledger(s), debits 695944.00, credits 695944.00"
+            "detail": "Trial balance: 18 ledger(s), debits 737276.00, credits 737276.00"
           },
           {
             "kind": "agent",
-            "text": "Balanced: debits ₹695,944.00, credits ₹695,944.00, 18 ledgers.\n\n| Ledger | Group | Balance (₹) |\n|---|---|---|\n| Acme Industries | Sundry Debtors | 62,244.00 Dr |\n| Zenith Exports | Sundry Debtors | 14,160.00 Dr |\n| Bank - HDFC 1234 | Bank Accounts | 294,664.00 Dr |\n| Cash | Cash-in-Hand | 8,990.00 Cr |\n| Bharat Supplies | Sundry Creditors | 292,050.00 Cr |\n| Capital Account | Capital Account | 250,000.00 Cr |\n| Sales - GST 18% | Sales Accounts | 122,800.00 Cr |\n| Purchase - GST 18% | Purchase Accounts | 267,500.00 Dr |\n| Input IGST | Duties & Taxes | 48,150.00 Dr |\n| Output IGST | Duties & Taxes | 22,104.00 Cr |\n| Input/Output CGST & SGST | Duties & Taxes | 0.00 |\n| Bank Charges | Indirect Expenses | 386.00 Dr |\n| Rent | Indirect Expenses | 0.00 |\n| Round Off | Indirect Expenses | 8,840.00 Dr |\n| Profit & Loss A/c | Primary | 0.00 |\n\nTwo things worth a look: Cash shows a credit balance of ₹8,990.00, and all GST so far is IGST with nothing under CGST/SGST.",
+            "text": "| Ledger | Group | Balance |\n|---|---|---|\n| Bank - HDFC 1234 | Bank Accounts | 294,664.00 Dr |\n| Purchase - GST 18% | Purchase Accounts | 267,500.00 Dr |\n| Acme Industries | Sundry Debtors | 92,452.00 Dr |\n| Input IGST | Duties & Taxes | 48,150.00 Dr |\n| Zenith Exports | Sundry Debtors | 24,384.00 Dr |\n| Round Off | Indirect Expenses | 8,840.00 Dr |\n| Bank Charges | Indirect Expenses | 1,286.00 Dr |\n| Input CGST / Input SGST / Output CGST / Output SGST / Rent / P&L A/c | — | 0.00 |\n| Bharat Supplies | Sundry Creditors | 292,050.00 Cr |\n| Capital Account | Capital Account | 250,000.00 Cr |\n| Sales - GST 18% | Sales Accounts | 157,700.00 Cr |\n| Output IGST | Duties & Taxes | 28,386.00 Cr |\n| Cash | Cash-in-Hand | 9,140.00 Cr |\n\nDebits 737,276.00, credits 737,276.00 — it agrees. Cash shows a credit balance of 9,140.00, which usually means an unrecorded payment or a missing opening figure.",
             "tool": "",
             "detail": ""
           }
@@ -248,17 +368,23 @@
       },
       {
         "input": "who owes us money?",
-        "seconds": 2.5,
+        "seconds": 3.2,
         "lines": [
           {
             "kind": "tool",
-            "text": "outstanding_receivables  1023ms  6759+32 tok  25765B",
+            "text": "outstanding_receivables  1369ms  6733+66 tok  25681B",
             "tool": "outstanding_receivables",
-            "detail": "Total receivable: 76404.00 across 2 part(y/ies)."
+            "detail": "Total receivable: 116836.00 across 2 part(y/ies)."
+          },
+          {
+            "kind": "tool",
+            "text": "top_debtors  1369ms  6733+66 tok  25681B",
+            "tool": "top_debtors",
+            "detail": "Top debtors: Acme Industries 92452.00, Zenith Exports 24384.00"
           },
           {
             "kind": "agent",
-            "text": "₹76,404.00 is owed to you, and all of it is over 90 days old.\n\n| Party | Amount (₹) | Overdue |\n|---|---|---|\n| Acme Industries | 62,244.00 | 186 days |\n| Zenith Exports | 14,160.00 | 125 days |\n\nBoth sit on account rather than against an invoice reference, so I can't tie either to a specific bill.",
+            "text": "Two parties owe you 116,836.00 in total, and every rupee of it is over 90 days old — there is nothing current.\n\n| Party | Amount | Ageing |\n|---|---|---|\n| Acme Industries | 92,452.00 | 90+ (186 days) |\n| Zenith Exports | 24,384.00 | 90+ (125 days) |\n\nBoth balances sit as \"(on account)\" rather than against invoice references, so there is no bill-wise detail to chase against.",
             "tool": "",
             "detail": ""
           }
@@ -268,7 +394,7 @@
     "bills": [
       {
         "input": "/bills demo/bills --limit 3 --again",
-        "seconds": 24.3,
+        "seconds": 3.9,
         "lines": [
           {
             "kind": "system",
@@ -310,7 +436,7 @@
         "lines": [
           {
             "kind": "system",
-            "text": "2 client(s): 5 done, 6 waiting for approval, 7 need a person, Rs 121,996.00 at risk. Could not work on: sharma.",
+            "text": "2 client(s): 5 done, 6 waiting for approval, 9 need a person, Rs 152,754.00 at risk. Could not work on: sharma.",
             "tool": "",
             "detail": ""
           }
@@ -322,7 +448,7 @@
         "lines": [
           {
             "kind": "system",
-            "text": "18 open, worst first:\n  #4    [exception] demo         Acme Industries has been outstanding over 90 days  Rs 62,244.00\n  #11   [exception] demo         Bharat Supplies has not filed 2 invoice(s)  Rs 43,110.00  due 2026-07-20\n  #3    [exception] demo         Cash is negative at month end  Rs 8,990.00\n  #16   [exception] demo         Sales to Acme Industries on 2026-06-02 appears 7 times (vouchers 11, 12, 14, 15, 16, 17, 18)  Rs 7,552.00\n  #6    [exception] demo         Journal to Cash on 2026-06-01 appears 5 times (vouchers 13, 14, 15, 16, 17)  Rs 100.00\n  #12   [exception] demo         Bharat Supplies BS/2026/77: taxable value differs  due 2026-07-20\n  #9    [exception] sharma       Could not work on Sharma Textiles\n  #13   [queued   ] demo         Drafted missing bill Bharat Supplies BS/2026/90 (Rs 4,720.00) from 2B\n  #15   [queued   ] demo         APR-0007 waiting: create purchase voucher Rs 4,720.00\n  #17   [queued   ] demo         APR-0008 waiting: create purchase voucher Rs 4,720.00\n  #18   [queued   ] demo         APR-0010 waiting: create purchase voucher Rs 8,496.00\n  #19   [queued   ] demo         APR-0011 waiting: create purchase voucher Rs 8,850.00\n  #20   [queued   ] demo         APR-0012 waiting: create purchase voucher Rs 377.60\n  #2    [done     ] demo         GSTR-1 2026-06 ready to upload  due 2026-07-11\n  #7    [done     ] demo         Close pack for 2026-06 written\n  #8    [done     ] demo         No-touch rate: 25% no-touch: 1 of 4 posted without a person (0 earned, 1 standing policy)\n  #10   [done     ] demo         GSTR-2B 062026: 1 bill not entered in the books, 1 matched, 2 supplier has not filed, 1 taxable value differs. Claimable Rs 3,600.00; at risk Rs 43,110.00.\n  #14   [done     ] demo         IMS suggestions for 2026-06: 1 to accept, 2 to keep pending",
+            "text": "20 open, worst first:\n  #4    [exception] demo         Acme Industries has been outstanding over 90 days  Rs 92,452.00\n  #11   [exception] demo         Bharat Supplies has not filed 2 invoice(s)  Rs 43,110.00  due 2026-07-20\n  #3    [exception] demo         Cash is negative at month end  Rs 9,140.00\n  #21   [exception] demo         Sales to Acme Industries on 2026-06-02 appears 11 times (vouchers 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22)  Rs 7,552.00\n  #22   [exception] demo         Receipt to Zenith Exports on 2026-06-02 appears 3 times (vouchers 5, 6, 7)  Rs 250.00\n  #23   [exception] demo         Payment to Cash on 2026-06-02 appears 7 times (vouchers 10, 3, 5, 6, 7, 8, 9)  Rs 150.00\n  #6    [exception] demo         Journal to Cash on 2026-06-01 appears 5 times (vouchers 13, 14, 15, 16, 17)  Rs 100.00\n  #12   [exception] demo         Bharat Supplies BS/2026/77: taxable value differs  due 2026-07-20\n  #9    [exception] sharma       Could not work on Sharma Textiles\n  #13   [queued   ] demo         Drafted missing bill Bharat Supplies BS/2026/90 (Rs 4,720.00) from 2B\n  #17   [queued   ] demo         APR-0008 waiting: create purchase voucher Rs 4,720.00\n  #18   [queued   ] demo         APR-0010 waiting: create purchase voucher Rs 8,496.00\n  #19   [queued   ] demo         APR-0011 waiting: create purchase voucher Rs 8,850.00\n  #20   [queued   ] demo         APR-0012 waiting: create purchase voucher Rs 377.60\n  #24   [queued   ] demo         APR-0013 waiting: create purchase voucher Rs 4,720.00\n  #2    [done     ] demo         GSTR-1 2026-06 ready to upload  due 2026-07-11\n  #7    [done     ] demo         Close pack for 2026-06 written\n  #8    [done     ] demo         No-touch rate: 11% no-touch: 1 of 9 posted without a person (0 earned, 1 standing policy)\n  #10   [done     ] demo         GSTR-2B 062026: 1 bill not entered in the books, 1 matched, 2 supplier has not filed, 1 taxable value differs. Claimable Rs 3,600.00; at risk Rs 43,110.00.\n  #14   [done     ] demo         IMS suggestions for 2026-06: 1 to accept, 2 to keep pending",
             "tool": "",
             "detail": ""
           }
@@ -334,7 +460,7 @@
         "lines": [
           {
             "kind": "system",
-            "text": "TA-Demo Traders: off - every write waits for a person\n  alter_voucher            streak   1  a partner has not switched on earned autonomy for this client\n  create_receipt           streak   1  a partner has not switched on earned autonomy for this client\n  create_sales_voucher     streak   1  a partner has not switched on earned autonomy for this client\n  25% no-touch: 1 of 4 posted without a person (0 earned, 1 standing policy)",
+            "text": "TA-Demo Traders: off - every write waits for a person\n  alter_voucher            streak   1  a partner has not switched on earned autonomy for this client\n  create_receipt           streak   1  a partner has not switched on earned autonomy for this client\n  create_sales_voucher     streak   6  a partner has not switched on earned autonomy for this client\n  11% no-touch: 1 of 9 posted without a person (0 earned, 1 standing policy)",
             "tool": "",
             "detail": ""
           }
@@ -344,17 +470,17 @@
     "close": [
       {
         "input": "/monthend 2026-06 tests/fixtures/live_bank_statement.csv tests/fixtures/live_gstr2b.json",
-        "seconds": 1.4,
+        "seconds": 1.6,
         "lines": [
           {
             "kind": "system",
-            "text": "Month-end close for 2026-06: 3 to fix, 6 to check. Pack written to reports\\close\\TA-Demo Traders\\2026-06\\close.md. Nothing was posted.",
+            "text": "Month-end close for 2026-06: 3 to fix, 8 to check. Pack written to reports\\close\\TA-Demo Traders\\2026-06\\close.md. Nothing was posted.",
             "tool": "",
             "detail": ""
           },
           {
             "kind": "system",
-            "text": "  high   4 statement line(s) have no voucher  (107836.00)\n         -> Vouchers have been proposed for these. Approve or edit them.\n  high   2 purchase(s) in the books are not in GSTR-2B  (43110.00)\n         -> The supplier has not filed, or the GSTIN is wrong. The credit cannot be claimed until it appears.\n  high   Cash is negative at month end  (-8990.00)\n         -> A payment was entered that the cash box could not cover - usually a receipt that was never entered.\n  medium Acme Industries has been outstanding over 90 days  (62244.00)\n         -> Chase it, or decide whether it is still collectable.\n  medium 2 book entry/entries are not on the statement  (9500.00)\n         -> Cheques not yet presented, or an entry against the wrong bank.\n  medium Sales to Acme Industries on 2026-06-02 appears 7 times (vouchers 11, 12, 14, 15, 16, 17, 18)  (7552.00)\n         -> Check whether the same bill was entered twice.\n  medium Journal to Cash on 2026-06-01 appears 5 times (vouchers 13, 14, 15, 16, 17)  (100.00)\n         -> Check whether the same bill was entered twice.\n  medium 2 invoice(s) in GSTR-2B are not in the books\n         -> Enter the bills, or confirm they belong to another period.\n  medium 1 invoice(s) differ in value between 2B and the books\n         -> Usually a rounding or a freight line. Fix the side that is wrong.",
+            "text": "  high   4 statement line(s) have no voucher  (107836.00)\n         -> Vouchers have been proposed for these. Approve or edit them.\n  high   2 purchase(s) in the books are not in GSTR-2B  (43110.00)\n         -> The supplier has not filed, or the GSTIN is wrong. The credit cannot be claimed until it appears.\n  high   Cash is negative at month end  (-9140.00)\n         -> A payment was entered that the cash box could not cover - usually a receipt that was never entered.\n  medium Acme Industries has been outstanding over 90 days  (92452.00)\n         -> Chase it, or decide whether it is still collectable.\n  medium 2 book entry/entries are not on the statement  (9500.00)\n         -> Cheques not yet presented, or an entry against the wrong bank.\n  medium Sales to Acme Industries on 2026-06-02 appears 11 times (vouchers 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22)  (7552.00)\n         -> Check whether the same bill was entered twice.\n  medium Receipt to Zenith Exports on 2026-06-02 appears 3 times (vouchers 5, 6, 7)  (250.00)\n         -> Check whether the same bill was entered twice.\n  medium Payment to Cash on 2026-06-02 appears 7 times (vouchers 10, 3, 5, 6, 7, 8, 9)  (150.00)\n         -> Check whether the same bill was entered twice.\n  medium Journal to Cash on 2026-06-01 appears 5 times (vouchers 13, 14, 15, 16, 17)  (100.00)\n         -> Check whether the same bill was entered twice.\n  medium 2 invoice(s) in GSTR-2B are not in the books\n         -> Enter the bills, or confirm they belong to another period.\n  medium 1 invoice(s) differ in value between 2B and the books\n         -> Usually a rounding or a freight line. Fix the side that is wrong.",
             "tool": "",
             "detail": ""
           }
@@ -366,7 +492,7 @@
         "lines": [
           {
             "kind": "system",
-            "text": "GSTR-1 2026-06: 9 supply voucher(s) written to reports\\gstr1\\TA-Demo Traders\\2026-06.json.",
+            "text": "GSTR-1 2026-06: 14 supply voucher(s) written to reports\\gstr1\\TA-Demo Traders\\2026-06.json.",
             "tool": "",
             "detail": ""
           }
@@ -376,88 +502,88 @@
   },
   "audit": [
     {
-      "seq": 14,
-      "at": "2026-10-04T12:19:25",
-      "event": "action_queued",
-      "actor": "chat"
-    },
-    {
-      "seq": 15,
-      "at": "2026-10-04T12:19:27",
-      "event": "action_approved",
-      "actor": "R. Mehta"
-    },
-    {
-      "seq": 16,
-      "at": "2026-10-04T12:19:28",
+      "seq": 31,
+      "at": "2026-10-04T13:40:20",
       "event": "action_executed",
       "actor": "R. Mehta"
     },
     {
-      "seq": 17,
-      "at": "2026-10-04T13:04:51",
+      "seq": 32,
+      "at": "2026-10-04T14:45:31",
       "event": "action_queued",
       "actor": "chat"
     },
     {
-      "seq": 18,
-      "at": "2026-10-04T13:10:28",
-      "event": "action_queued",
-      "actor": "chat"
-    },
-    {
-      "seq": 19,
-      "at": "2026-10-04T13:15:10",
-      "event": "action_queued",
-      "actor": "chat"
-    },
-    {
-      "seq": 20,
-      "at": "2026-10-04T13:15:13",
+      "seq": 33,
+      "at": "2026-10-04T14:45:55",
       "event": "action_approved",
       "actor": "R. Mehta"
     },
     {
-      "seq": 21,
-      "at": "2026-10-04T13:15:13",
+      "seq": 34,
+      "at": "2026-10-04T14:45:55",
       "event": "action_executed",
       "actor": "R. Mehta"
     },
     {
-      "seq": 22,
-      "at": "2026-10-04T13:15:48",
+      "seq": 35,
+      "at": "2026-10-04T14:59:30",
       "event": "action_queued",
       "actor": "chat"
     },
     {
-      "seq": 23,
-      "at": "2026-10-04T13:15:48",
+      "seq": 36,
+      "at": "2026-10-04T14:59:47",
+      "event": "action_approved",
+      "actor": "R. Mehta"
+    },
+    {
+      "seq": 37,
+      "at": "2026-10-04T14:59:48",
+      "event": "action_executed",
+      "actor": "R. Mehta"
+    },
+    {
+      "seq": 38,
+      "at": "2026-10-04T15:20:58",
+      "event": "backup_recorded",
+      "actor": "R. Mehta"
+    },
+    {
+      "seq": 39,
+      "at": "2026-10-04T15:21:29",
       "event": "action_queued",
       "actor": "chat"
     },
     {
-      "seq": 24,
-      "at": "2026-10-04T13:15:49",
-      "event": "action_queued",
-      "actor": "chat"
+      "seq": 40,
+      "at": "2026-10-04T15:21:33",
+      "event": "action_approved",
+      "actor": "R. Mehta"
     },
     {
-      "seq": 25,
-      "at": "2026-10-04T13:15:50",
-      "event": "action_queued",
-      "actor": "chat"
+      "seq": 41,
+      "at": "2026-10-04T15:21:33",
+      "event": "action_executed",
+      "actor": "R. Mehta"
+    },
+    {
+      "seq": 42,
+      "at": "2026-10-04T15:21:47",
+      "event": "backup_recorded",
+      "actor": "R. Mehta"
     }
   ],
   "audit_ok": true,
-  "audit_count": 25,
+  "audit_count": 42,
   "files": {
-    "brief": "# Morning brief - 15 Jul 2026\n\n2 client(s): 5 done, 6 waiting for approval, 7 need a person, Rs 121,996.00 at risk. Could not work on: sharma.\n\n| Client | Done | Waiting | Needs a person | At risk |\n|---|---|---|---|---|\n| demo | 5 | 6 | 6 | Rs 121,996.00 |\n| sharma (could not run) | 0 | 0 | 1 |  |\n\n## Needs a person, worst first\n\n- **demo** - Acme Industries has been outstanding over 90 days - Rs 62,244.00\n  Chase it, or decide whether it is still collectable.\n- **demo** - Bharat Supplies has not filed 2 invoice(s) - Rs 43,110.00\n  Credit deferred until they do. Follow-up drafted: reports\\reco\\TA-Demo Traders\\2026-06\\followups\\Bharat Supplies.txt\n- **demo** - Cash is negative at month end - Rs 8,990.00\n  A payment was entered that the cash box could not cover - usually a receipt that was never entered.\n- **demo** - Sales to Acme Industries on 2026-06-02 appears 7 times (vouchers 11, 12, 14, 15, 16, 17, 18) - Rs 7,552.00\n  Check whether the same bill was entered twice.\n- **demo** - Journal to Cash on 2026-06-01 appears 5 times (vouchers 13, 14, 15, 16, 17) - Rs 100.00\n  Check whether the same bill was entered twice.\n- **demo** - Bharat Supplies BS/2026/77: taxable value differs\n  Taxable value is Rs 10,000.00 in 2B and Rs 8,000.00 in the books (+2,000.00). Check the bill: a freight or discount line, or a typing error, on one side.\n- **sharma** - Could not work on Sharma Textiles\n  Sharma Textiles is not loaded in Tally (open: TA-Demo Traders)\n- **demo** - Drafted missing bill Bharat Supplies BS/2026/90 (Rs 4,720.00) from 2B (APR-0013)\n  Queued for approval as APR-0013: Purchase bill BS/2026/90 from Bharat Supplies for 4720.00 on 2026-06-02 a partner has not switched on earned autonomy for this client\n- **demo** - APR-0007 waiting: create purchase voucher Rs 4,720.00 (APR-0007)\n  a partner has not switched on earned autonomy for this client\n- **demo** - APR-0008 waiting: create purchase voucher Rs 4,720.00 (APR-0008)\n  a partner has not switched on earned autonomy for this client\n- **demo** - APR-0010 waiting: create purchase voucher Rs 8,496.00 (APR-0010)\n  a partner has not switched on earned autonomy for this client\n- **demo** - APR-0011 waiting: create purchase voucher Rs 8,850.00 (APR-0011)\n  a partner has not switched on earned autonomy for this client\n- **demo** - APR-0012 waiting: create purchase voucher Rs 377.60 (APR-0012)\n  a partner has not switched on earned autonomy for this client\n",
+    "brief": "# Morning brief - 15 Jul 2026\n\n2 client(s): 5 done, 6 waiting for approval, 9 need a person, Rs 152,754.00 at risk. Could not work on: sharma.\n\n| Client | Done | Waiting | Needs a person | At risk |\n|---|---|---|---|---|\n| demo | 5 | 6 | 8 | Rs 152,754.00 |\n| sharma (could not run) | 0 | 0 | 1 |  |\n\n## Needs a person, worst first\n\n- **demo** - Acme Industries has been outstanding over 90 days - Rs 92,452.00\n  Chase it, or decide whether it is still collectable.\n- **demo** - Bharat Supplies has not filed 2 invoice(s) - Rs 43,110.00\n  Credit deferred until they do. Follow-up drafted: reports\\reco\\TA-Demo Traders\\2026-06\\followups\\Bharat Supplies.txt\n- **demo** - Cash is negative at month end - Rs 9,140.00\n  A payment was entered that the cash box could not cover - usually a receipt that was never entered.\n- **demo** - Sales to Acme Industries on 2026-06-02 appears 11 times (vouchers 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22) - Rs 7,552.00\n  Check whether the same bill was entered twice.\n- **demo** - Receipt to Zenith Exports on 2026-06-02 appears 3 times (vouchers 5, 6, 7) - Rs 250.00\n  Check whether the same bill was entered twice.\n- **demo** - Payment to Cash on 2026-06-02 appears 7 times (vouchers 10, 3, 5, 6, 7, 8, 9) - Rs 150.00\n  Check whether the same bill was entered twice.\n- **demo** - Journal to Cash on 2026-06-01 appears 5 times (vouchers 13, 14, 15, 16, 17) - Rs 100.00\n  Check whether the same bill was entered twice.\n- **demo** - Bharat Supplies BS/2026/77: taxable value differs\n  Taxable value is Rs 10,000.00 in 2B and Rs 8,000.00 in the books (+2,000.00). Check the bill: a freight or discount line, or a typing error, on one side.\n- **sharma** - Could not work on Sharma Textiles\n  Sharma Textiles is not loaded in Tally (open: TA-Demo Traders)\n- **demo** - Drafted missing bill Bharat Supplies BS/2026/90 (Rs 4,720.00) from 2B (APR-0007)\n  Queued for approval as APR-0007: Purchase bill BS/2026/90 from Bharat Supplies for 4720.00 on 2026-06-02 a partner has not switched on earned autonomy for this client\n- **demo** - APR-0008 waiting: create purchase voucher Rs 4,720.00 (APR-0008)\n  a partner has not switched on earned autonomy for this client\n- **demo** - APR-0010 waiting: create purchase voucher Rs 8,496.00 (APR-0010)\n  a partner has not switched on earned autonomy for this client\n- **demo** - APR-0011 waiting: create purchase voucher Rs 8,850.00 (APR-0011)\n  a partner has not switched on earned autonomy for this client\n- **demo** - APR-0012 waiting: create purchase voucher Rs 377.60 (APR-0012)\n  a partner has not switched on earned autonomy for this client\n- **demo** - APR-0013 waiting: create purchase voucher Rs 4,720.00 (APR-0013)\n  a partner has not switched on earned autonomy for this client\n",
     "followup": "Dear Bharat Supplies,\n\nThe following invoice(s) you raised on TA-Demo Traders do not appear in our GSTR-2B for June 2026 against your GSTIN 29AAGCB7383J1Z4:\n\n  - RESTOCK-2026-09-12 dated 01-06-2026, GST Rs 31,950.00\n  - INV-STOCK-IN-1 dated 01-06-2026, GST Rs 11,160.00\n\nThat is Rs 43,110.00 of input tax credit we cannot claim until they are reported. Please include them in your next GSTR-1 / IFF, or let us know if any were reported under a different number or GSTIN.\n\nRegards,\nAccounts",
     "accuracy_photo": "# Bill reading accuracy - photographed, as bills arrive\n\n13 bill(s) from `tests/fixtures/bill_pile_photo`. 12 drafted, 1 sent for a person to look at, **0 drafted with something wrong**.\n\nA bill on the attention list is not counted as wrong: correctly saying it cannot be read is the reader working.\n\n| field | read | right | accuracy |\n|---|---|---|---|\n| vendor | 12/13 | 12 | 100% |\n| invoice_no | 12/13 | 12 | 100% |\n| invoice_date | 12/13 | 12 | 100% |\n| taxable_value | 12/13 | 12 | 100% |\n| cgst | 12/13 | 12 | 100% |\n| sgst | 12/13 | 12 | 100% |\n| igst | 12/13 | 12 | 100% |\n| total | 12/13 | 12 | 100% |\n\n## Sent for a person to look at\n\n- `bill-013.png`: refused, correctly\n\nRead in 2s, 0.1s per bill.\n",
-    "close_pack": "# Month-end close - TA-Demo Traders - 2026-06\n\nPeriod 2026-06-01 to 2026-06-30. 3 to fix, 6 to check, 0 for information.\n\nNothing in this pack has been posted. Every proposal still goes through the approval queue.\n\n## Cash and bank\n\nCash and bank: 285674.00 across 2 account(s).\n\n## Receivables\n\nTotal receivable: 76404.00 across 2 part(y/ies).\n\n## Vouchers this month\n\n15 voucher(s) posted between 2026-06-01 and 2026-06-30.\n\n## Bank reconciliation\n\nBank reco on Bank - HDFC 1234: 0 matched, 4 statement line(s) not in books, 2 book entry/entries not on the statement. 4 voucher(s) proposed - none posted.\n\n## GSTR-2B\n\nGSTR-2B reconciliation - missing in 2b: 2, missing in books: 2, value mismatch: 1. Claimable Rs 0.00, at risk Rs 43,110.00.\n\n## What needs a person\n\n| | Finding | Amount | What to do |\n|---|---|---|---|\n| high | 4 statement line(s) have no voucher | 107836.00 | Vouchers have been proposed for these. Approve or edit them. |\n| high | 2 purchase(s) in the books are not in GSTR-2B | 43110.00 | The supplier has not filed, or the GSTIN is wrong. The credit cannot be claimed until it appears. |\n| high | Cash is negative at month end | -8990.00 | A payment was entered that the cash box could not cover - usually a receipt that was never entered. |\n| medium | Acme Industries has been outstanding over 90 days | 62244.00 | Chase it, or decide whether it is still collectable. |\n| medium | 2 book entry/entries are not on the statement | 9500.00 | Cheques not yet presented, or an entry against the wrong bank. |\n| medium | Sales to Acme Industries on 2026-06-02 appears 7 times (vouchers 11, 12, 14, 15, 16, 17, 18) | 7552.00 | Check whether the same bill was entered twice. |\n| medium | Journal to Cash on 2026-06-01 appears 5 times (vouchers 13, 14, 15, 16, 17) | 100.00 | Check whether the same bill was entered twice. |\n| medium | 2 invoice(s) in GSTR-2B are not in the books |  | Enter the bills, or confirm they belong to another period. |\n| medium | 1 invoice(s) differ in value between 2B and the books |  | Usually a rounding or a freight line. Fix the side that is wrong. |\n"
+    "close_pack": "# Month-end close - TA-Demo Traders - 2026-06\n\nPeriod 2026-06-01 to 2026-06-30. 3 to fix, 8 to check, 0 for information.\n\nNothing in this pack has been posted. Every proposal still goes through the approval queue.\n\n## Cash and bank\n\nCash and bank: 285524.00 across 2 account(s).\n\n## Receivables\n\nTotal receivable: 116836.00 across 2 part(y/ies).\n\n## Vouchers this month\n\n22 voucher(s) posted between 2026-06-01 and 2026-06-30.\n\n## Bank reconciliation\n\nBank reco on Bank - HDFC 1234: 0 matched, 4 statement line(s) not in books, 2 book entry/entries not on the statement. 4 voucher(s) proposed - none posted.\n\n## GSTR-2B\n\nGSTR-2B reconciliation - missing in 2b: 2, missing in books: 2, value mismatch: 1. Claimable Rs 0.00, at risk Rs 43,110.00.\n\n## What needs a person\n\n| | Finding | Amount | What to do |\n|---|---|---|---|\n| high | 4 statement line(s) have no voucher | 107836.00 | Vouchers have been proposed for these. Approve or edit them. |\n| high | 2 purchase(s) in the books are not in GSTR-2B | 43110.00 | The supplier has not filed, or the GSTIN is wrong. The credit cannot be claimed until it appears. |\n| high | Cash is negative at month end | -9140.00 | A payment was entered that the cash box could not cover - usually a receipt that was never entered. |\n| medium | Acme Industries has been outstanding over 90 days | 92452.00 | Chase it, or decide whether it is still collectable. |\n| medium | 2 book entry/entries are not on the statement | 9500.00 | Cheques not yet presented, or an entry against the wrong bank. |\n| medium | Sales to Acme Industries on 2026-06-02 appears 11 times (vouchers 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22) | 7552.00 | Check whether the same bill was entered twice. |\n| medium | Receipt to Zenith Exports on 2026-06-02 appears 3 times (vouchers 5, 6, 7) | 250.00 | Check whether the same bill was entered twice. |\n| medium | Payment to Cash on 2026-06-02 appears 7 times (vouchers 10, 3, 5, 6, 7, 8, 9) | 150.00 | Check whether the same bill was entered twice. |\n| medium | Journal to Cash on 2026-06-01 appears 5 times (vouchers 13, 14, 15, 16, 17) | 100.00 | Check whether the same bill was entered twice. |\n| medium | 2 invoice(s) in GSTR-2B are not in the books |  | Enter the bills, or confirm they belong to another period. |\n| medium | 1 invoice(s) differ in value between 2B and the books |  | Usually a rounding or a freight line. Fix the side that is wrong. |\n"
   },
   "run": {
-    "summary": "2 client(s): 5 done, 6 waiting for approval, 7 need a person, Rs 121,996.00 at risk. Could not work on: sharma.",
+    "summary": "2 client(s): 5 done, 6 waiting for approval, 9 need a person, Rs 152,754.00 at risk. Could not work on: sharma.",
     "clients": [
       {
         "slug": "demo",
@@ -466,7 +592,7 @@
         "reason": "",
         "done": 5,
         "queued": 6,
-        "exceptions": 6
+        "exceptions": 8
       },
       {
         "slug": "sharma",
