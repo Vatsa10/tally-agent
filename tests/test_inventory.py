@@ -471,3 +471,27 @@ def test_tool_names_are_unique():
 
     names = [tool.name for tool in registry.TOOLS]
     assert len(names) == len(set(names))
+
+
+async def test_a_sale_of_goods_needs_no_separate_taxable_value(ctx, queue, fake_tally):
+    """The model's first call left it out - it is derivable - and the error line
+    showed up on screen before the retry."""
+    await seed_items(ctx, queue)
+
+    result = await vouchers.create_sales_voucher(
+        ctx,
+        party_name="Acme Industries",
+        voucher_date=date(2026, 6, 15),
+        reference="NO-TV-1",
+        items=[{"stock_item": "Widget", "quantity": "2", "rate": "3200", "unit": "Pcs"}],
+    )
+
+    assert result.ok, result.message
+    assert result.pending.voucher.gst.taxable_value == Decimal("6400.00")
+
+
+async def test_neither_a_value_nor_goods_says_what_is_missing(ctx):
+    with pytest.raises(ValueError, match="taxable value or the items"):
+        await vouchers.create_sales_voucher(
+            ctx, party_name="Acme Industries", reference="NO-TV-2"
+        )

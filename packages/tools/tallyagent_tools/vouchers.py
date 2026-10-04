@@ -167,10 +167,25 @@ async def _gst_voucher(
     )
 
 
+def _require_value(taxable_value: Decimal | str) -> None:
+    """A GST voucher needs a value: given directly, or from the goods on it.
+
+    Optional in the signature because with stock items it is computed, and
+    requiring it anyway made the model's first call fail in front of whoever
+    was watching - an error line, then a retry with the number it had to work
+    out itself.
+    """
+    if str(taxable_value).strip() in ("", "None"):
+        raise ValueError(
+            "give either the taxable value or the items (quantity and rate), "
+            "so the value can be worked out from the goods"
+        )
+
+
 async def create_sales_voucher(
     ctx: ToolContext,
     party_name: str,
-    taxable_value: Decimal | str,
+    taxable_value: Decimal | str = "",
     gst_rate: Decimal | str = "18",
     voucher_date: date | None = None,
     reference: str = "",
@@ -188,6 +203,7 @@ async def create_sales_voucher(
     inventory = _inventory_lines(items or [], outward=True)
     if inventory:
         taxable_value = sum((line.amount for line in inventory), Decimal("0"))
+    _require_value(taxable_value)
 
     voucher = await _gst_voucher(
         ctx,
@@ -212,7 +228,7 @@ async def create_sales_voucher(
 async def create_purchase_voucher(
     ctx: ToolContext,
     party_name: str,
-    taxable_value: Decimal | str,
+    taxable_value: Decimal | str = "",
     gst_rate: Decimal | str = "18",
     voucher_date: date | None = None,
     reference: str = "",
@@ -225,6 +241,7 @@ async def create_purchase_voucher(
     inventory = _inventory_lines(items or [], outward=False)
     if inventory:
         taxable_value = sum((line.amount for line in inventory), Decimal("0"))
+    _require_value(taxable_value)
 
     voucher = await _gst_voucher(
         ctx,
