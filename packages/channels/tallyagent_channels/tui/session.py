@@ -757,6 +757,24 @@ class Session:
         turn.say("system", result.message)
         return turn.say("system", _render_findings(result.data["findings"]))
 
+    async def cmd_gstr1(self, args: list[str], turn: Turn) -> Turn:
+        """/gstr1 2026-06 - the portal JSON, or why it cannot be filed yet."""
+        if not args:
+            return turn.say("error", "usage: /gstr1 YYYY-MM")
+        from tallyagent_tools import gstr1
+
+        try:
+            result = await gstr1.gstr1_export(self.services.tools, args[0])
+        except ValueError as exc:
+            return turn.say("error", f"{args[0]!r} is not a month: {exc}")
+        kind = "error" if result.data["problems"] else "system"
+        turn.say(kind, result.message)
+        if result.data["problems"]:
+            return turn.say(
+                "error", "\n".join(f"  {p}" for p in result.data["problems"])
+            )
+        return turn
+
     async def cmd_close(self, args: list[str], turn: Turn) -> Turn:
         return turn.say("system", "Session summary: " + self.stats.summary(self.services))
 
@@ -836,6 +854,7 @@ COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
     "tier3": Session.cmd_tier3,
     "model": Session.cmd_model,
     "monthend": Session.cmd_monthend,
+    "gstr1": Session.cmd_gstr1,
     "close": Session.cmd_close,
     "quit": Session.cmd_quit,
 }
@@ -863,6 +882,7 @@ HELP = {
     "tier3": "on | off - the gated computer-use fallback",
     "model": "show or switch the model provider",
     "monthend": "<YYYY-MM> [bank.csv] [gstr2b.json] - the month-end close pack",
+    "gstr1": "<YYYY-MM> - the GSTR-1 JSON for the portal, validated first",
     "close": "print the session summary",
     "quit": "summary, then exit",
 }

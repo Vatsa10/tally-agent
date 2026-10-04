@@ -649,6 +649,19 @@ async def test_monthend_says_so_when_the_month_is_not_a_month(session, tmp_path,
     assert "not a month" in turn.text
 
 
+async def test_gstr1_writes_the_portal_json_for_an_empty_month(session, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    turn = await session.handle("/gstr1 2026-06")
+    assert turn.lines[-1].kind == "system"
+    assert list((tmp_path / "reports" / "gstr1").rglob("2026-06.json"))
+
+
+async def test_gstr1_without_a_month_says_how_to_call_it(session):
+    turn = await session.handle("/gstr1")
+    assert turn.lines[-1].kind == "error"
+    assert "YYYY-MM" in turn.text
+
+
 # --- clients -----------------------------------------------------------------
 
 

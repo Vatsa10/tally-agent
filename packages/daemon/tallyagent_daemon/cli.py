@@ -392,6 +392,29 @@ def close_month(
         typer.echo(f"  {finding['severity']:<6} {finding['detail']}")
 
 
+@app.command("gstr1")
+def gstr1_cmd(
+    month: str = typer.Argument(..., help="The return month, YYYY-MM."),
+    out_dir: str = typer.Option("reports/gstr1", help="Where the JSON is written."),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+    fake: bool = FAKE_OPTION,
+) -> None:
+    """Write the month's GSTR-1 JSON, or list why it cannot be filed yet."""
+    from tallyagent_tools import gstr1
+
+    config = _load(config_path, policy_path, client, clients_path)
+    wired = _wire(config, fake)
+    result = asyncio.run(gstr1.gstr1_export(wired.services.tools, month, out_dir=out_dir))
+    typer.echo(result.message)
+    for problem in result.data["problems"]:
+        typer.echo(f"  {problem}")
+    if result.data["problems"]:
+        raise typer.Exit(code=1)
+
+
 @app.command("enable-server")
 def enable_server(
     port: int = typer.Option(9000, help="The port Tally should listen on."),
