@@ -28,7 +28,27 @@ TARGET_ON_HAND = Decimal("40")
 RESTOCK_DATE = date(2026, 6, 1)  # an EDU-legal date
 
 async def main() -> int:
+    import argparse
+
+    from tallyagent_daemon import clients
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--client",
+        default="demo",
+        help="Which client's queue and books to reset (from config/clients.toml).",
+    )
+    args = parser.parse_args()
+
     config = config_mod.load("config/config.toml", "config/policy.toml")
+    # The queue lives in the client's own database. Resetting the install's
+    # default one instead would leave tomorrow's stale tickets exactly where the
+    # demo will look for them.
+    register = clients.load()
+    chosen = register.find(args.client)
+    if chosen is not None:
+        config = clients.apply(config, chosen, register.data_dir)
+    print(f"  client: {args.client} -> {config.company.name} ({config.db_path})")
     wired = wiring.build(config)
     ctx = wired.services.tools
     company = config.company.name
@@ -36,7 +56,7 @@ async def main() -> int:
     queue = wired.services.queue
     waiting = queue.list("pending", company)
     for item in waiting:
-        queue.reject(item.ticket, "demo-prep", "cleared before recording")
+        queue.reject(item.ticket, "demo-prep", "cleared before the demo")
     print(f"  queue: {len(waiting)} undecided ticket(s) cleared")
 
     on_hand = await stock.on_hand(ctx)
