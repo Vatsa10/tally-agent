@@ -134,6 +134,7 @@ class Session:
         auto_approve: bool = False,
         clients: Any = None,
         switch: Any = None,
+        firm: Any = None,
     ) -> None:
         self.services = services
         self.live = live or LiveMode()
@@ -150,6 +151,8 @@ class Session:
         # depend on the daemon that does the wiring.
         self.clients = clients
         self.switch = switch
+        # The morning run across every client, when this session can start one.
+        self.firm = firm
         self.client_slug = ""
 
     # --- who is doing this --------------------------------------------------
@@ -635,6 +638,94 @@ class Session:
             "separate queue.",
         )
 
+    async def cmd_run(self, args: list[str], turn: Turn) -> Turn:
+        """/run [--force] [client ...] - the morning run, now."""
+        if self.firm is None:
+            return turn.say("error", "this session cannot start a firm run")
+        from datetime import date as _date
+
+        force = "--force" in args
+        only = [a for a in args if not a.startswith("--")] or None
+        turn.say("system", "Running every due job for every client ...")
+        report = await self.firm.run(_date.today(), only=only, force=force)
+        lines = [report.summary()]
+        for client in report.clients:
+            state = "" if client.healthy else f"  - could not run: {client.reason}"
+            lines.append(
+                f"  {client.slug:<14} {client.count('done')} done, "
+                f"{client.count('queued')} waiting, {client.count('exception')} "
+                f"for a person{state}"
+            )
+        lines.append("/inbox lists them, worst first.")
+        return turn.say("system", "\n".join(lines))
+
+    async def cmd_inbox(self, args: list[str], turn: Turn) -> Turn:
+        """/inbox [client] - everything the morning runs found, worst first."""
+        if self.firm is None:
+            return turn.say("error", "no firm inbox is wired into this session")
+        items = self.firm.inbox.open(client=args[0] if args else "")
+        if not items:
+            return turn.say("system", "Inbox empty - nothing is waiting on a person.")
+        lines = [f"{len(items)} open, worst first:"]
+        for item in items[:25]:
+            lines.append(f"  #{item.id:<4} {item.line()}")
+        if len(items) > 25:
+            lines.append(f"  ... and {len(items) - 25} more")
+        return turn.say("system", "\n".join(lines))
+
+    async def cmd_autonomy(self, args: list[str], turn: Turn) -> Turn:
+        """/autonomy [grant <streak> <max> | revoke] - earned hands-off posting."""
+        from decimal import Decimal, InvalidOperation
+
+        from tallyagent_approvals import autonomy as rules
+
+        grants = getattr(self.services, "autonomy", None)
+        if grants is None:
+            return turn.say("error", "no autonomy register is wired into this session")
+        company = self.services.company.name
+
+        if args and args[0] == "grant":
+            self.require("grant_autonomy")
+            try:
+                streak = int(args[1]) if len(args) > 1 else rules.DEFAULT_STREAK
+                ceiling = Decimal(args[2]) if len(args) > 2 else rules.DEFAULT_MAX
+                grant = grants.grant(
+                    company, by=self.who, min_streak=streak, max_amount=ceiling
+                )
+            except (ValueError, InvalidOperation) as exc:
+                return turn.say("error", str(exc))
+            return turn.say(
+                "system",
+                f"Earned autonomy on for {company}: after {grant.min_streak} clean "
+                f"approvals in a row, up to Rs {grant.max_amount:,.2f}, never above "
+                "what a person has approved. One correction takes it away.",
+            )
+        if args and args[0] == "revoke":
+            self.require("grant_autonomy")
+            done = grants.revoke(company, by=self.who)
+            return turn.say(
+                "system",
+                "Revoked; every write waits for a person." if done else "It was not on.",
+            )
+
+        grant = grants.active(company)
+        records = rules.records(rules.queue_rows(self.services.queue, company))
+        lines = [
+            f"{company}: "
+            + (
+                f"on (streak {grant.min_streak}, up to Rs {grant.max_amount:,.2f}, "
+                f"granted by {grant.granted_by})"
+                if grant
+                else "off - every write waits for a person"
+            )
+        ]
+        for record in sorted(records.values(), key=lambda r: r.action_type):
+            state = "trusted" if record.trusted(grant) else record.why_not(grant)
+            lines.append(f"  {record.action_type:<24} streak {record.streak:>3}  {state}")
+        metric = rules.no_touch(self.services.queue, self.services.audit, company)
+        lines.append("  " + metric.describe())
+        return turn.say("system", "\n".join(lines))
+
     async def cmd_signin(self, args: list[str], turn: Turn) -> Turn:
         """/signin <name> - who is at the keyboard.
 
@@ -862,6 +953,9 @@ def _render_findings(findings: list[dict[str, str]]) -> str:
 COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
     "help": Session.cmd_help,
     "client": Session.cmd_client,
+    "run": Session.cmd_run,
+    "inbox": Session.cmd_inbox,
+    "autonomy": Session.cmd_autonomy,
     "signin": Session.cmd_signin,
     "signout": Session.cmd_signout,
     "users": Session.cmd_users,
@@ -891,6 +985,9 @@ COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
 HELP = {
     "help": "this list",
     "client": "[slug] - list the practice's clients, or switch to one",
+    "run": "[--force] [client ...] - the morning run across every client, now",
+    "inbox": "[client] - everything the runs found, worst first",
+    "autonomy": "[grant <streak> <max> | revoke] - earned hands-off posting",
     "signin": "<name> - who is deciding; the PIN is asked for masked",
     "signout": "stop acting as the signed-in person",
     "users": "who is registered here",

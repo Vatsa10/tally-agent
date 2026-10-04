@@ -36,6 +36,21 @@ class DaemonConfig:
 
 
 @dataclass(slots=True)
+class FirmConfig:
+    """The morning run across every client."""
+
+    enabled: bool = True
+    #: Local time, HH:MM. Before the office opens, so the partner's first look
+    #: at the inbox is already the day's list.
+    run_at: str = "07:30"
+
+    @property
+    def hour_minute(self) -> tuple[int, int]:
+        hour, _, minute = self.run_at.partition(":")
+        return int(hour), int(minute or 0)
+
+
+@dataclass(slots=True)
 class McpConfig:
     enabled: bool = True
     transport: str = "stdio"
@@ -61,6 +76,7 @@ class Config:
     tiers: TierConfig = field(default_factory=TierConfig)
     whatsapp: WhatsAppConfig = field(default_factory=WhatsAppConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
+    firm: FirmConfig = field(default_factory=FirmConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     policy: Policy = field(default_factory=Policy.default)
     db_path: str = "./tallyagent.db"
@@ -116,6 +132,7 @@ def from_dict(
     tiers_raw = data.get("tiers") or {}
     storage_raw = data.get("storage") or {}
     mcp_raw = data.get("mcp") or {}
+    firm_raw = data.get("firm") or {}
     logging_raw = data.get("logging") or {}
     whatsapp_raw = (data.get("channels") or {}).get("whatsapp") or {}
 
@@ -202,6 +219,10 @@ def from_dict(
             access_token=os.environ.get("WHATSAPP_ACCESS_TOKEN", ""),
             phone_number_id=str(whatsapp_raw.get("phone_number_id") or ""),
             allowlist=allowlist,
+        ),
+        firm=FirmConfig(
+            enabled=bool(firm_raw.get("enabled", True)),
+            run_at=str(firm_raw.get("run_at") or "07:30"),
         ),
         mcp=McpConfig(
             enabled=bool(mcp_raw.get("enabled", True)),

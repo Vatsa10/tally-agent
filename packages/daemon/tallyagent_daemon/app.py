@@ -22,7 +22,9 @@ from tallyagent_daemon.wiring import Wired
 log = logging.getLogger(__name__)
 
 
-def build_app(wired: Wired, pool: ServicesPool | None = None) -> FastAPI:
+def build_app(
+    wired: Wired, pool: ServicesPool | None = None, firm: object = None
+) -> FastAPI:
     """The daemon's application.
 
     ``pool`` holds every client the web UI may show; without one the UI serves
@@ -31,6 +33,9 @@ def build_app(wired: Wired, pool: ServicesPool | None = None) -> FastAPI:
     job belong to one set of books, not to whichever tab is open.
     """
     scheduler = Scheduler(wired)
+    if firm is not None and wired.config.firm.enabled:
+        scheduler.firm = firm
+        scheduler.firm_at = wired.config.firm.hour_minute
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
@@ -69,6 +74,10 @@ def build_app(wired: Wired, pool: ServicesPool | None = None) -> FastAPI:
 
     # Last, because the web router redirects every unprefixed address to the
     # default client and would otherwise swallow the webhook.
-    app.include_router(build_web_router(pool or wired.services))
+    app.include_router(
+        build_web_router(
+            pool or wired.services, inbox=getattr(firm, "inbox", None)
+        )
+    )
 
     return app

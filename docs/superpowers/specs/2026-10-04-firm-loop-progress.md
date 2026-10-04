@@ -15,7 +15,7 @@ moves from gated to hands-off on a measured record and falls back on a miss.
 | 2 | Earned autonomy ramp and no-touch metric | **done** |
 | 3 | `reconcile_2b` job: mismatch classification, vendor follow-ups, deferred-ITC ledger, IMS suggestions | **done** |
 | 4 | Edit Log edition check, local model option | **done** |
-| 5 | Wiring: scheduler, TUI `/inbox`, web home page, CLI `firm run` | next |
+| 5 | Wiring: scheduler, TUI `/inbox`, web home page, CLI `firm run` | **done** |
 
 ## 1. Firm loop core - done
 
@@ -107,3 +107,42 @@ Tests: `tests/test_itc.py` (19), `tests/test_reconcile_job.py` (10), `tests/test
   overrides the name heuristic ("Ltd", "Limited", "Pvt").
 
 Tests: `tests/test_onprem_and_editlog.py` (21).
+
+## 5. Wiring - done
+
+`packages/daemon/tallyagent_daemon/firm/setup.py` builds the same run for every surface.
+
+- **CLI**:
+  - `tallyagent firm run [--client X] [--force] [--date]` writes `reports/brief/<date>.md` and prints the brief.
+  - `firm inbox [--client]` and `firm resolve <id> --by`.
+  - `autonomy grant|status|revoke` (grant and revoke are partner-only, with PIN).
+- **TUI**:
+  - `/run [--force] [client ...]` and `/inbox [client]`.
+  - `/autonomy`, plus `/autonomy grant <streak> <max>` and `/autonomy revoke` (partner-only).
+- **Daemon**: `serve` runs the morning run daily at `[firm] run_at` (default 07:30, local time), once a day. A failed run is not retried every minute.
+- **Web**:
+  - Every client page shows the firm inbox, covering every client and worst first.
+  - "Dealt with" needs a registered name and PIN.
+- **A solo install with no `clients.toml`** gets a register of one, on its existing database.
+- **The inbox closes superseded lines.** When a job reports again for a client, that job's earlier lines that it no longer reports are closed. Jobs that did not run keep theirs.
+
+Live: `firm run --force --date 2026-07-15 --client demo` against TallyPrime:
+- reconciled June's 2B;
+- deferred Rs 43,110;
+- drafted the Bharat Supplies follow-up;
+- found the BS/77 Rs 2,000 value difference;
+- drafted the missing bill BS/2026/90 from 2B (APR-0007);
+- flagged 90-day receivables, negative cash and duplicates;
+- wrote the brief.
+
+`autonomy status` shows each action's streak and a 33% no-touch rate.
+
+Tests: `tests/test_firm_surfaces.py` (9), plus 2 more in `tests/test_firm_runner.py`.
+
+## Where this leaves the vision
+
+The loop exists end to end: every client, every morning, reconciliation first, earned autonomy as the throughput engine, one inbox, and a brief. What is not yet built:
+- WhatsApp delivery of the brief: the text exists, but sending it is not wired.
+- A bills job in the loop: today it runs on demand only.
+- A bank-reco job fed from a statement folder.
+- Remote-client hardening beyond the health check.

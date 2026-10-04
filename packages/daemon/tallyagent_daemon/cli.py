@@ -39,11 +39,15 @@ audit_app = typer.Typer(help="The append-only audit log.")
 consent_app = typer.Typer(help="Which client companies may be written to.")
 users_app = typer.Typer(help="Who works here, and what they may decide.")
 clients_app = typer.Typer(help="The practice's clients, one set of books each.")
+firm_app = typer.Typer(help="The morning run across every client, and its inbox.")
+autonomy_app = typer.Typer(help="Hands-off posting, earned per client and per action.")
 app.add_typer(approvals_app, name="approvals")
 app.add_typer(audit_app, name="audit")
 app.add_typer(consent_app, name="consent")
 app.add_typer(users_app, name="users")
 app.add_typer(clients_app, name="clients")
+app.add_typer(firm_app, name="firm")
+app.add_typer(autonomy_app, name="autonomy")
 backup_app = typer.Typer(help="Backups of a client's books, before a bulk posting.")
 app.add_typer(backup_app, name="backup")
 
@@ -353,12 +357,17 @@ def tui(
         _wire_fallback(switched)
         return switched.services
 
+    from tallyagent_daemon.firm.setup import make_runner, single_client_register
+
     run_tui(
         wired.services,
         config.live,
         clients=register,
         switch=switch,
         client_slug=register.find(client).slug if register.find(client) else "",
+        firm=make_runner(
+            base, register if not register.empty else single_client_register(base), fake=fake
+        ),
     )
 
 
@@ -517,8 +526,15 @@ def serve(
     typer.echo(f"tallyagent is at {url}")
     if wired.using_mock_model:
         typer.echo("Using the mock model provider (no API key configured).")
+    from tallyagent_daemon.firm.setup import make_runner, single_client_register
+
+    base = load(config_path, policy_path)
+    firm = make_runner(
+        base, register if not register.empty else single_client_register(base), fake=fake
+    )
+    typer.echo(f"The morning run across every client is at {config.firm.run_at} daily.")
     uvicorn.run(
-        build_app(wired, pool),
+        build_app(wired, pool, firm=firm),
         host=config.daemon.host,
         port=config.daemon.port,
         log_level=config.logging.level.lower(),
@@ -997,6 +1013,157 @@ def clients_check(
         )
         ready += int(loaded)
     typer.echo(f"{ready} of {len(register.clients)} client(s) ready to work on.")
+
+
+def _register_or_one(base: Config, clients_path: str):  # type: ignore[no-untyped-def]
+    from tallyagent_daemon.firm.setup import single_client_register
+
+    register = clients.load(clients_path)
+    return register if not register.empty else single_client_register(base)
+
+
+ONLY_CLIENTS_OPTION = typer.Option(None, "--client", help="Only these clients.")
+
+
+@firm_app.command("run")
+def firm_run(
+    only: list[str] | None = ONLY_CLIENTS_OPTION,
+    force: bool = typer.Option(False, "--force", help="Run every job, due or not."),
+    on: str = typer.Option("", "--date", help="Run as if today were YYYY-MM-DD."),
+    clients_path: str = CLIENTS_OPTION,
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+    fake: bool = FAKE_OPTION,
+) -> None:
+    """Run every due job for every client, and write the morning brief."""
+    from datetime import date as _date
+
+    from tallyagent_daemon.firm import brief
+    from tallyagent_daemon.firm.setup import make_runner
+
+    base = _load(config_path, policy_path)
+    register = _register_or_one(base, clients_path)
+    today = _date.fromisoformat(on) if on else _date.today()
+    runner = make_runner(base, register, fake=fake)
+    report = asyncio.run(runner.run(today, only=only or None, force=force))
+    path = brief.write(report)
+    typer.echo(brief.markdown(report))
+    typer.echo(f"brief written to {path}")
+
+
+@firm_app.command("inbox")
+def firm_inbox_list(
+    client: str = typer.Option("", "--client", help="Only this client."),
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Everything the morning runs found that is not yet dealt with, worst first."""
+    from tallyagent_daemon.firm.setup import firm_inbox
+
+    items = firm_inbox(_load(config_path, policy_path)).open(client=client)
+    if not items:
+        typer.echo("Inbox empty.")
+        return
+    for item in items:
+        typer.echo(f"  #{item.id:<5} {item.line()}")
+        if item.detail:
+            typer.echo(f"         {item.detail[:140]}")
+
+
+@firm_app.command("resolve")
+def firm_resolve(
+    item: int,
+    by: str = typer.Option(..., "--by", help="Who dealt with it."),
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Mark an inbox line as dealt with."""
+    from tallyagent_daemon.firm.setup import firm_inbox
+
+    done = firm_inbox(_load(config_path, policy_path)).resolve(item, by)
+    typer.echo(f"#{item} resolved by {by}." if done else f"No inbox line #{item}.")
+
+
+@autonomy_app.command("grant")
+def autonomy_grant(
+    by: str = typer.Option(..., "--by", help="Which partner is granting it."),
+    streak: int = typer.Option(20, "--streak", help="Clean approvals in a row needed."),
+    max_amount: str = typer.Option("50000", "--max", help="Nothing above this posts unattended."),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Let this client's work earn hands-off posting, within these limits."""
+    from decimal import Decimal
+
+    wired = wiring.build(_load(config_path, policy_path, client, clients_path))
+    partner = _partner(wired, by, action="grant_autonomy")
+    try:
+        grant = wired.services.autonomy.grant(
+            wired.config.company.name,
+            by=partner.name,
+            min_streak=streak,
+            max_amount=Decimal(max_amount),
+        )
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(
+        f"{grant.company}: an action type posts without a person after "
+        f"{grant.min_streak} clean approvals in a row, up to Rs {grant.max_amount:,.2f} "
+        f"and never above what a person has approved. Granted by {grant.granted_by}."
+    )
+
+
+@autonomy_app.command("status")
+def autonomy_status(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Each action type's record, and how much now posts without a person."""
+    from tallyagent_approvals import autonomy as rules
+
+    wired = wiring.build(_load(config_path, policy_path, client, clients_path))
+    services = wired.services
+    company = wired.config.company.name
+    grant = services.autonomy.active(company)
+    typer.echo(
+        f"{company}: "
+        + (
+            f"earned autonomy on (streak {grant.min_streak}, ceiling Rs "
+            f"{grant.max_amount:,.2f}, granted by {grant.granted_by})"
+            if grant
+            else "earned autonomy is off - every write waits for a person"
+        )
+    )
+    for record in sorted(
+        rules.records(rules.queue_rows(services.queue, company)).values(),
+        key=lambda r: r.action_type,
+    ):
+        state = "trusted" if record.trusted(grant) else record.why_not(grant)
+        typer.echo(
+            f"  {record.action_type:<24} streak {record.streak:>3}  "
+            f"up to Rs {record.ceiling:>12,.2f}  {state}"
+        )
+    typer.echo("  " + rules.no_touch(services.queue, services.audit, company).describe())
+
+
+@autonomy_app.command("revoke")
+def autonomy_revoke(
+    by: str = typer.Option(..., "--by", help="Which partner is revoking it."),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Every write waits for a person again, from the next one."""
+    wired = wiring.build(_load(config_path, policy_path, client, clients_path))
+    partner = _partner(wired, by, action="grant_autonomy")
+    done = wired.services.autonomy.revoke(wired.config.company.name, by=partner.name)
+    typer.echo("Earned autonomy revoked." if done else "It was not on.")
 
 
 @app.command("fake-tally")

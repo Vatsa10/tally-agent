@@ -1,0 +1,41 @@
+{# The firm inbox: every client's open lines in one list, worst first. The same
+   on every client's page, because it is the partner's morning, not one client's. #}
+{% if flash %}
+<p class="mb-2 rounded px-3 py-2 text-sm {{ 'bg-emerald-50 text-emerald-800' if flash_ok else 'bg-rose-50 text-rose-800' }}">{{ flash }}</p>
+{% endif %}
+{% if not items %}
+<p class="text-sm text-slate-500">Nothing open. The morning run found nothing that needs a person.</p>
+{% else %}
+<ul class="divide-y rounded border bg-white">
+  {% for item in items %}
+  <li class="p-3">
+    <div class="flex flex-wrap items-baseline gap-2">
+      <span class="rounded px-2 py-0.5 text-xs font-medium
+        {{ 'bg-rose-100 text-rose-800' if item.kind == 'exception' else
+           ('bg-amber-100 text-amber-800' if item.kind == 'queued' else 'bg-slate-100 text-slate-600') }}">
+        {{ 'needs a person' if item.kind == 'exception' else ('waiting' if item.kind == 'queued' else 'done') }}
+      </span>
+      <a href="/c/{{ item.client }}/" class="text-xs font-medium text-slate-600 underline">{{ item.client }}</a>
+      <span class="text-sm">{{ item.title }}</span>
+      {% if item.amount_at_risk %}
+      <span class="text-xs font-semibold text-rose-700">Rs {{ '{:,.2f}'.format(item.amount_at_risk) }}</span>
+      {% endif %}
+      {% if item.due %}<span class="text-xs text-slate-500">due {{ item.due }}</span>{% endif %}
+    </div>
+    {% if item.detail %}<p class="mt-1 text-xs text-slate-600">{{ item.detail }}</p>{% endif %}
+    <form hx-post="/firm/inbox/{{ item.id }}/resolve" hx-target="#inbox"
+          class="mt-2 flex items-center gap-2">
+      {% if users %}
+      <select name="who" required class="rounded border border-slate-300 px-2 py-1 text-xs">
+        <option value="">who dealt with it</option>
+        {% for user in users %}<option value="{{ user.name }}">{{ user.name }}</option>{% endfor %}
+      </select>
+      <input name="pin" type="password" required placeholder="PIN" autocomplete="off"
+             inputmode="numeric" size="6" class="rounded border border-slate-300 px-2 py-1 text-xs">
+      {% endif %}
+      <button class="rounded border border-slate-400 px-3 py-1 text-xs">Dealt with</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

@@ -235,3 +235,32 @@ async def test_the_real_jobs_run_against_a_fake_client(practice, tmp_path, monke
     jobs = {o.job for o in report.outcomes}
     assert {"month_end", "gstr1"} <= jobs, [o.title for o in report.outcomes]
     assert any("Close pack for 2026-06" in o.title for o in report.outcomes)
+
+
+async def test_a_line_the_job_no_longer_reports_is_closed_by_the_next_run(practice):
+    """"GSTR-2B has not been downloaded" must not stay open after the run that
+    found the file."""
+    register, wire, inbox = practice
+    missing = StubJob("gstr2b", [Outcome(job="gstr2b", kind=EXCEPTION,
+                                         title="2B not downloaded", subject="missing")])
+    await FirmRunner(register, wire, inbox, jobs=[missing]).run(DAY, only=["sharma"])
+
+    found = StubJob("gstr2b", [Outcome(job="gstr2b", kind=DONE,
+                                       title="2B reconciled", subject="summary")])
+    await FirmRunner(register, wire, inbox, jobs=[found]).run(DAY, only=["sharma"])
+
+    titles = [i.title for i in inbox.open()]
+    assert "2B not downloaded" not in titles
+    assert "2B reconciled" in titles
+
+
+async def test_a_job_that_did_not_run_keeps_its_lines(practice):
+    register, wire, inbox = practice
+    gst = StubJob("gstr2b", [Outcome(job="gstr2b", kind=EXCEPTION, title="open item",
+                                     subject="x")])
+    await FirmRunner(register, wire, inbox, jobs=[gst]).run(DAY, only=["sharma"])
+
+    other = StubJob("month_end", [Outcome(job="month_end", kind=DONE, title="pack")])
+    await FirmRunner(register, wire, inbox, jobs=[other]).run(DAY, only=["sharma"])
+
+    assert "open item" in [i.title for i in inbox.open()]

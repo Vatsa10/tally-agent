@@ -51,7 +51,10 @@ class ClientReport:
 
     @property
     def at_risk(self) -> Decimal:
-        return sum((o.amount_at_risk for o in self.outcomes), Decimal("0"))
+        """Money on lines still open - what is done is no longer at risk."""
+        return sum(
+            (o.amount_at_risk for o in self.outcomes if o.kind != DONE), Decimal("0")
+        )
 
 
 @dataclass(slots=True)
@@ -193,7 +196,18 @@ class FirmRunner:
             report.outcomes.extend(outcomes)
 
         if self.autonomy is not None:
-            report.outcomes.extend(await self.autonomy.apply(wired, client, today))
+            by_ticket = {o.ticket: o for o in report.outcomes if o.ticket}
+            for outcome in await self.autonomy.apply(wired, client, today):
+                drafted = by_ticket.get(outcome.ticket) if outcome.ticket else None
+                if drafted is None:
+                    report.outcomes.append(outcome)
+                    continue
+                # The job already has a line for this draft; say what became of
+                # it there, rather than a second line about the same ticket.
+                drafted.kind = outcome.kind
+                if outcome.kind == DONE:
+                    drafted.title = outcome.title
+                drafted.detail = f"{drafted.detail} {outcome.detail}".strip()
         return report
 
 

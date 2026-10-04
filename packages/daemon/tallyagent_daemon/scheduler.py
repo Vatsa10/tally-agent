@@ -31,6 +31,10 @@ class Scheduler:
     history: list[JobRun] = field(default_factory=list)
     last_bank_reco: date | None = None
     last_gstr2b: tuple[int, int] | None = None
+    #: The morning run across every client, when the daemon was given one.
+    firm: object = None
+    firm_at: tuple[int, int] = (7, 30)
+    last_firm_run: date | None = None
 
     @property
     def services(self):  # type: ignore[no-untyped-def]
@@ -97,9 +101,38 @@ class Scheduler:
         )
         return run
 
+    def due_firm_run(self, local: datetime) -> bool:
+        """Once a day, from the configured local time - a partner's morning is
+        a local thing, not a UTC one."""
+        if self.firm is None or self.last_firm_run == local.date():
+            return False
+        return (local.hour, local.minute) >= self.firm_at
+
+    async def run_firm(self, local: datetime) -> JobRun:
+        from tallyagent_daemon.firm import brief
+
+        # Marked before running, so a run that fails is not retried every
+        # minute for the rest of the day; the failure is in the history.
+        self.last_firm_run = local.date()
+        try:
+            report = await self.firm.run(local.date())  # type: ignore[attr-defined]
+            path = brief.write(report)
+            run = JobRun("firm_run", local, f"{report.summary()} Brief: {path}")
+        except Exception as exc:  # noqa: BLE001 - the daemon outlives a bad morning
+            log.exception("morning firm run failed")
+            run = JobRun("firm_run", local, f"failed: {exc}", ok=False)
+        self.history.append(run)
+        self.services.audit.append(
+            "scheduled_job", actor="scheduler", job="firm_run", summary=run.summary
+        )
+        return run
+
     async def tick(self, now: datetime | None = None) -> list[JobRun]:
         now = now or datetime.now(UTC)
         runs = []
+        local = now.astimezone()
+        if self.due_firm_run(local):
+            runs.append(await self.run_firm(local))
         if self.due_bank_reco(now):
             runs.append(await self.run_bank_reco(now))
         if self.due_gstr2b(now):

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -28,7 +29,7 @@ from tallyagent_core.models import Voucher, VoucherLine
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
-def build_router(source: Services | ServicesPool) -> APIRouter:
+def build_router(source: Services | ServicesPool, inbox: Any = None) -> APIRouter:
     """The web routes over one client or a pool of them.
 
     A bare :class:`Services` is a single-company install and is wrapped as a
@@ -311,6 +312,54 @@ def build_router(source: Services | ServicesPool) -> APIRouter:
     @router.get("/c/{slug}/health")
     async def client_health(slug: str) -> dict[str, object]:
         return _services(slug).status()
+
+    def _inbox_page(
+        request: Request, flash: str = "", flash_ok: bool = True
+    ) -> HTMLResponse:
+        services = _services(pool.default)
+        items = inbox.open() if inbox is not None else []
+        return TEMPLATES.TemplateResponse(
+            request=request,
+            name="_inbox.html",
+            context={
+                "items": items,
+                "users": _users(services),
+                "flash": flash,
+                "flash_ok": flash_ok,
+            },
+        )
+
+    @router.get("/firm/inbox", response_class=HTMLResponse)
+    async def firm_inbox(request: Request) -> HTMLResponse:
+        """Every client's open lines, worst first - the partner's morning."""
+        return _inbox_page(request)
+
+    @router.post("/firm/inbox/{item_id}/resolve", response_class=HTMLResponse)
+    async def firm_inbox_resolve(
+        request: Request, item_id: int, who: str = Form(""), pin: str = Form("")
+    ) -> HTMLResponse:
+        """Mark a line dealt with, by a named person.
+
+        Any registered person may - dealing with a line is work, not a
+        decision about the books - but it carries their name, checked by PIN,
+        like everything else that says who did what.
+        """
+        if inbox is None:
+            return _inbox_page(request, "No firm inbox here.", False)
+        services = _services(pool.default)
+        people = getattr(services, "people", None)
+        name = who or "web"
+        if people is not None and not people.empty:
+            try:
+                name = people.check(who, pin).name
+            except TallyAgentError as exc:
+                return _inbox_page(request, str(exc), False)
+        done = inbox.resolve(item_id, name)
+        return _inbox_page(
+            request,
+            f"Marked dealt with by {name}." if done else f"No line #{item_id}.",
+            done,
+        )
 
     @router.get("/health")
     async def health() -> dict[str, object]:

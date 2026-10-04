@@ -246,11 +246,14 @@ class TallyAgentTUI(App[None]):
         clients: Any = None,
         switch: Any = None,
         client_slug: str = "",
+        firm: Any = None,
     ) -> None:
         super().__init__()
         self.services = services
         self.live = live or LiveMode()
-        self.session = Session(services, live=self.live, clients=clients, switch=switch)
+        self.session = Session(
+            services, live=self.live, clients=clients, switch=switch, firm=firm
+        )
         self.session.client_slug = client_slug
         self.session.tier3_approver = self._approve_tier3_step
         self.session.pin_prompt = self._ask_pin
@@ -492,9 +495,10 @@ def run(
     clients: Any = None,
     switch: Any = None,
     client_slug: str = "",
+    firm: Any = None,
 ) -> None:
     TallyAgentTUI(
-        services, live, clients=clients, switch=switch, client_slug=client_slug
+        services, live, clients=clients, switch=switch, client_slug=client_slug, firm=firm
     ).run()
 
 

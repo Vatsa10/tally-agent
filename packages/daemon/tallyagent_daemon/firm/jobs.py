@@ -83,7 +83,9 @@ class MonthEndJob:
         outcomes = [
             Outcome(
                 job=self.name,
-                kind=EXCEPTION if finding["severity"] == "high" else DONE,
+                # "To fix" and "to check" both need a person; only the
+                # informational ones are simply done.
+                kind=DONE if finding["severity"] == "low" else EXCEPTION,
                 title=finding["detail"],
                 detail=finding["fix"],
                 amount_at_risk=abs(Decimal(finding["amount"] or "0")),

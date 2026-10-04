@@ -56,7 +56,21 @@ class Inbox:
         """
         added = 0
         now = datetime.now(UTC)
+        fresh = {outcome.key(run_day) for outcome in outcomes}
+        reported = {(outcome.client, outcome.job) for outcome in outcomes}
         with Session(self.engine) as session:
+            # A job that has reported again for a client speaks for that
+            # client's current state: its earlier lines it no longer reports
+            # are over - the 2B that "has not been downloaded" was downloaded.
+            # Jobs that did not run this time keep their lines.
+            for row in session.exec(
+                select(InboxRow).where(InboxRow.resolved == False)  # noqa: E712
+            ).all():
+                if (row.client, row.job) in reported and row.key not in fresh:
+                    row.resolved = True
+                    row.resolved_by = "superseded by a later run"
+                    row.updated_at = now
+                    session.add(row)
             for outcome in outcomes:
                 key = outcome.key(run_day)
                 row = session.exec(select(InboxRow).where(InboxRow.key == key)).first()

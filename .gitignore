@@ -32,3 +32,4 @@ tests/fixtures/bill_pile_photo/
 tests/fixtures/bills_real/*.jpg
 data/
 config/clients.toml
+clients/

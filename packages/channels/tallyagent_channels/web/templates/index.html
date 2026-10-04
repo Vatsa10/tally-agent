@@ -37,6 +37,17 @@
   </header>
 
   <section>
+    <div class="flex items-baseline justify-between mb-2">
+      <h2 class="text-lg font-semibold">Firm inbox &mdash; every client</h2>
+      <button hx-get="/firm/inbox" hx-target="#inbox"
+              class="text-xs text-slate-600 underline">refresh</button>
+    </div>
+    <div id="inbox" hx-get="/firm/inbox" hx-trigger="load">
+      <p class="text-sm text-slate-500">Loading...</p>
+    </div>
+  </section>
+
+  <section>
     <h2 class="text-lg font-semibold mb-2">Ask</h2>
     <form hx-post="{{ base }}/chat" hx-target="#chat" hx-swap="afterbegin"
           class="flex gap-2" hx-on::after-request="this.reset()">
