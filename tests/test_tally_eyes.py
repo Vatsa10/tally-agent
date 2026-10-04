@@ -91,6 +91,28 @@ async def test_the_same_picture_is_read_once():
     assert router.calls == 1
 
 
+async def test_an_empty_reply_is_asked_again_and_never_cached():
+    """Measured live: some reads come back empty. Ask once more; cache only answers."""
+    class Flaky:
+        def __init__(self) -> None:
+            self.replies = ["", '{"screen": "Gateway of Tally"}']
+
+        async def complete(self, messages, max_tokens=0):  # type: ignore[no-untyped-def]
+            from tallyagent_llm.provider import Completion
+
+            return Completion(text=self.replies.pop(0) if self.replies else "")
+
+    eyes = VisionScreen(Flaky())
+    assert (await eyes.read(_png())).screen == "Gateway of Tally"
+
+    blank = VisionScreen(CountingRouter())
+    blank.router.complete = Flaky().complete  # type: ignore[method-assign]
+    other = _png((10, 10, 10))
+    blank.router.complete.__self__.replies = ["", ""]  # type: ignore[attr-defined]
+    assert (await blank.read(other)).screen == ""
+    assert not blank._cache, "an empty read is not remembered as the answer"
+
+
 async def test_a_failing_model_is_an_unknown_screen_not_a_crash():
     class Broken:
         async def complete(self, *a, **k):  # type: ignore[no-untyped-def]

@@ -142,22 +142,32 @@ class VisionScreen:
 
         jpeg, width, height, scale = _shrink(png)
         started = time.monotonic()
-        try:
-            completion = await self.router.complete(
-                [
-                    Message(
-                        role="user",
-                        content=PROMPT.format(w=width, h=height),
-                        images=[Image(data=jpeg, media_type="image/jpeg")],
-                    )
-                ],
-                max_tokens=self.max_tokens,
-            )
-            state = parse(completion.text, scale)
-        except Exception as exc:  # noqa: BLE001 - an unreadable screen is a state too
-            log.warning("vision read failed: %s", exc)
-            state = ScreenState()
+        # Measured live: about one read in three came back empty - no error,
+        # just no reply after twelve seconds of thinking. A second ask nearly
+        # always answers, so an empty read is asked once more, and an empty
+        # state is never cached as if it were the answer.
+        state = ScreenState()
+        for _attempt in range(2):
+            try:
+                completion = await self.router.complete(
+                    [
+                        Message(
+                            role="user",
+                            content=PROMPT.format(w=width, h=height),
+                            images=[Image(data=jpeg, media_type="image/jpeg")],
+                        )
+                    ],
+                    max_tokens=self.max_tokens,
+                )
+                state = parse(completion.text, scale)
+            except Exception as exc:  # noqa: BLE001 - an unreadable screen is a state too
+                log.warning("vision read failed: %s", exc)
+                state = ScreenState()
+            if state.screen or state.dialog:
+                break
         state = ScreenState(**{**_fields(state), "seconds": round(time.monotonic() - started, 2)})
+        if not (state.screen or state.dialog):
+            return state
         self._cache[key] = state
         if len(self._cache) > 64:
             self._cache.pop(next(iter(self._cache)))
