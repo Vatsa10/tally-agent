@@ -41,6 +41,8 @@ async def main() -> int:
     env.load()
 
     spec = json.loads(NARRATION.read_text(encoding="utf-8"))
+    clips_file = Path("film/data/clips.json")
+    clips = json.loads(clips_file.read_text(encoding="utf-8")) if clips_file.is_file() else {}
     voice = Voice(**{k: v for k, v in spec["voice"].items() if k in Voice.model_fields})
     paths = Paths()
     raw = SilentTTS(paths.scratch) if args.offline else MurfTTS(paths.scratch)
@@ -51,14 +53,29 @@ async def main() -> int:
     scenes = []
     cursor = 0.0
     for scene in spec["scenes"]:
+        clip = clips.get(scene.get("clip", "")) if scene.get("clip") else None
+        if scene.get("clip") and not (clip and clip.get("ok")):
+            # A clip that did not record cleanly is left out rather than shown
+            # failing: the film shows what the product does, not a retake.
+            print(f"  {scene['id']:<10} skipped - clip {scene['clip']!r} not recorded cleanly")
+            continue
         spoken = await speaker.speak(scene["say"], voice)
         seconds = duration(spoken.path) or spoken.seconds
         length = max(float(scene.get("min", 0)), LEAD_IN + seconds + TAIL)
-        scenes.append({
+        entry = {
             "id": scene["id"], "start": round(cursor, 3), "duration": round(length, 3),
             "say": scene["say"], "voice_at": round(cursor + LEAD_IN, 3),
             "voice_seconds": round(seconds, 3),
-        })
+        }
+        if clip:
+            speed = float(scene.get("speed", 1.0))
+            # The footage sets the floor: the scene lasts as long as the clip
+            # takes at its speed, plus the frame's own entrance and exit.
+            length = max(length, float(clip["seconds"]) / speed + 1.4)
+            entry.update(duration=round(length, 3), clip=scene["clip"], speed=speed,
+                         clip_at=round(cursor + 0.6, 3), clip_seconds=clip["seconds"],
+                         events=clip.get("events", []))
+        scenes.append(entry)
         lead = BUILD / f"lead-{scene['id']}.wav"
         lead.write_bytes(silence_wav(LEAD_IN))
         tail = BUILD / f"tail-{scene['id']}.wav"

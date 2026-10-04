@@ -37,11 +37,16 @@ def build_ui(ctx: ToolContext) -> Any:
     tiers = getattr(fallback, "tiers", None)
     if tiers is not None and not tiers.config.fallback_enabled:
         return None
-    from tallyagent_agent.fallback.tally_ui import DesktopKeyboard, TallyUi
+    from tallyagent_agent.fallback.tally_ui import (
+        DesktopKeyboard,
+        TallyUi,
+        locate_on_screen,
+    )
 
     return TallyUi(
         keyboard=DesktopKeyboard(),
         spotlight=getattr(fallback, "spotlight", None),
+        locate=locate_on_screen,
     )
 
 

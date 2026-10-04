@@ -38,6 +38,42 @@ log = logging.getLogger(__name__)
 #: How long Tally needs to draw a screen before the next key means anything.
 SETTLE = 1.2
 
+#: Where each kind of step happens on Tally's screen: the label Tally draws
+#: beside the field. The ring is moved there before anything is typed, so a
+#: person watching sees the field being filled rather than a ring parked
+#: somewhere else - which is what the first version showed.
+ANCHORS: tuple[tuple[str, str], ...] = (
+    ("choose the", "Voucher Creation"),
+    ("open the date field", "Date"),
+    ("the voucher date", "Change Voucher Date"),
+    ("the account", "Account"),
+    ("what it is being spent on", "Particulars"),
+    ("who or what it came from", "Particulars"),
+    ("the ledger", "Particulars"),
+    ("debit side", "Particulars"),
+    ("credit side", "Particulars"),
+    ("the amount against it", "Amount"),
+    ("the amount", "Amount"),
+    ("the debit amount", "Amount"),
+    ("the credit amount", "Amount"),
+    ("the cost category", "Cost Category"),
+    ("the cost centre", "Name of Cost Centre"),
+    ("finish the allocation", "Cost Allocations"),
+    ("allocate it on account", "Type of Ref"),
+    ("accept the amount", "Amount"),
+    ("finish the bill allocation", "Bill-wise Details"),
+    ("no more lines", "Narration"),
+    ("the narration", "Narration"),
+    ("accept the voucher", "Narration"),
+)
+
+
+def anchor_for(what: str) -> str:
+    for prefix, label in ANCHORS:
+        if what.startswith(prefix):
+            return label
+    return ""
+
 #: Tally writes the open screen's name in its own title area. Checking it is
 #: what makes typing into the right field a fact rather than a hope.
 SCREEN_CHECK_ATTEMPTS = 3
@@ -50,6 +86,9 @@ class UiStep:
     what: str
     keys: list[str] = field(default_factory=list)
     text: str = ""
+    #: The label beside this step's field on Tally's screen; derived from
+    #: ``what`` when not given.
+    anchor: str = ""
     #: The screen this step expects to be typing into. Tally opens sub-screens
     #: of its own accord, and a step that names the one it wants is the only
     #: way to tell the expected one from a surprise.
@@ -98,12 +137,23 @@ class TallyUi:
         sleep: Any = None,
         screen_name: Callable[[], str] | None = None,
         title: str = "TallyPrime",
+        locate: Callable[[str], tuple[int, int] | None] | None = None,
+        on_event: Callable[[str, str], None] | None = None,
+        pace: float = 1.0,
     ) -> None:
         self.keyboard = keyboard
         self.spotlight = spotlight
         self.approve = approve
         self.title = title
         self._screen_name = screen_name or _screen_from_title
+        # Finding a field means reading the real screen, so it is never implied:
+        # callers driving the desktop pass ``locate_on_screen``; tests and
+        # anything without a ring pass nothing.
+        self._locate = locate
+        self._on_event = on_event
+        #: Multiplies every pause. Below 1 for a recording, where the waits
+        #: that let Tally draw are kept and the rest is dead air.
+        self.pace = pace
         if sleep is None:
             import asyncio
 
@@ -118,7 +168,19 @@ class TallyUi:
         """Put the reason on screen, beside the ring."""
         if self.spotlight is not None:
             self.spotlight.announce(words)
+        self._event("say", words)
         log.info("tally ui: %s", words)
+
+    def _event(self, kind: str, text: str) -> None:
+        if self._on_event is None:
+            return
+        try:
+            self._on_event(kind, text)
+        except Exception:  # noqa: BLE001 - an observer never stops the work
+            log.debug("event observer failed", exc_info=True)
+
+    async def _wait(self, seconds: float) -> None:
+        await self._sleep(seconds * self.pace)
 
     async def go_to(self, report: str) -> bool:
         """Open a screen by name. Works from wherever Tally happens to be."""
@@ -130,7 +192,7 @@ class TallyUi:
         # searching. Close it first, and only it.
         if self._palette_open():
             self.keyboard.press("escape")
-            await self._sleep(0.6)
+            await self._wait(0.6)
         # The first Alt+G after Tally is raised is sometimes swallowed, and the
         # report name then gets typed into whatever report is open. Confirm the
         # palette is up before typing, and ask again if it is not.
@@ -145,15 +207,15 @@ class TallyUi:
         else:
             return False
         self.keyboard.type(report)
-        await self._sleep(0.5)
+        await self._wait(0.5)
         self.keyboard.press("enter")
-        await self._sleep(SETTLE)
+        await self._wait(SETTLE)
         # Go To leaves its report list sitting over the report it just opened.
         # Escape closes the list, not the report - but only press it when the
         # list is actually there, or it backs out of the report instead.
         if self._palette_open():
             self.keyboard.press("escape")
-            await self._sleep(0.6)
+            await self._wait(0.6)
         return True
 
     async def _palette_appears(self, polls: int = 5, every: float = 0.5) -> bool:
@@ -179,13 +241,14 @@ class TallyUi:
             current = self._screen_name().lower().replace(" ", "")
             if wanted in current:
                 return True
-            await self._sleep(0.6)
+            await self._wait(0.6)
         log.warning("expected %r, Tally is showing %r", expected, self._screen_name())
         return False
 
     async def step(self, step: UiStep) -> bool:
         """Narrate, ask if it changes anything, then do it."""
         self.say(step.describe())
+        self._point_at(step)
         if step.mutating:
             if self.approve is None:
                 step.refused = True
@@ -200,10 +263,30 @@ class TallyUi:
             self.keyboard.type(step.text)
         for key in step.keys:
             self.keyboard.press(key)
-            await self._sleep(0.35)
-        await self._sleep(SETTLE if step.mutating else 0.4)
+            await self._wait(0.35)
+        await self._wait(SETTLE if step.mutating else 0.4)
         step.done = True
+        self._event("done", step.describe())
+        # The caption belongs to this step. Left in place, the next screen
+        # carried the last one's words - "the new voucher, posted" over a
+        # payment that had not been typed yet.
+        if self.spotlight is not None:
+            self.spotlight.announce("")
         return True
+
+    def _point_at(self, step: UiStep) -> None:
+        """Move the ring to the field this step is about to fill."""
+        if self.spotlight is None or self._locate is None:
+            return
+        label = step.anchor or anchor_for(step.what)
+        if not label:
+            return
+        try:
+            where = self._locate(label)
+        except Exception:  # noqa: BLE001 - the keys still go in; only the ring misses
+            where = None
+        if where is not None:
+            self.spotlight.point(*where, caption=step.describe())
 
     # --- the work ------------------------------------------------------------
 
@@ -626,6 +709,54 @@ def _ocr_lines(png: bytes) -> list[str]:
     image = PilImage.open(io.BytesIO(png)).convert("RGB")
     found, _ = _OCR(numpy.array(image))
     return [line[1] for line in (found or [])]
+
+
+def _ocr_boxes(png: bytes) -> list[tuple[str, tuple[float, float, float, float]]]:
+    """Every line of text on the image, with its box: (text, (x0, y0, x1, y1))."""
+    global _OCR
+    import io  # noqa: PLC0415
+
+    import numpy  # noqa: PLC0415
+    from PIL import Image as PilImage  # noqa: PLC0415
+
+    if _OCR is None:
+        from rapidocr_onnxruntime import RapidOCR  # type: ignore[import-untyped]  # noqa: PLC0415
+
+        _OCR = RapidOCR()
+    image = PilImage.open(io.BytesIO(png)).convert("RGB")
+    found, _ = _OCR(numpy.array(image))
+    out = []
+    for box, text, _score in found or []:
+        xs = [point[0] for point in box]
+        ys = [point[1] for point in box]
+        out.append((str(text), (min(xs), min(ys), max(xs), max(ys))))
+    return out
+
+
+def _squash(text: str) -> str:
+    return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
+def locate_on_screen(label: str) -> tuple[int, int] | None:
+    """Where ``label`` is drawn in the Tally window, in screen coordinates.
+
+    Reads the window through PrintWindow, so it works whether or not Tally is
+    in front. The topmost match wins - Tally's field labels sit above the
+    rows of figures that might repeat the same word.
+    """
+    from tallyagent_agent.perception.screen import capture, find_tally_window
+
+    bounds = find_tally_window()
+    if bounds is None:
+        return None
+    wanted = _squash(label)
+    matches = [
+        box for text, box in _ocr_boxes(capture(bounds)) if wanted and wanted in _squash(text)
+    ]
+    if not matches:
+        return None
+    x0, y0, x1, y1 = min(matches, key=lambda b: (b[1], b[0]))
+    return int(bounds.left + (x0 + x1) / 2), int(bounds.top + (y0 + y1) / 2)
 
 
 def _screen_from_title() -> str:

@@ -473,3 +473,84 @@ async def test_a_journal_debit_ledger_with_cost_centres_stops_before_the_credit_
     assert "Cr" not in keyboard.typed and "Furniture" not in keyboard.typed
     assert "ctrl+a" not in keyboard.pressed
     assert keyboard.pressed[-1] == "escape"
+
+
+# --- the ring goes where the work is ------------------------------------------
+
+
+class Ring(FakeSpotlight):
+    def __init__(self) -> None:
+        super().__init__()
+        self.captions: list[str] = []
+
+    def announce(self, words: str) -> None:
+        super().announce(words)
+
+    def point(self, x: int, y: int, caption: str = "") -> None:
+        super().point(x, y, caption)
+        self.captions.append(caption)
+
+
+async def test_the_ring_goes_to_the_field_before_it_is_typed_into():
+    """The first version parked the ring in one place while fields were typed
+    somewhere else."""
+    keyboard, ring = FakeKeyboard(), Ring()
+    asked: list[str] = []
+
+    def locate(label: str):  # type: ignore[no-untyped-def]
+        asked.append(label)
+        return {"Account": (400, 120), "Amount": (900, 300)}.get(label)
+
+    ui = TallyUi(keyboard=keyboard, spotlight=ring, approve=yes, sleep=_nosleep,
+                 screen_name=_ui()[0]._screen_name, locate=locate)
+    await ui.step(UiStep("the account to pay from", text="Cash", keys=["enter"]))
+    await ui.step(UiStep("the amount", text="150.00", keys=["enter"]))
+
+    assert asked == ["Account", "Amount"]
+    assert ring.points == [(400, 120), (900, 300)]
+    assert ring.captions == ['the account to pay from: type "Cash"',
+                             'the amount: type "150.00"']
+
+
+async def test_a_step_leaves_no_caption_behind_for_the_next_screen():
+    keyboard, ring = FakeKeyboard(), Ring()
+    ui = TallyUi(keyboard=keyboard, spotlight=ring, sleep=_nosleep, screen_name=lambda: "x")
+
+    await ui.step(UiStep("the amount", text="150.00"))
+
+    assert ring.said[-1] == "", "cleared once the step is done"
+
+
+async def test_a_field_that_cannot_be_found_still_gets_typed():
+    """Locating only moves the ring; it never decides whether keys are sent."""
+    keyboard, ring = FakeKeyboard(), Ring()
+    ui = TallyUi(keyboard=keyboard, spotlight=ring, sleep=_nosleep,
+                 screen_name=lambda: "x", locate=lambda label: None)
+
+    await ui.step(UiStep("the amount", text="150.00"))
+
+    assert keyboard.typed == ["150.00"]
+    assert ring.points == []
+
+
+async def test_every_step_is_reported_as_it_starts_and_finishes():
+    events: list[tuple[str, str]] = []
+    ui = TallyUi(keyboard=FakeKeyboard(), sleep=_nosleep, screen_name=lambda: "x",
+                 on_event=lambda kind, text: events.append((kind, text)))
+
+    await ui.step(UiStep("the amount", text="150.00"))
+
+    assert events == [("say", 'the amount: type "150.00"'),
+                      ("done", 'the amount: type "150.00"')]
+
+
+async def test_pace_scales_every_pause():
+    waited: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        waited.append(seconds)
+
+    ui = TallyUi(keyboard=FakeKeyboard(), sleep=sleep, screen_name=lambda: "x", pace=0.5)
+    await ui.step(UiStep("the amount", text="150.00", keys=["enter"]))
+
+    assert waited == [0.175, 0.2]

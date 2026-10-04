@@ -101,7 +101,10 @@ def check_framing(region: Region, windows: dict[str, tuple[int, int, int, int]])
 
 
 def record_args(
-    output: Path, region: Region | None = None, framerate: int = FRAMERATE
+    output: Path,
+    region: Region | None = None,
+    framerate: int = FRAMERATE,
+    draw_mouse: bool = True,
 ) -> list[str]:
     """The capture command. No filters here on purpose.
 
@@ -113,7 +116,7 @@ def record_args(
         "ffmpeg", "-hide_banner", "-y",
         "-f", "gdigrab",
         "-framerate", str(framerate),
-        "-draw_mouse", "1",
+        "-draw_mouse", "1" if draw_mouse else "0",
         "-offset_x", str((region or Region()).left),
         "-offset_y", str((region or Region()).top),
         "-video_size", f"{(region or Region()).width}x{(region or Region()).height}",
@@ -135,15 +138,18 @@ class Recorder:
     plays, a half-written mp4 is a brick.
     """
 
-    def __init__(self, output: Path, region: Region | None = None) -> None:
+    def __init__(
+        self, output: Path, region: Region | None = None, draw_mouse: bool = True
+    ) -> None:
         self.output = output
         self.region = region or Region()
+        self.draw_mouse = draw_mouse
         self.process: subprocess.Popen[bytes] | None = None
 
     def start(self) -> None:
         self.output.parent.mkdir(parents=True, exist_ok=True)
         self.process = subprocess.Popen(
-            record_args(self.output, self.region),
+            record_args(self.output, self.region, draw_mouse=self.draw_mouse),
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

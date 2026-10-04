@@ -19,7 +19,9 @@ const out = join(here, "out");
 mkdirSync(build, { recursive: true });
 mkdirSync(out, { recursive: true });
 
-const FPS = Number(process.env.FPS || 30);
+// 60 frames a second: the motion is drawn, so every one of them is a real
+// in-between rather than a repeated frame.
+const FPS = Number(process.env.FPS || 60);
 const args = process.argv.slice(2);
 const stillsArg = args.includes("--stills") ? args[args.indexOf("--stills") + 1] : "";
 
@@ -71,14 +73,51 @@ ffmpeg.stdin.end();
 await new Promise((r) => ffmpeg.on("close", r));
 await browser.close();
 
+// The real Tally footage goes into the framed windows the page left for it:
+// each clip trimmed, sped up, given a slow push in, and overlaid exactly over
+// its scene's clip rectangle for exactly its scene's time.
+const T = JSON.parse(timing);
+const RECT = { x: 96, y: 150, w: 1216, h: 760 };  // must match CLIP_RECT in film.js
+const clipScenes = T.scenes.filter((s) => s.clip);
+let composed = video;
+if (clipScenes.length) {
+  const inputs = ["-i", video];
+  const filters = [];
+  let last = "[0:v]";
+  clipScenes.forEach((s, n) => {
+    const file = join(here, "clips", `${s.clip}.mkv`);
+    inputs.push("-i", file);
+    const len = s.clip_seconds / s.speed;
+    const push = 0.05;
+    filters.push(
+      `[${n + 1}:v]setpts=(PTS-STARTPTS)/${s.speed},fps=${FPS},` +
+      `crop=w='iw/(1+${push}*t/${len.toFixed(3)})':h='ih/(1+${push}*t/${len.toFixed(3)})':x='(iw-ow)/2':y='(ih-oh)/2',` +
+      `scale=${RECT.w}:${RECT.h}:flags=lanczos,setsar=1,setpts=PTS+${s.clip_at}/TB[c${n}]`,
+    );
+    const out = n === clipScenes.length - 1 ? "[v]" : `[o${n}]`;
+    filters.push(`${last}[c${n}]overlay=${RECT.x}:${RECT.y}:eof_action=pass:enable='between(t,${s.clip_at},${(s.clip_at + len).toFixed(3)})'${out}`);
+    last = out;
+  });
+  composed = join(build, "composed.mp4");
+  await new Promise((res, rej) => {
+    const p = spawn("ffmpeg", [
+      "-hide_banner", "-loglevel", "error", "-y", ...inputs,
+      "-filter_complex", filters.join(";"), "-map", "[v]",
+      "-c:v", "libx264", "-preset", "medium", "-crf", "17", "-pix_fmt", "yuv420p", composed,
+    ], { stdio: "inherit" });
+    p.on("close", (code) => (code === 0 ? res() : rej(new Error(`compose failed ${code}`))));
+  });
+  console.log(`  composited ${clipScenes.length} Tally clip(s)`);
+}
+
 // Lay the narration under the picture.
 const final = join(out, "tallyagent.mp4");
 await new Promise((res, rej) => {
   const mux = spawn("ffmpeg", [
-    "-hide_banner", "-loglevel", "error", "-y", "-i", video,
+    "-hide_banner", "-loglevel", "error", "-y", "-i", composed,
     "-i", join(build, "narration.wav"), "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
     "-shortest", "-movflags", "+faststart", final,
   ], { stdio: "inherit" });
   mux.on("close", (code) => (code === 0 ? res() : rej(new Error(`mux failed ${code}`))));
 });
-console.log(`done: ${resolve(final)}  (${total.toFixed(1)}s, ${frames} frames)`);
+console.log(`done: ${resolve(final)}  (${total.toFixed(1)}s, ${frames} frames at ${FPS}fps)`);

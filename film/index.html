@@ -22,9 +22,43 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
   body { font-family: var(--sans); color: var(--ink); }
-  #stage { position: absolute; inset: 0; overflow: hidden;
-    background: radial-gradient(1200px 700px at 78% -10%, #1a2a52 0%, transparent 60%),
-                radial-gradient(900px 600px at -10% 110%, #2a1b06 0%, transparent 55%), var(--bg); }
+  #stage { position: absolute; inset: 0; overflow: hidden; background: var(--bg); }
+  .layer { position: absolute; inset: 0; will-change: transform, opacity, filter; }
+  .orb { position: absolute; width: 1400px; height: 1000px; border-radius: 50%; pointer-events: none; }
+  .orb.small { width: 900px; height: 700px; }
+  .sweep { position: absolute; left: 100px; top: 490px; height: 4px; border-radius: 4px;
+    background: linear-gradient(90deg, var(--saffron), rgba(245,165,36,0)); }
+  .chapter .rule { display: inline-block; height: 2px; background: var(--saffron); margin-right: 14px; vertical-align: middle; }
+  .note { position: absolute; right: 96px; top: 112px; font-size: 17px; color: var(--faint); font-family: var(--mono); }
+  .note2 { padding: 12px 18px; font-size: 14px; color: #6a7c98; }
+  .cardhead { font-size: 22px; color: var(--dim); margin-bottom: 10px; }
+  .state { margin-top: 30px; font-size: 30px; font-weight: 650; }
+  .trusthead { font-size: 40px; font-weight: 700; color: var(--saffron); }
+  .bar2 { flex: 1; height: 8px; border-radius: 8px; background: #1a2440; margin: 0 18px; align-self: center; overflow: hidden; }
+  .bar2 i { display: block; height: 100%; border-radius: 8px; background: linear-gradient(90deg, #179e86, var(--teal)); }
+  .chain { position: absolute; left: 96px; top: 240px; display: flex; }
+  .link { width: 44px; height: 3px; align-self: center; background: #1a2440; }
+  .link i { display: block; height: 100%; background: var(--teal); }
+  .clipframe { position: absolute; border-radius: 18px; background: #0b1222; border: 1px solid var(--line);
+    box-shadow: 0 40px 120px rgba(0,0,0,.6), 0 0 0 1px rgba(245,165,36,.08); }
+  .clipbar { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 20px;
+    font-size: 18px; color: #e8edf7; font-weight: 600; }
+  .clipbar .rec { color: var(--risk); font-size: 20px; }
+  .ticks { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; }
+  .ticks i { position: absolute; bottom: 0; width: 2px; height: 10px; background: var(--saffron); }
+  .k-tool .ms { color: var(--faint); }
+  .clipbar .speed { margin-left: 14px; padding: 2px 10px; border-radius: 999px; font-size: 15px;
+    background: rgba(245,165,36,.15); color: var(--saffron); }
+  .steps { position: absolute; left: 1352px; top: 100px; width: 472px; height: 822px; padding: 28px 26px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.45); overflow: hidden; }
+  .step { display: flex; gap: 14px; align-items: flex-start; font-size: 20px; line-height: 1.35;
+    padding: 10px 0; border-bottom: 1px solid rgba(34,48,77,.6); font-family: var(--mono); }
+  .step.done { color: var(--dim); }
+  .step.now { color: #fff; }
+  .step .mark { width: 26px; flex: none; color: var(--teal); font-weight: 700; }
+  .spin { display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+    border: 3px solid rgba(245,165,36,.25); border-top-color: var(--saffron); }
   .chapter { position: absolute; left: 96px; top: 64px; font-size: 22px; letter-spacing: .14em;
     text-transform: uppercase; color: var(--saffron); font-weight: 600; }
   .chapter b { color: var(--faint); font-weight: 600; margin-right: 14px; }
@@ -90,7 +124,7 @@
   .pill.d { background: rgba(34,195,166,.15); color: var(--teal); }
   .row { display: flex; align-items: baseline; gap: 14px; padding: 14px 0;
     border-bottom: 1px solid var(--line); font-size: 24px; }
-  .row .amt { margin-left: auto; white-space: nowrap; font-weight: 700; color: var(--risk); font-variant-numeric: tabular-nums; }
+  .row .amt { margin-left: auto; white-space: nowrap; font-weight: 700; min-width: 150px; text-align: right; color: var(--risk); font-variant-numeric: tabular-nums; }
   .row .who { color: var(--dim); font-size: 19px; font-family: var(--mono); min-width: 90px; }
   .letter { font-family: Georgia, "Times New Roman", serif; background: #fbfaf6; color: #222;
     padding: 46px 54px; border-radius: 6px; font-size: 22px; line-height: 1.55; white-space: pre-wrap;

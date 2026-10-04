@@ -1,37 +1,110 @@
 {
-  "voice": {"voice_id": "en-IN-eashwar", "style": "Narration", "rate": -2},
+  "voice": {
+    "voice_id": "en-IN-eashwar",
+    "style": "Narration",
+    "rate": -2
+  },
   "scenes": [
-    {"id": "title", "min": 5.5,
-     "say": "This is tallyagent. An A I staff member for a C A firm, working inside the Tally books the firm already trusts."},
-    {"id": "problem", "min": 9,
-     "say": "Sixty five percent of practices say staffing is their biggest problem. And every month, for every client, someone reconciles G S T R two B by hand, while input credit quietly goes at risk."},
-    {"id": "live", "min": 7,
-     "say": "Everything you are about to see ran against a real TallyPrime. When we filmed it, Tally was down. The agent restarted it, cleared the licence screen, and carried on."},
-    {"id": "people", "min": 7,
-     "say": "Every person has a role. A clerk drafts. A partner decides. And the software knows the difference."},
-    {"id": "sale", "min": 15,
-     "say": "A clerk asks for a sale in plain words. The agent checks the ledgers and the stock, works out integrated G S T from both G S T numbers, and before anyone approves, it notices six identical invoices already on that date, and says so."},
-    {"id": "approval", "min": 11,
-     "say": "The clerk cannot approve it. A partner signs in with a PIN, approves, and the voucher lands in Tally, with the partner's name on the audit trail."},
-    {"id": "refusal", "min": 7,
-     "say": "There is no Baroda branch in these books. There is Vadodara, the same city by its other name. So it asks, instead of guessing."},
-    {"id": "clients", "min": 9,
-     "say": "One install serves the whole practice. Each client has its own books, its own queue, and its own consent. A client nobody has enabled cannot be written to at all."},
-    {"id": "bills", "min": 10,
-     "say": "A pile of scanned bills. Each one is read on this machine, and drafted, or set aside for a person. On bills photographed the way clients send them, every field read right, and the unreadable one was refused."},
-    {"id": "firm", "min": 14,
-     "say": "Then the headline. Every morning, the agent runs every client. It reconciles G S T R two B, drafts the missing bills, and puts everything that needs a person in one inbox, money at risk first."},
-    {"id": "followup", "min": 9,
-     "say": "A supplier who has not filed is not just flagged. The credit goes on a deferred ledger, and the follow up letter is already written."},
-    {"id": "autonomy", "min": 14,
-     "say": "This is how throughput grows. A partner lets a client's work earn hands off posting. After a run of clean approvals, that kind of entry posts by itself, never above what a person has approved. One correction, and it goes back to waiting."},
-    {"id": "close", "min": 9,
-     "say": "On the first of the month, one close pack. Negative cash, duplicate bills, and input credit at risk in rupees. And G S T R one, checked before it is filed."},
-    {"id": "audit", "min": 8,
-     "say": "Every sign in, every grant, every approval, is on a hash chained log. It verifies, so you know nobody altered it."},
-    {"id": "trust", "min": 9,
-     "say": "Writes are pinned to the books a partner enabled. The model can run inside your office. And nothing reaches a client's books without a name on it."},
-    {"id": "end", "min": 7,
-     "say": "Your Tally. Two clients. Two weeks. tallyagent."}
+    {
+      "id": "title",
+      "min": 5.5,
+      "say": "This is tallyagent. An A I staff member for a C A firm, working inside the Tally books the firm already trusts."
+    },
+    {
+      "id": "problem",
+      "min": 9,
+      "say": "Sixty five percent of practices say staffing is their biggest problem. And every month, for every client, someone reconciles G S T R two B by hand, while input credit quietly goes at risk."
+    },
+    {
+      "id": "live",
+      "min": 7,
+      "say": "Everything you are about to see ran against a real TallyPrime. When we filmed it, Tally was down. The agent restarted it, cleared the licence screen, and carried on."
+    },
+    {
+      "id": "people",
+      "min": 7,
+      "say": "Every person has a role. A clerk drafts. A partner decides. And the software knows the difference."
+    },
+    {
+      "id": "sale",
+      "min": 15,
+      "say": "A clerk asks for a sale in plain words. The agent checks the ledgers and the stock, works out integrated G S T from both G S T numbers, and before anyone approves, it notices six identical invoices already on that date, and says so."
+    },
+    {
+      "id": "approval",
+      "min": 11,
+      "say": "The clerk cannot approve it. A partner signs in with a PIN, approves, and the voucher lands in Tally, with the partner's name on the audit trail."
+    },
+    {
+      "id": "lands",
+      "clip": "lands",
+      "speed": 2.0,
+      "min": 8,
+      "say": "This is the real TallyPrime. The agent opens the Day Book on its own, the partner approves, and the new sale appears on Tally's own screen."
+    },
+    {
+      "id": "refusal",
+      "min": 7,
+      "say": "There is no Baroda branch in these books. There is Vadodara, the same city by its other name. So it asks, instead of guessing."
+    },
+    {
+      "id": "clients",
+      "min": 9,
+      "say": "One install serves the whole practice. Each client has its own books, its own queue, and its own consent. A client nobody has enabled cannot be written to at all."
+    },
+    {
+      "id": "bills",
+      "min": 10,
+      "say": "A pile of scanned bills. Each one is read on this machine, and drafted, or set aside for a person. On bills photographed the way clients send them, every field read right, and the unreadable one was refused."
+    },
+    {
+      "id": "firm",
+      "min": 14,
+      "say": "Then the headline. Every morning, the agent runs every client. It reconciles G S T R two B, drafts the missing bills, and puts everything that needs a person in one inbox, money at risk first."
+    },
+    {
+      "id": "followup",
+      "min": 9,
+      "say": "A supplier who has not filed is not just flagged. The credit goes on a deferred ledger, and the follow up letter is already written."
+    },
+    {
+      "id": "autonomy",
+      "min": 14,
+      "say": "This is how throughput grows. A partner lets a client's work earn hands off posting. After a run of clean approvals, that kind of entry posts by itself, never above what a person has approved. One correction, and it goes back to waiting."
+    },
+    {
+      "id": "keyed",
+      "clip": "payment",
+      "speed": 2.0,
+      "min": 8,
+      "say": "Where X M L is not enough, the agent works Tally's own screens. The red ring goes to each field before it types, the caption names every key first, and a partner approves before Ctrl A accepts the voucher."
+    },
+    {
+      "id": "billwise",
+      "clip": "receipt",
+      "speed": 2.0,
+      "min": 8,
+      "say": "When Tally interrupts with a bill wise screen, the agent recognises it, allocates on account, and carries on. Anything it does not recognise, it stops on, instead of typing into it."
+    },
+    {
+      "id": "close",
+      "min": 9,
+      "say": "On the first of the month, one close pack. Negative cash, duplicate bills, and input credit at risk in rupees. And G S T R one, checked before it is filed."
+    },
+    {
+      "id": "audit",
+      "min": 8,
+      "say": "Every sign in, every grant, every approval, is on a hash chained log. It verifies, so you know nobody altered it."
+    },
+    {
+      "id": "trust",
+      "min": 9,
+      "say": "Writes are pinned to the books a partner enabled. The model can run inside your office. And nothing reaches a client's books without a name on it."
+    },
+    {
+      "id": "end",
+      "min": 7,
+      "say": "Your Tally. Two clients. Two weeks. tallyagent."
+    }
   ]
 }
