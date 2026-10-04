@@ -181,3 +181,20 @@ def test_it_runs_between_the_14th_and_the_end_of_the_month():
     assert job.due(None, date(2026, 7, 14))
     assert job.due(None, date(2026, 7, 31))
 
+
+
+async def test_running_twice_does_not_draft_the_same_missing_bill_twice(client_setup):
+    """Each forced run drafted BS/2026/90 again, and the partner's queue filled
+    with the same voucher three times."""
+    wired, runner, folder = client_setup
+    (folder / "june.json").write_text(json.dumps(two_b(
+        "062026", [portal_inv("BS/91", 2000, 360, "03-06-2026")])), encoding="utf-8")
+
+    first = await runner.run(date(2026, 7, 15))
+    second = await runner.run(date(2026, 7, 16))
+
+    def ticket(report):  # type: ignore[no-untyped-def]
+        return next(o.ticket for o in report.outcomes if "Drafted missing bill" in o.title)
+
+    assert ticket(first) == ticket(second)
+    assert len(wired.services.queue.list("pending", "Sharma Textiles")) == 1

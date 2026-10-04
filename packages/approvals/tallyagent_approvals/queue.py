@@ -205,6 +205,22 @@ class ApprovalQueue:
                 "refusing to queue an action whose validation failed and was not "
                 f"overridden: {action.validation.summary()}"
             )
+        # The same write, asked for again while the first is still waiting, is
+        # the same ticket. A morning run that drafts a missing bill each time it
+        # runs, a bill folder read twice, a chat retried after a timeout - each
+        # would otherwise hand a partner the same voucher to approve twice, and
+        # approving both is a duplicate in the books.
+        if action.idempotency_key:
+            with Session(self.engine) as session:
+                waiting = session.exec(
+                    select(ApprovalRow).where(
+                        ApprovalRow.idempotency_key == action.idempotency_key,
+                        ApprovalRow.status == "pending",
+                    )
+                ).first()
+            if waiting is not None:
+                return waiting.ticket
+
         ticket = self.next_ticket()
         row = ApprovalRow(
             ticket=ticket,
