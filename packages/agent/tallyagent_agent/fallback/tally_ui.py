@@ -140,6 +140,8 @@ class TallyUi:
         locate: Callable[[str], tuple[int, int] | None] | None = None,
         on_event: Callable[[str, str], None] | None = None,
         pace: float = 1.0,
+        vision: Any = None,
+        grab: Callable[[], tuple[bytes, Any] | None] | None = None,
     ) -> None:
         self.keyboard = keyboard
         self.spotlight = spotlight
@@ -154,6 +156,15 @@ class TallyUi:
         #: Multiplies every pause. Below 1 for a recording, where the waits
         #: that let Tally draw are kept and the rest is dead air.
         self.pace = pace
+        #: The agent's eyes: a vision model that says what screen is up and
+        #: what is in front of it (``perception.vision.VisionScreen``), and a
+        #: way to grab the window (png bytes, bounds). Both optional - without
+        #: them the driver works exactly as before, on header text alone.
+        self.vision = vision
+        self._grab = grab
+        self._watcher: Any = None
+        self._seeing: Any = None
+        self.last_seen: Any = None
         if sleep is None:
             import asyncio
 
@@ -242,7 +253,19 @@ class TallyUi:
             if wanted in current:
                 return True
             await self._wait(0.6)
-        log.warning("expected %r, Tally is showing %r", expected, self._screen_name())
+        # Header text says no. Before refusing, look at the whole screen: the
+        # vision model reads popups and sub-screens the header strip does not
+        # show, and if it is not the expected screen it can at least say what
+        # is there - "Bill-wise Details for Zenith Exports" rather than "an
+        # unexpected screen".
+        state = await self.look()
+        if state is not None and state.mentions(expected):
+            return True
+        log.warning(
+            "expected %r, Tally is showing %r",
+            expected,
+            state.describe() if state is not None else self._screen_name(),
+        )
         return False
 
     async def step(self, step: UiStep) -> bool:
@@ -275,8 +298,29 @@ class TallyUi:
         return True
 
     def _point_at(self, step: UiStep) -> None:
-        """Move the ring to the field this step is about to fill."""
-        if self.spotlight is None or self._locate is None:
+        """Move the ring to the field this step is about to fill.
+
+        Tally's own highlight first: the field holding the cursor is painted in
+        a distinct yellow, found in milliseconds and exact. Reading the screen
+        for the field's label is the fallback for screens with no highlight.
+        """
+        if self.spotlight is None:
+            return
+        frame = self._frame()
+        if frame is not None:
+            self._notice(frame[0])
+            from tallyagent_agent.perception.focus import active_field, centre
+
+            try:
+                box = active_field(frame[0])
+            except Exception:  # noqa: BLE001 - fall back to the label
+                box = None
+            if box is not None:
+                x, y = centre(box)
+                bounds = frame[1]
+                self.spotlight.point(bounds.left + x, bounds.top + y, caption=step.describe())
+                return
+        if self._locate is None:
             return
         label = step.anchor or anchor_for(step.what)
         if not label:
@@ -648,11 +692,64 @@ class TallyUi:
         run.completed = True
         return run
 
+    def _frame(self) -> tuple[bytes, Any] | None:
+        if self._grab is None:
+            return None
+        try:
+            return self._grab()
+        except Exception:  # noqa: BLE001 - no picture, no pointer; keys still go
+            return None
+
+    def _notice(self, png: bytes) -> None:
+        """When Tally has drawn a new screen, have it read - without waiting.
+
+        A vision read takes seconds; a keystroke takes milliseconds. So the
+        read runs alongside the work, and what it saw is reported when it is
+        ready. Nothing waits on it unless something has gone wrong.
+        """
+        if self.vision is None:
+            return
+        import asyncio
+
+        from tallyagent_agent.perception.focus import ChangeWatcher
+
+        if self._watcher is None:
+            self._watcher = ChangeWatcher()
+        if self._watcher.observe(png) == "same":
+            return
+        if self._seeing is not None and not self._seeing.done():
+            return
+
+        async def look() -> None:
+            state = await self.vision.read(png)
+            self.last_seen = state
+            if state.describe():
+                self._event("see", state.describe())
+
+        try:
+            self._seeing = asyncio.get_running_loop().create_task(look())
+        except RuntimeError:
+            self._seeing = None
+
+    async def look(self) -> Any:
+        """Read the screen now, and wait for the answer."""
+        if self.vision is None:
+            return None
+        frame = self._frame()
+        if frame is None:
+            return None
+        state = await self.vision.read(frame[0])
+        self.last_seen = state
+        if state.describe():
+            self._event("see", state.describe())
+        return state
+
     def _interrupted(self, run: UiRun) -> UiRun:
         """Stop on a screen nobody asked for, and back out of it."""
+        seen = self.last_seen.describe() if self.last_seen is not None else ""
         run.stopped = (
             "Tally opened another screen mid-voucher "
-            f"({self._screen_name()[:80]!r}), so the rest was not typed"
+            f"({seen or self._screen_name()[:80]!r}), so the rest was not typed"
         )
         self.keyboard.press("escape")
         return run
@@ -740,6 +837,16 @@ def _ocr_boxes(png: bytes) -> list[tuple[str, tuple[float, float, float, float]]
 
 def _squash(text: str) -> str:
     return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
+def grab_window() -> tuple[bytes, Any] | None:
+    """The Tally window's own pixels (PrintWindow) and where it is on screen."""
+    from tallyagent_agent.perception.screen import capture, find_tally_window
+
+    bounds = find_tally_window()
+    if bounds is None:
+        return None
+    return capture(bounds), bounds
 
 
 def locate_on_screen(label: str) -> tuple[int, int] | None:
