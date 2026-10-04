@@ -415,8 +415,10 @@ async def test_gstr2b_classification(ctx, backend):
 
 
 def test_invoice_number_normalisation_absorbs_the_usual_noise():
-    assert reconcile._normalise_invoice_no(" bs-2026/41 ") == "BS2026/41"
-    assert reconcile._normalise_invoice_no("0041") == "41"
+    from tallyagent_tools.itc import invoice_key
+
+    assert invoice_key(" bs-2026/41 ") == invoice_key("BS/2026/41")
+    assert invoice_key("0041") == "41"
 
 
 # --- ingest -----------------------------------------------------------------

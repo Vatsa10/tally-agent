@@ -62,6 +62,9 @@ class Client:
     bills_dir: str = ""
     #: Which bank ledger their statement belongs to, for the close pack.
     bank_ledger: str = ""
+    #: Where this client's GSTR-2B downloads are put, for the monthly
+    #: reconciliation. Defaults to clients/<slug>/gstr2b.
+    gstr2b_dir: str = ""
     #: Overrides the derived path only when somebody has a reason to.
     db_path: str = ""
     notes: str = ""
@@ -154,6 +157,7 @@ def parse(data: dict[str, Any], path: str = DEFAULT_REGISTER) -> Register:
                 gstin=str(item.get("gstin") or ""),
                 bills_dir=str(item.get("bills_dir") or ""),
                 bank_ledger=str(item.get("bank_ledger") or ""),
+                gstr2b_dir=str(item.get("gstr2b_dir") or ""),
                 db_path=str(item.get("db_path") or ""),
                 notes=str(item.get("notes") or ""),
             )

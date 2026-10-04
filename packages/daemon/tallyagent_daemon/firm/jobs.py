@@ -147,4 +147,8 @@ class Gstr1Job:
 
 def default_jobs() -> list[Job]:
     """The jobs every client gets unless told otherwise."""
-    return [Gstr1Job(), MonthEndJob()]
+    from tallyagent_daemon.firm.reconcile import Reconcile2BJob
+
+    # Reconciliation first: it is the job with money and a statutory deadline
+    # behind it, and the one most likely to queue drafts the others build on.
+    return [Reconcile2BJob(), Gstr1Job(), MonthEndJob()]

@@ -261,14 +261,21 @@ def gst_findings(counts: dict[str, int], rows: list[dict[str, Any]]) -> list[Fin
     the finding is the credit at risk, not "17 rows differ".
     """
     findings = []
-    at_risk = sum(
-        (
-            Decimal(str(row.get("books_total", "0")))
-            for row in rows
-            if row.get("status") == "missing_in_2b"
-        ),
-        Decimal("0"),
-    )
+
+    def credit(status: str) -> Decimal:
+        # The tax on those invoices - the credit itself. The first version
+        # summed the invoice totals, which overstated the money at risk by the
+        # size of the taxable value; an accountant spots that in a second.
+        return sum(
+            (
+                Decimal(str(row.get("itc_at_risk") or "0"))
+                for row in rows
+                if row.get("status") == status
+            ),
+            Decimal("0"),
+        )
+
+    at_risk = credit("missing_in_2b")
     if counts.get("missing_in_2b"):
         findings.append(
             Finding(
@@ -290,6 +297,28 @@ def gst_findings(counts: dict[str, int], rows: list[dict[str, Any]]) -> list[Fin
                 "the books",
                 Decimal("0"),
                 "Enter the bills, or confirm they belong to another period.",
+            )
+        )
+    if counts.get("itc_not_available"):
+        findings.append(
+            Finding(
+                "itc_not_available",
+                "high",
+                f"{counts['itc_not_available']} invoice(s) where GSTR-2B says the "
+                "credit is not available",
+                credit("itc_not_available"),
+                "Do not claim these; reverse any that were claimed.",
+            )
+        )
+    if counts.get("gstin_mismatch"):
+        findings.append(
+            Finding(
+                "gstin_mismatch",
+                "high",
+                f"{counts['gstin_mismatch']} invoice(s) under a different supplier "
+                "GSTIN in the books than in GSTR-2B",
+                credit("gstin_mismatch"),
+                "Correct the GSTIN on the supplier ledger; they will never match until then.",
             )
         )
     if counts.get("value_mismatch"):

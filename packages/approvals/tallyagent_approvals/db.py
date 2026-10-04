@@ -235,6 +235,32 @@ class AutonomyGrantRow(SQLModel, table=True):
     revoked_by: str = ""
 
 
+class DeferredItcRow(SQLModel, table=True):
+    """A purchase whose credit is waiting for the supplier to file.
+
+    Kept per client from the month it first went missing from GSTR-2B to the
+    month it appears, so the credit is claimed then rather than forgotten - and
+    flagged before the section 16(4) deadline makes it unclaimable for good.
+    """
+
+    __tablename__ = "deferred_itc"
+
+    id: int | None = Field(default=None, primary_key=True)
+    company: str = Field(index=True)
+    supplier_gstin: str = Field(default="", index=True)
+    supplier: str = ""
+    invoice_no: str = ""
+    invoice_key: str = Field(default="", index=True)
+    invoice_date: str = ""
+    tax: str = "0"
+    first_period: str = ""
+    last_seen_period: str = ""
+    #: open | claimable | expired
+    status: str = Field(default="open", index=True)
+    resolved_period: str = ""
+    updated_at: datetime = Field(default_factory=_now)
+
+
 class EgressRow(SQLModel, table=True):
     """What left the machine, per model request. See docs/SECURITY.md."""
 

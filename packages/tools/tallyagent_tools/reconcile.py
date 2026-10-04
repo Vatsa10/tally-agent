@@ -209,53 +209,8 @@ async def bank_reco(
 
 # --- GSTR-2B ----------------------------------------------------------------
 
-#: A rupee of difference between 2B and the books is a rounding artefact;
-#: anything more is a real value mismatch worth a human's time.
-VALUE_TOLERANCE = Decimal("1.00")
-
-
 def _money(value: Decimal) -> str:
-    """Figures from the GST portal arrive as JSON floats; the books are in
-    Decimal. A report that mixes 23600.0 and 23600.00 reads as two numbers."""
-    return format(value.quantize(PAISA), "f")
-
-
-def _normalise_invoice_no(raw: str) -> str:
-    """2B and books disagree on case, spaces and leading zeros constantly."""
-    return raw.strip().upper().replace(" ", "").replace("-", "").lstrip("0")
-
-
-def _flatten_gstr2b(gstr2b: dict[str, Any]) -> list[dict[str, Any]]:
-    """Pull B2B invoice rows out of the GST portal's nested 2B JSON.
-
-    The portal nests supplier -> invoices; a flat list of rows is what the
-    comparison needs. Unknown shapes are skipped rather than guessed at.
-    """
-    rows: list[dict[str, Any]] = []
-    docdata = gstr2b.get("data", gstr2b).get("docdata", gstr2b.get("docdata", {}))
-    for supplier in docdata.get("b2b", []) or []:
-        gstin = supplier.get("ctin", "")
-        name = supplier.get("trdnm", "")
-        for inv in supplier.get("inv", []) or []:
-            igst = cgst = sgst = Decimal("0")
-            taxable = Decimal("0")
-            for item in inv.get("items", []) or []:
-                taxable += Decimal(str(item.get("txval", 0)))
-                igst += Decimal(str(item.get("iamt", 0)))
-                cgst += Decimal(str(item.get("camt", 0)))
-                sgst += Decimal(str(item.get("samt", 0)))
-            rows.append(
-                {
-                    "supplier_gstin": gstin,
-                    "supplier": name,
-                    "invoice_no": str(inv.get("inum", "")),
-                    "invoice_date": str(inv.get("idt", "")),
-                    "taxable_value": taxable,
-                    "tax": (igst + cgst + sgst).quantize(PAISA),
-                    "total": Decimal(str(inv.get("val", taxable + igst + cgst + sgst))),
-                }
-            )
-    return rows
+    return format(Decimal(value).quantize(PAISA), "f")
 
 
 async def gstr2b_vs_purchase_register(
@@ -265,65 +220,64 @@ async def gstr2b_vs_purchase_register(
     to_date: date | None = None,
 ) -> ToolResult:
     """Classify every invoice as matched / missing in books / missing in 2B /
-    value mismatch, and emit a CSV a CA can work through."""
-    from tallyagent_tools import reports
+    value mismatch, and emit a CSV a CA can work through.
 
-    portal_rows = _flatten_gstr2b(gstr2b_json)
+    The matching itself lives in ``tallyagent_tools.itc``: on supplier GSTIN
+    plus invoice number, reading the portal's real GSTR-2B shape. The first
+    version matched on the invoice number alone - two suppliers' bill "12"
+    collided - and read only GSTR-1 style tax keys, so a real portal download
+    came back with every tax as zero. The rows keep their old shape so the TUI
+    and the close pack read them unchanged, with the cause and the action
+    added.
+    """
+    from tallyagent_tools import itc, reports
+
+    period, portal = itc.parse_2b(gstr2b_json)
+    # Without dates, the window comes from the 2B file itself: its own month,
+    # plus the months before it that a late-reported bill can come from. The
+    # first version fell back to the register's default - today - and saw no
+    # books at all, so every 2B invoice read as "not entered".
+    own = itc.period_dates(period)
+    if own and from_date is None and to_date is None:
+        from_date, to_date = own[0] - itc.LOOKBACK, own[1]
     register = await reports.gstr2_purchase_register(
         ctx, from_date=from_date, to_date=to_date
     )
-    book_rows = register.data
+    masters = await ctx.masters()
+    gstins = {p.name: (p.gstin or "") for p in masters.parties}
+    result = itc.reconcile(period, portal, itc.book_invoices(register.data or [], gstins))
 
-    # Books are keyed by party + normalised invoice number; the purchase
-    # register's "voucher_number" is our number, the reference is theirs.
-    book_index: dict[str, dict[str, Any]] = {}
-    for row in book_rows:
-        key = _normalise_invoice_no(str(row.get("reference") or row.get("voucher_number")))
-        book_index[key] = row
-
+    status_of = {
+        itc.MATCHED: "matched",
+        itc.NOT_IN_BOOKS: "missing_in_books",
+        itc.NOT_FILED: "missing_in_2b",
+        itc.VALUE_DIFF: "value_mismatch",
+        itc.TAX_DIFF: "value_mismatch",
+        itc.GSTIN_MISMATCH: "gstin_mismatch",
+        itc.ITC_UNAVAILABLE: "itc_not_available",
+    }
     classified: list[dict[str, str]] = []
     counts: dict[str, int] = defaultdict(int)
-    seen_keys: set[str] = set()
-
-    for portal in portal_rows:
-        key = _normalise_invoice_no(portal["invoice_no"])
-        seen_keys.add(key)
-        book = book_index.get(key)
-        if book is None:
-            status = "missing_in_books"
-            book_total = Decimal("0")
-        else:
-            book_total = Decimal(book["total"])
-            difference = abs(book_total - Decimal(str(portal["total"])))
-            status = "matched" if difference <= VALUE_TOLERANCE else "value_mismatch"
+    for finding in result.findings:
+        status = status_of[finding.cause]
         counts[status] += 1
+        portal_total = finding.portal.total if finding.portal else Decimal("0")
+        books_total = finding.books.total if finding.books else Decimal("0")
         classified.append(
             {
                 "status": status,
-                "supplier": portal["supplier"],
-                "supplier_gstin": portal["supplier_gstin"],
-                "invoice_no": portal["invoice_no"],
-                "invoice_date": portal["invoice_date"],
-                "gstr2b_total": _money(Decimal(str(portal["total"]))),
-                "books_total": _money(book_total),
-                "difference": _money(Decimal(str(portal["total"])) - book_total),
-            }
-        )
-
-    for key, book in book_index.items():
-        if key in seen_keys:
-            continue
-        counts["missing_in_2b"] += 1
-        classified.append(
-            {
-                "status": "missing_in_2b",
-                "supplier": str(book.get("party", "")),
-                "supplier_gstin": "",
-                "invoice_no": str(book.get("reference") or book.get("voucher_number")),
-                "invoice_date": str(book.get("date", "")),
-                "gstr2b_total": "0.00",
-                "books_total": _money(Decimal(book["total"])),
-                "difference": _money(-Decimal(book["total"])),
+                "supplier": finding.supplier,
+                "supplier_gstin": finding.supplier_gstin,
+                "invoice_no": finding.number,
+                "invoice_date": finding.invoice_date.isoformat()
+                if finding.invoice_date
+                else "",
+                "gstr2b_total": _money(portal_total),
+                "books_total": _money(books_total),
+                "difference": _money(portal_total - books_total),
+                "itc_at_risk": _money(finding.itc_at_risk),
+                "cause": itc.CAUSE_WORDS[finding.cause],
+                "action": finding.action,
             }
         )
 
@@ -335,6 +289,15 @@ async def gstr2b_vs_purchase_register(
 
     summary = ", ".join(f"{k.replace('_', ' ')}: {v}" for k, v in sorted(counts.items()))
     return ToolResult(
-        message=f"GSTR-2B reconciliation - {summary or 'nothing to compare'}.",
-        data={"rows": classified, "counts": dict(counts), "csv": buffer.getvalue()},
+        message=(
+            f"GSTR-2B reconciliation - {summary or 'nothing to compare'}. "
+            f"Claimable Rs {result.claimable:,.2f}, at risk Rs {result.at_risk:,.2f}."
+        ),
+        data={
+            "rows": classified,
+            "counts": dict(counts),
+            "csv": buffer.getvalue(),
+            "claimable": format(result.claimable, "f"),
+            "at_risk": format(result.at_risk, "f"),
+        },
     )

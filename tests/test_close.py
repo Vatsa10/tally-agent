@@ -125,19 +125,35 @@ def test_two_different_amounts_on_a_day_are_not_a_duplicate():
 
 
 def test_purchases_missing_from_2b_are_reported_as_credit_at_risk():
-    """The row count is not the point; the money that cannot be claimed is."""
+    """The row count is not the point; the money that cannot be claimed is -
+    and that money is the tax, not the invoice total. The first version summed
+    totals, so an 11,800 bill read as 11,800 of credit at risk instead of 1,800."""
     findings = gst_findings(
         {"missing_in_2b": 2},
         [
-            {"status": "missing_in_2b", "books_total": "11800.00"},
-            {"status": "missing_in_2b", "books_total": "5900.00"},
-            {"status": "matched", "books_total": "1000.00"},
+            {"status": "missing_in_2b", "books_total": "11800.00", "itc_at_risk": "1800.00"},
+            {"status": "missing_in_2b", "books_total": "5900.00", "itc_at_risk": "900.00"},
+            {"status": "matched", "books_total": "1000.00", "itc_at_risk": "0.00"},
         ],
     )
 
     assert findings[0].kind == "itc_at_risk"
-    assert findings[0].amount == Decimal("17700.00")
+    assert findings[0].amount == Decimal("2700.00")
     assert findings[0].severity == "high"
+
+
+def test_credit_the_portal_bars_and_a_wrong_gstin_are_both_reported():
+    findings = gst_findings(
+        {"itc_not_available": 1, "gstin_mismatch": 1},
+        [
+            {"status": "itc_not_available", "itc_at_risk": "540.00"},
+            {"status": "gstin_mismatch", "itc_at_risk": "1800.00"},
+        ],
+    )
+
+    kinds = {f.kind: f.amount for f in findings}
+    assert kinds["itc_not_available"] == Decimal("540.00")
+    assert kinds["gstin_mismatch"] == Decimal("1800.00")
 
 
 def test_a_clean_2b_produces_no_findings():
