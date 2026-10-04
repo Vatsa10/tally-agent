@@ -136,6 +136,8 @@ def test_a_window_already_up_is_just_raised():
         launch=lambda: calls.append("launch") or True,
         raise_window=lambda _b: calls.append("raise") or True,
         sleep=lambda _s: None,
+        restore=lambda: False,
+        running=lambda: False,
     )
     assert (bounds, reason) == (BOUNDS, "")
     assert calls == ["raise"], "nothing is started when Tally is already there"
@@ -150,6 +152,8 @@ def test_tally_is_started_when_it_is_not_running():
         launch=lambda: seen.append("launch") or True,
         raise_window=lambda _b: True,
         sleep=lambda _s: None,
+        restore=lambda: False,
+        running=lambda: False,
     )
     assert seen == ["launch"]
     assert bounds == BOUNDS
@@ -163,6 +167,8 @@ def test_nothing_is_sent_when_tally_cannot_be_brought_to_the_front():
         launch=lambda: True,
         raise_window=lambda _b: False,
         sleep=lambda _s: None,
+        restore=lambda: False,
+        running=lambda: False,
     )
     assert bounds is None
     assert "would go to whatever is in front" in reason
@@ -174,9 +180,47 @@ def test_a_missing_installation_is_reported_not_retried_forever():
         launch=lambda: False,
         raise_window=lambda _b: True,
         sleep=lambda _s: None,
+        restore=lambda: False,
+        running=lambda: False,
     )
     assert bounds is None
     assert "not installed" in reason
+
+
+def test_a_minimised_tally_is_restored_not_started_again():
+    """A minimised window looked like no Tally at all, and a second copy was
+    started that could not bind the port the first one held."""
+    calls: list[str] = []
+    windows = iter([None, BOUNDS])
+
+    bounds, reason = win.ensure_visible(
+        locate=lambda: next(windows, BOUNDS),
+        launch=lambda: calls.append("launch") or True,
+        raise_window=lambda _b: True,
+        sleep=lambda _s: None,
+        restore=lambda: calls.append("restore") or True,
+        running=lambda: True,
+    )
+
+    assert (bounds, reason) == (BOUNDS, "")
+    assert calls == ["restore"], "restored, never launched"
+
+
+def test_a_running_tally_with_no_findable_window_is_never_started_twice():
+    calls: list[str] = []
+
+    bounds, reason = win.ensure_visible(
+        locate=lambda: None,
+        launch=lambda: calls.append("launch") or True,
+        raise_window=lambda _b: True,
+        sleep=lambda _s: None,
+        restore=lambda: False,
+        running=lambda: True,
+    )
+
+    assert bounds is None
+    assert "second copy" in reason
+    assert calls == []
 
 
 # --- the two together -------------------------------------------------------

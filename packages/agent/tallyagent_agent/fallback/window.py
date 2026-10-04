@@ -131,18 +131,87 @@ def start_tally() -> bool:
     return bool(install.start(installation))
 
 
+def restore_minimised() -> bool:
+    """Un-minimise a TallyPrime window that is running but tucked away.
+
+    ``find_tally_window`` skips minimised windows, because a minimised window
+    reports nonsense coordinates. Without this, a Tally that somebody had
+    minimised looked like no Tally at all - and the next step started a second
+    copy, which cannot bind the port the first one already holds. That happened
+    the night before a demo.
+    """
+    try:
+        import win32con  # type: ignore[import-not-found]
+        import win32gui  # type: ignore[import-not-found]
+    except ImportError:
+        return False
+
+    from tallyagent_agent.perception.screen import TALLY_TITLE
+
+    found: list[int] = []
+
+    def visit(handle: int, _extra: object) -> None:
+        title = win32gui.GetWindowText(handle) or ""
+        if (
+            win32gui.IsWindowVisible(handle)
+            and TALLY_TITLE.search(title)
+            and win32gui.GetWindowPlacement(handle)[1] == win32con.SW_SHOWMINIMIZED
+        ):
+            found.append(handle)
+
+    win32gui.EnumWindows(visit, None)
+    for handle in found:
+        win32gui.ShowWindow(handle, win32con.SW_RESTORE)
+    return bool(found)
+
+
+def tally_running() -> bool:
+    """Is a tally.exe process alive, whatever its window is doing?"""
+    import subprocess
+
+    try:
+        listing = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq tally.exe", "/NH"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "tally.exe" in listing.lower()
+
+
 def ensure_visible(
     locate=find_tally_window,  # type: ignore[no-untyped-def]
     launch=start_tally,  # type: ignore[no-untyped-def]
     raise_window=focus,  # type: ignore[no-untyped-def]
     sleep=time.sleep,  # type: ignore[no-untyped-def]
+    restore=restore_minimised,  # type: ignore[no-untyped-def]
+    running=tally_running,  # type: ignore[no-untyped-def]
 ) -> tuple[WindowBounds | None, str]:
     """Tally on screen and in front, or a reason why not.
 
     Returns the window and an empty reason on success. Everything is injected
     so the decision sequence can be tested without a desktop.
+
+    Starting Tally is the last resort, not the first: a minimised window is
+    restored, and if a Tally process is alive with no window we can find, the
+    answer is to say so - a second copy of Tally cannot serve the port the
+    first one holds, and leaves two windows that look identical.
     """
     bounds = locate()
+    if bounds is None and restore():
+        sleep(1)
+        bounds = locate()
+    if bounds is None and running():
+        return None, (
+            "TallyPrime is running but its window cannot be found on screen. "
+            "Bring it up by hand (click it in the taskbar); starting a second "
+            "copy would leave two Tallys fighting over one port."
+        )
     if bounds is None:
         log.info("TallyPrime is not on screen; starting it")
         if not launch():

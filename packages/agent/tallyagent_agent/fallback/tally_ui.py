@@ -136,8 +136,10 @@ class TallyUi:
         # palette is up before typing, and ask again if it is not.
         for attempt in (1, 2):
             self.keyboard.press("alt+g")
-            await self._sleep(0.8)
-            if self._palette_open():
+            # Poll rather than check once: a Tally that has just been restored
+            # or is busy can take two seconds to draw the list, and pressing
+            # Alt+G again while it is drawing *closes* it.
+            if await self._palette_appears():
                 break
             log.info("Go To did not open (attempt %d)", attempt)
         else:
@@ -153,6 +155,13 @@ class TallyUi:
             self.keyboard.press("escape")
             await self._sleep(0.6)
         return True
+
+    async def _palette_appears(self, polls: int = 5, every: float = 0.5) -> bool:
+        for _ in range(polls):
+            await self._sleep(every)
+            if self._palette_open():
+                return True
+        return False
 
     def _palette_open(self) -> bool:
         """Is Tally's Go To list up? It is what Alt+G is supposed to produce."""
@@ -507,6 +516,43 @@ class TallyUi:
                 if not await self.step(step):
                     run.stopped = f"could not perform {step.describe()}"
                     self.keyboard.press("escape")
+                    return run
+
+        # A party ledger with bill-wise details on - the default for debtors
+        # and creditors - stops the voucher to ask which bill the amount is
+        # against. "On Account" is the honest answer for a keyed entry: it does
+        # not guess which of the party's bills this settles, and the partner can
+        # match it against a bill afterwards. Choosing a particular bill belongs
+        # to whoever knows which one it was.
+        if await self.expect_screen("Bill-wise Details"):
+            billwise = [
+                UiStep(
+                    "allocate it on account",
+                    text="On Account",
+                    keys=["enter"],
+                    on_screen="Bill-wise Details",
+                ),
+                # Tally fills in the full amount; accepting it is one Enter.
+                UiStep(
+                    "accept the amount",
+                    keys=["enter"],
+                    on_screen="Bill-wise Details",
+                ),
+            ]
+            run.steps.extend(billwise)
+            for step in billwise:
+                if not await self._perform(run, step):
+                    return run
+            # Some releases ask for a further reference row; an empty one
+            # closes the screen. Only pressed if the screen is still there.
+            if await self.expect_screen("Bill-wise Details"):
+                close = UiStep(
+                    "finish the bill allocation",
+                    keys=["enter"],
+                    on_screen="Bill-wise Details",
+                )
+                run.steps.append(close)
+                if not await self._perform(run, close):
                     return run
 
         run.steps.extend(tail)
