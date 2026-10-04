@@ -225,6 +225,42 @@ def test_a_file_copy_zips_tallys_data_folder_and_the_firm_database(
     assert backups.taken_today(COMPANY) is not None
 
 
+def test_a_locked_tally_file_records_no_backup_and_says_what_to_do(
+    engine, audit, clock, tmp_path, monkeypatch
+):
+    data = tmp_path / "TallyData"
+    data.mkdir()
+    (data / "Company.900").write_bytes(b"held open by TallyPrime")
+
+    def locked(self, filename, arcname=None, *args, **kwargs):
+        raise PermissionError(13, "The process cannot access the file", filename)
+
+    monkeypatch.setattr(zipfile.ZipFile, "write", locked)
+    backups = BackupLog(
+        engine, audit, data_dir=str(data), root=tmp_path / "backups", now=clock
+    )
+    with pytest.raises(BackupNotPossibleError, match="Alt\\+Y"):
+        backups.take(COMPANY, "R. Mehta")
+    assert backups.latest(COMPANY) is None
+    assert not list((tmp_path / "backups").rglob("*.zip"))
+
+
+def test_a_backups_folder_inside_the_data_folder_is_not_copied_into_itself(
+    engine, audit, clock, tmp_path
+):
+    data = tmp_path / "TallyData"
+    data.mkdir()
+    (data / "Company.900").write_bytes(b"tally company file")
+    backups = BackupLog(
+        engine, audit, data_dir=str(data), root=data / "backups", now=clock
+    )
+    backups.take(COMPANY, "R. Mehta")
+    clock.at += timedelta(minutes=1)
+    second = backups.take(COMPANY, "R. Mehta")
+    with zipfile.ZipFile(second.path) as zf:
+        assert zf.namelist() == ["tally/Company.900"]
+
+
 # --- who may take one, from the chat window ----------------------------------
 
 

@@ -130,15 +130,31 @@ class BackupLog:
         folder = self.root / _slug(company) / f"{_local(moment):%Y%m%d-%H%M%S}"
         folder.mkdir(parents=True, exist_ok=True)
         archive = folder / "backup.zip"
-        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-            for path in sorted(source.rglob("*")):
-                if path.is_file():
+        # A backups folder inside the data folder would otherwise copy earlier
+        # backups, and the zip being written, into the zip.
+        own = self.root.resolve()
+        try:
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                for path in sorted(source.rglob("*")):
+                    if not path.is_file() or path.resolve().is_relative_to(own):
+                        continue
                     zf.write(path, Path("tally") / path.relative_to(source))
-            if self.firm_db_path and Path(self.firm_db_path).is_file():
-                zf.writestr(
-                    f"firm/{Path(self.firm_db_path).name}",
-                    _sqlite_snapshot(Path(self.firm_db_path)),
-                )
+                if self.firm_db_path and Path(self.firm_db_path).is_file():
+                    zf.writestr(
+                        f"firm/{Path(self.firm_db_path).name}",
+                        _sqlite_snapshot(Path(self.firm_db_path)),
+                    )
+        except (OSError, sqlite3.Error) as exc:
+            # TallyPrime holds its company files open while it runs, and a half
+            # written zip must not be recorded as a backup anyone can restore.
+            archive.unlink(missing_ok=True)
+            if not any(folder.iterdir()):
+                folder.rmdir()
+            raise BackupNotPossibleError(
+                f"could not copy the Tally data folder ({exc}). Close the company "
+                "in TallyPrime and try again, or take Tally's own backup (Alt+Y) "
+                "and record it with: /backup confirm <where you saved it>"
+            ) from exc
         return self._record(company, str(archive), by, FILE_COPY, moment)
 
     def attest(self, company: str, by: str, note: str) -> Backup:
