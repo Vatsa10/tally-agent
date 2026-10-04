@@ -58,6 +58,16 @@
       "say": "A pile of scanned bills. Each one is read on this machine, and drafted, or set aside for a person. On bills photographed the way clients send them, every field read right, and the unreadable one was refused."
     },
     {
+      "id": "invoice",
+      "min": 12,
+      "say": "Here is one of those bills, read field by field: the supplier, the GSTIN, the invoice number, the taxable value and the tax. From it the agent drafts the purchase. Purchases and input IGST debited, the supplier credited, debits equal to credits, every check passed. Then it waits for a partner."
+    },
+    {
+      "id": "matching",
+      "min": 12,
+      "say": "Then the matching. Each line on the bank statement is matched to its voucher in Tally on the exact amount, then the date. A credit with no voucher becomes a proposed receipt, a debit a proposed payment. And G S T R two B is matched to the purchase register on the supplier's GSTIN and invoice number, so a supplier who has not filed is caught before the credit is claimed."
+    },
+    {
       "id": "firm",
       "min": 14,
       "say": "Then the headline. Every morning, the agent runs every client. It reconciles G S T R two B, drafts the missing bills, and puts everything that needs a person in one inbox, money at risk first."

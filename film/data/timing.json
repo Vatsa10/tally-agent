@@ -1,5 +1,5 @@
 {
-  "total": 188.429,
+  "total": 318.487,
   "scenes": [
     {
       "id": "title",
@@ -50,83 +50,272 @@
       "voice_seconds": 9.126
     },
     {
-      "id": "refusal",
+      "id": "lands",
       "start": 71.191,
+      "duration": 23.95,
+      "say": "This is the real TallyPrime. The agent opens the Day Book on its own, the partner approves, and the new sale appears on Tally's own screen.",
+      "voice_at": 71.641,
+      "voice_seconds": 8.78,
+      "clip": "lands",
+      "speed": 2.0,
+      "clip_at": 71.791,
+      "clip_seconds": 45.1,
+      "events": [
+        {
+          "t": 1.2,
+          "kind": "say",
+          "text": "opening Day Book"
+        },
+        {
+          "t": 24.86,
+          "kind": "say",
+          "text": "opening Day Book"
+        }
+      ]
+    },
+    {
+      "id": "refusal",
+      "start": 95.141,
       "duration": 9.724,
       "say": "There is no Baroda branch in these books. There is Vadodara, the same city by its other name. So it asks, instead of guessing.",
-      "voice_at": 71.641,
+      "voice_at": 95.591,
       "voice_seconds": 8.374
     },
     {
       "id": "clients",
-      "start": 80.915,
+      "start": 104.865,
       "duration": 11.813,
       "say": "One install serves the whole practice. Each client has its own books, its own queue, and its own consent. A client nobody has enabled cannot be written to at all.",
-      "voice_at": 81.365,
+      "voice_at": 105.315,
       "voice_seconds": 10.463
     },
     {
       "id": "bills",
-      "start": 92.728,
+      "start": 116.678,
       "duration": 14.924,
       "say": "A pile of scanned bills. Each one is read on this machine, and drafted, or set aside for a person. On bills photographed the way clients send them, every field read right, and the unreadable one was refused.",
-      "voice_at": 93.178,
+      "voice_at": 117.128,
       "voice_seconds": 13.574
     },
     {
+      "id": "invoice",
+      "start": 131.602,
+      "duration": 22.007,
+      "say": "Here is one of those bills, read field by field: the supplier, the GSTIN, the invoice number, the taxable value and the tax. From it the agent drafts the purchase. Purchases and input IGST debited, the supplier credited, debits equal to credits, every check passed. Then it waits for a partner.",
+      "voice_at": 132.052,
+      "voice_seconds": 20.657
+    },
+    {
+      "id": "matching",
+      "start": 153.609,
+      "duration": 22.936,
+      "say": "Then the matching. Each line on the bank statement is matched to its voucher in Tally on the exact amount, then the date. A credit with no voucher becomes a proposed receipt, a debit a proposed payment. And G S T R two B is matched to the purchase register on the supplier's GSTIN and invoice number, so a supplier who has not filed is caught before the credit is claimed.",
+      "voice_at": 154.059,
+      "voice_seconds": 21.586
+    },
+    {
       "id": "firm",
-      "start": 107.652,
+      "start": 176.545,
       "duration": 15.015,
       "say": "Then the headline. Every morning, the agent runs every client. It reconciles G S T R two B, drafts the missing bills, and puts everything that needs a person in one inbox, money at risk first.",
-      "voice_at": 108.102,
+      "voice_at": 176.995,
       "voice_seconds": 13.665
     },
     {
       "id": "followup",
-      "start": 122.667,
+      "start": 191.56,
       "duration": 9.597,
       "say": "A supplier who has not filed is not just flagged. The credit goes on a deferred ledger, and the follow up letter is already written.",
-      "voice_at": 123.117,
+      "voice_at": 192.01,
       "voice_seconds": 8.247
     },
     {
       "id": "autonomy",
-      "start": 132.264,
+      "start": 201.157,
       "duration": 16.636,
       "say": "This is how throughput grows. A partner lets a client's work earn hands off posting. After a run of clean approvals, that kind of entry posts by itself, never above what a person has approved. One correction, and it goes back to waiting.",
-      "voice_at": 132.714,
+      "voice_at": 201.607,
       "voice_seconds": 15.286
     },
     {
+      "id": "keyed",
+      "start": 217.793,
+      "duration": 61.165,
+      "say": "Where X M L is not enough, the agent works Tally's own screens. The red ring goes to each field before it types, the caption names every key first, and a partner approves before Ctrl A accepts the voucher.",
+      "voice_at": 218.243,
+      "voice_seconds": 13.794,
+      "clip": "payment",
+      "speed": 2.0,
+      "clip_at": 218.393,
+      "clip_seconds": 119.53,
+      "events": [
+        {
+          "t": 1.2,
+          "kind": "say",
+          "text": "opening Create Voucher"
+        },
+        {
+          "t": 13.31,
+          "kind": "say",
+          "text": "choose the Payment voucher type: f5"
+        },
+        {
+          "t": 18.07,
+          "kind": "done",
+          "text": "choose the Payment voucher type: f5"
+        },
+        {
+          "t": 20.35,
+          "kind": "say",
+          "text": "open the date field: f2"
+        },
+        {
+          "t": 25.12,
+          "kind": "done",
+          "text": "open the date field: f2"
+        },
+        {
+          "t": 27.77,
+          "kind": "say",
+          "text": "the voucher date: type \"02-06-2026\""
+        },
+        {
+          "t": 33.52,
+          "kind": "done",
+          "text": "the voucher date: type \"02-06-2026\""
+        },
+        {
+          "t": 35.75,
+          "kind": "say",
+          "text": "the account to pay from: type \"Cash\""
+        },
+        {
+          "t": 40.69,
+          "kind": "done",
+          "text": "the account to pay from: type \"Cash\""
+        },
+        {
+          "t": 43.79,
+          "kind": "say",
+          "text": "what it is being spent on: type \"Bank Charges\""
+        },
+        {
+          "t": 49.63,
+          "kind": "done",
+          "text": "what it is being spent on: type \"Bank Charges\""
+        },
+        {
+          "t": 51.99,
+          "kind": "say",
+          "text": "the amount: type \"150.00\""
+        },
+        {
+          "t": 57.34,
+          "kind": "done",
+          "text": "the amount: type \"150.00\""
+        },
+        {
+          "t": 59.61,
+          "kind": "say",
+          "text": "the cost category: type \"Branches\""
+        },
+        {
+          "t": 64.63,
+          "kind": "done",
+          "text": "the cost category: type \"Branches\""
+        },
+        {
+          "t": 64.63,
+          "kind": "say",
+          "text": "the cost centre: type \"Ahmedabad\""
+        },
+        {
+          "t": 69.73,
+          "kind": "done",
+          "text": "the cost centre: type \"Ahmedabad\""
+        },
+        {
+          "t": 69.73,
+          "kind": "say",
+          "text": "the amount against it: type \"150.00\""
+        },
+        {
+          "t": 74.67,
+          "kind": "done",
+          "text": "the amount against it: type \"150.00\""
+        },
+        {
+          "t": 74.67,
+          "kind": "say",
+          "text": "finish the allocation: enter"
+        },
+        {
+          "t": 79.25,
+          "kind": "done",
+          "text": "finish the allocation: enter"
+        },
+        {
+          "t": 92.22,
+          "kind": "say",
+          "text": "no more lines: enter"
+        },
+        {
+          "t": 97.76,
+          "kind": "done",
+          "text": "no more lines: enter"
+        },
+        {
+          "t": 100.17,
+          "kind": "say",
+          "text": "the narration: type \"keyed by the agent on camera\""
+        },
+        {
+          "t": 105.88,
+          "kind": "done",
+          "text": "the narration: type \"keyed by the agent on camera\""
+        },
+        {
+          "t": 108.16,
+          "kind": "say",
+          "text": "accept the voucher: ctrl+a"
+        },
+        {
+          "t": 115.61,
+          "kind": "done",
+          "text": "accept the voucher: ctrl+a"
+        }
+      ]
+    },
+    {
       "id": "close",
-      "start": 148.9,
+      "start": 278.958,
       "duration": 12.67,
       "say": "On the first of the month, one close pack. Negative cash, duplicate bills, and input credit at risk in rupees. And G S T R one, checked before it is filed.",
-      "voice_at": 149.35,
+      "voice_at": 279.408,
       "voice_seconds": 11.32
     },
     {
       "id": "audit",
-      "start": 161.57,
+      "start": 291.628,
       "duration": 9.839,
       "say": "Every sign in, every grant, every approval, is on a hash chained log. It verifies, so you know nobody altered it.",
-      "voice_at": 162.02,
+      "voice_at": 292.078,
       "voice_seconds": 8.489
     },
     {
       "id": "trust",
-      "start": 171.409,
+      "start": 301.467,
       "duration": 10.02,
       "say": "Writes are pinned to the books a partner enabled. The model can run inside your office. And nothing reaches a client's books without a name on it.",
-      "voice_at": 171.859,
+      "voice_at": 301.917,
       "voice_seconds": 8.67
     },
     {
       "id": "end",
-      "start": 181.429,
+      "start": 311.487,
       "duration": 7.0,
       "say": "Your Tally. Two clients. Two weeks. tallyagent.",
-      "voice_at": 181.879,
+      "voice_at": 311.937,
       "voice_seconds": 4.985
     }
   ]

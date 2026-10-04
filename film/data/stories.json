@@ -1,0 +1,321 @@
+{
+  "bill": {
+    "image": "data/bill.png",
+    "size": [
+      1000,
+      1300
+    ],
+    "fields": [
+      {
+        "field": "vendor",
+        "value": "Bharat Supplies",
+        "box": [
+          60,
+          52,
+          363,
+          94
+        ]
+      },
+      {
+        "field": "gstin",
+        "value": "27AAPFU0939F1ZV",
+        "box": [
+          57,
+          102,
+          384,
+          130
+        ]
+      },
+      {
+        "field": "invoice_no",
+        "value": "BS/2026/001",
+        "box": [
+          58,
+          229,
+          304,
+          255
+        ]
+      },
+      {
+        "field": "invoice_date",
+        "value": "2026-06-02",
+        "box": [
+          157,
+          262,
+          272,
+          285
+        ]
+      },
+      {
+        "field": "taxable_value",
+        "value": "7,200.00",
+        "box": [
+          816,
+          439,
+          908,
+          466
+        ]
+      },
+      {
+        "field": "igst",
+        "value": "1,296.00",
+        "box": [
+          817,
+          575,
+          908,
+          601
+        ]
+      },
+      {
+        "field": "total",
+        "value": "8,496.00",
+        "box": [
+          816,
+          629,
+          916,
+          660
+        ]
+      }
+    ],
+    "ticket": "APR-0010",
+    "summary": "Purchase bill BS/2026/001 from Bharat Supplies for 8496.00 on 2026-06-02",
+    "lines": [
+      {
+        "ledger": "Bharat Supplies",
+        "side": "Cr",
+        "amount": "8,496.00"
+      },
+      {
+        "ledger": "Purchase - GST 18%",
+        "side": "Dr",
+        "amount": "7,200.00"
+      },
+      {
+        "ledger": "Input IGST",
+        "side": "Dr",
+        "amount": "1,296.00"
+      }
+    ],
+    "checks": [
+      {
+        "rule": "ledgers_exist",
+        "passed": true,
+        "message": "all ledgers resolve to masters"
+      },
+      {
+        "rule": "balanced",
+        "passed": true,
+        "message": "Dr 8496.00 = Cr 8496.00"
+      },
+      {
+        "rule": "gst_rate_valid",
+        "passed": true,
+        "message": "rate 18% is notified"
+      },
+      {
+        "rule": "gst_split_correct",
+        "passed": true,
+        "message": "IGST 1296.00 on 7200.0"
+      },
+      {
+        "rule": "gstin_valid",
+        "passed": true,
+        "message": "company GSTIN checksum passes"
+      },
+      {
+        "rule": "period_open",
+        "passed": true,
+        "message": "2026-06-02 is in an open period"
+      },
+      {
+        "rule": "edu_date_allowed",
+        "passed": true,
+        "message": "2026-06-02 is enterable in Educational mode"
+      },
+      {
+        "rule": "stock_items_exist",
+        "passed": true,
+        "message": "no stock on this voucher"
+      },
+      {
+        "rule": "cost_centres_exist",
+        "passed": true,
+        "message": "no cost centre on this voucher"
+      },
+      {
+        "rule": "currency_is_usable",
+        "passed": true,
+        "message": "base currency only"
+      },
+      {
+        "rule": "inventory_matches_value",
+        "passed": true,
+        "message": "no stock on this voucher"
+      },
+      {
+        "rule": "stock_not_negative",
+        "passed": true,
+        "message": "nothing to check"
+      },
+      {
+        "rule": "not_duplicate",
+        "passed": true,
+        "message": "no matching voucher in the window"
+      }
+    ]
+  },
+  "reco": {
+    "bank": {
+      "message": "Bank reco on Bank - HDFC 1234: 2 matched, 2 statement line(s) not in books, 0 book entry/entries not on the statement. 2 voucher(s) proposed - none posted.",
+      "matched": [
+        {
+          "statement_date": "2026-06-02",
+          "amount": "500.00",
+          "voucher_number": "3",
+          "narration_score": 0.25
+        },
+        {
+          "statement_date": "2026-06-02",
+          "amount": "9000.00",
+          "voucher_number": "4",
+          "narration_score": 0.25
+        }
+      ],
+      "unmatched_statement": [
+        {
+          "date": "2026-06-27",
+          "amount": "25000.00",
+          "narration": "NEFT ACME INDUSTRIES PART PMT"
+        },
+        {
+          "date": "2026-06-30",
+          "amount": "-236.00",
+          "narration": "BANK CHARGES QTR APR-JUN"
+        }
+      ],
+      "unmatched_ledger": [],
+      "proposals": [
+        {
+          "tool": "create_receipt",
+          "date": "2026-06-27",
+          "amount": "25000.00",
+          "bank_ledger": "Bank - HDFC 1234",
+          "narration": "NEFT ACME INDUSTRIES PART PMT",
+          "suggested_party": "Acme Industries"
+        },
+        {
+          "tool": "create_payment",
+          "date": "2026-06-30",
+          "amount": "236.00",
+          "bank_ledger": "Bank - HDFC 1234",
+          "narration": "BANK CHARGES QTR APR-JUN",
+          "suggested_party": ""
+        }
+      ],
+      "statement": [
+        {
+          "date": "02/06/2026",
+          "narration": "NEFT CR",
+          "amount": "500.00",
+          "reference": "V3"
+        },
+        {
+          "date": "02/06/2026",
+          "narration": "NEFT CR",
+          "amount": "9000.00",
+          "reference": "V4"
+        },
+        {
+          "date": "27/06/2026",
+          "narration": "NEFT ACME INDUSTRIES PART PMT",
+          "amount": "25000.00",
+          "reference": "N0627"
+        },
+        {
+          "date": "30/06/2026",
+          "narration": "BANK CHARGES QTR APR-JUN",
+          "amount": "-236.00",
+          "reference": ""
+        }
+      ]
+    },
+    "gstr2b": {
+      "message": "GSTR-2B reconciliation - missing in 2b: 2, missing in books: 2, value mismatch: 1. Claimable Rs 0.00, at risk Rs 43,110.00.",
+      "rows": [
+        {
+          "status": "missing_in_2b",
+          "supplier": "Bharat Supplies",
+          "supplier_gstin": "29AAGCB7383J1Z4",
+          "invoice_no": "RESTOCK-2026-09-12",
+          "invoice_date": "2026-06-01",
+          "gstr2b_total": "0.00",
+          "books_total": "209450.00",
+          "difference": "-209450.00",
+          "itc_at_risk": "31950.00",
+          "cause": "supplier has not filed",
+          "action": "Do not claim it this month. Ask the supplier to file it in GSTR-1 or IFF; it goes on the deferred-ITC list and is claimable the month it appears."
+        },
+        {
+          "status": "missing_in_2b",
+          "supplier": "Bharat Supplies",
+          "supplier_gstin": "29AAGCB7383J1Z4",
+          "invoice_no": "INV-STOCK-IN-1",
+          "invoice_date": "2026-06-01",
+          "gstr2b_total": "0.00",
+          "books_total": "73160.00",
+          "difference": "-73160.00",
+          "itc_at_risk": "11160.00",
+          "cause": "supplier has not filed",
+          "action": "Do not claim it this month. Ask the supplier to file it in GSTR-1 or IFF; it goes on the deferred-ITC list and is claimable the month it appears."
+        },
+        {
+          "status": "value_mismatch",
+          "supplier": "Bharat Supplies",
+          "supplier_gstin": "29AAGCB7383J1Z4",
+          "invoice_no": "BS/2026/77",
+          "invoice_date": "2026-06-01",
+          "gstr2b_total": "11800.00",
+          "books_total": "9440.00",
+          "difference": "2360.00",
+          "itc_at_risk": "0.00",
+          "cause": "taxable value differs",
+          "action": "Check the bill: a freight or discount line, or a typing error, on one side."
+        },
+        {
+          "status": "missing_in_books",
+          "supplier": "Bharat Supplies",
+          "supplier_gstin": "29AAGCB7383J1Z4",
+          "invoice_no": "BS/2026/41",
+          "invoice_date": "2026-04-02",
+          "gstr2b_total": "23600.00",
+          "books_total": "0.00",
+          "difference": "23600.00",
+          "itc_at_risk": "0.00",
+          "cause": "bill not entered in the books",
+          "action": "Find the bill and enter it, or confirm it is not this client's."
+        },
+        {
+          "status": "missing_in_books",
+          "supplier": "Bharat Supplies",
+          "supplier_gstin": "29AAGCB7383J1Z4",
+          "invoice_no": "BS/2026/90",
+          "invoice_date": "2026-06-02",
+          "gstr2b_total": "4720.00",
+          "books_total": "0.00",
+          "difference": "4720.00",
+          "itc_at_risk": "0.00",
+          "cause": "bill not entered in the books",
+          "action": "Find the bill and enter it, or confirm it is not this client's."
+        }
+      ],
+      "counts": {
+        "missing_in_2b": 2,
+        "value_mismatch": 1,
+        "missing_in_books": 2
+      },
+      "csv": "status,supplier,supplier_gstin,invoice_no,invoice_date,gstr2b_total,books_total,difference,itc_at_risk,cause,action\r\nmissing_in_2b,Bharat Supplies,29AAGCB7383J1Z4,RESTOCK-2026-09-12,2026-06-01,0.00,209450.00,-209450.00,31950.00,supplier has not filed,Do not claim it this month. Ask the supplier to file it in GSTR-1 or IFF; it goes on the deferred-ITC list and is claimable the month it appears.\r\nmissing_in_2b,Bharat Supplies,29AAGCB7383J1Z4,INV-STOCK-IN-1,2026-06-01,0.00,73160.00,-73160.00,11160.00,supplier has not filed,Do not claim it this month. Ask the supplier to file it in GSTR-1 or IFF; it goes on the deferred-ITC list and is claimable the month it appears.\r\nvalue_mismatch,Bharat Supplies,29AAGCB7383J1Z4,BS/2026/77,2026-06-01,11800.00,9440.00,2360.00,0.00,taxable value differs,\"Check the bill: a freight or discount line, or a typing error, on one side.\"\r\nmissing_in_books,Bharat Supplies,29AAGCB7383J1Z4,BS/2026/41,2026-04-02,23600.00,0.00,23600.00,0.00,bill not entered in the books,\"Find the bill and enter it, or confirm it is not this client's.\"\r\nmissing_in_books,Bharat Supplies,29AAGCB7383J1Z4,BS/2026/90,2026-06-02,4720.00,0.00,4720.00,0.00,bill not entered in the books,\"Find the bill and enter it, or confirm it is not this client's.\"\r\n",
+      "claimable": "0.00",
+      "at_risk": "43110.00"
+    }
+  }
+}

@@ -29,7 +29,8 @@ const stillsArg = args.includes("--stills") ? args[args.indexOf("--stills") + 1]
 // can load from file:// - fetch() is refused there.
 const capture = readFileSync(join(here, "data", "capture.json"), "utf8");
 const timing = readFileSync(join(here, "data", "timing.json"), "utf8");
-writeFileSync(join(build, "data.js"), `window.CAPTURE=${capture};\nwindow.TIMING=${timing};\n`);
+const stories = readFileSync(join(here, "data", "stories.json"), "utf8");
+writeFileSync(join(build, "data.js"), `window.CAPTURE=${capture};\nwindow.TIMING=${timing};\nwindow.STORIES=${stories};\n`);
 
 const browser = await chromium.launch({ channel: "msedge", headless: true });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });

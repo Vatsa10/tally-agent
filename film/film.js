@@ -8,6 +8,7 @@
 // the real TallyPrime recording is composited in afterwards (render.mjs).
 
 const D = window.CAPTURE;
+const S = window.STORIES;
 const T = window.TIMING;
 const stage = document.getElementById("stage");
 
@@ -299,6 +300,87 @@ const SCENES = {
             <span class="amt" style="color:var(--teal)">${count(t, at, value, 1.2)}%</span></div>`;
         }).join("")}
         <div class="src">Every field right on our pile; the unreadable scan was refused, not guessed.</div></div>`;
+  },
+
+  invoice(t) {
+    t /= 1.75; // paced to the narration: fields, then the draft, then the checks
+    const B = S.bill;
+    const H = 700, scale = H / B.size[1], W = B.size[0] * scale, X = 96, Y = 170;
+    const scanY = clamp((t - 0.8) / 2.6) * H;
+    const labels = { vendor: "Supplier", gstin: "GSTIN", invoice_no: "Invoice no", invoice_date: "Date", taxable_value: "Taxable value", igst: "IGST", total: "Total" };
+    const boxes = B.fields.map((f, i) => {
+      const [x0, y0, x1, y1] = f.box.map((v) => v * scale);
+      const at = 0.8 + (y1 / H) * 2.6;
+      const p = prog(t, at, 0.45);
+      return `<div style="position:absolute;left:${X + x0 - 6}px;top:${Y + y0 - 4}px;width:${x1 - x0 + 12}px;height:${y1 - y0 + 8}px;border:2px solid var(--saffron);border-radius:6px;opacity:${p};box-shadow:0 0 ${18 * p}px rgba(255,153,51,.55);transform:scale(${lerp(1.25, 1, p)})"></div>`;
+    }).join("");
+    const read = B.fields.map((f, i) => {
+      const at = 0.8 + ((f.box[3] * scale) / H) * 2.6 + 0.2;
+      return `<div class="row" style="padding:5px 0;font-size:22px;${enter(t, at, { dy: 10, over: 0.5, blur: 2, scale: 1 })}"><span>${labels[f.field] || f.field}</span><span class="amt" style="color:var(--ink)">${esc(typed(f.value, t, at + 0.1, 40).text)}</span></div>`;
+    }).join("");
+    const lines = B.lines.map((l, i) => {
+      const at = 5.6 + i * 0.55;
+      return `<div class="row" style="padding:8px 0;font-size:23px;${enter(t, at, { dy: 12, over: 0.6, blur: 2, scale: 1 })}"><span><b style="color:${l.side === "Dr" ? "var(--teal)" : "var(--saffron)"}">${l.side}</b>&nbsp; ${esc(l.ledger)}</span><span class="amt" style="color:var(--ink)">${esc(l.amount)}</span></div>`;
+    }).join("");
+    const dr = B.lines.filter((l) => l.side === "Dr").reduce((a, l) => a + Number(l.amount.replace(/,/g, "")), 0);
+    const balanced = prog(t, 7.6, 0.8);
+    const checks = B.checks.slice(0, 5).map((c, i) => `<span class="pill" style="${enter(t, 8.4 + i * 0.25, { dy: 6, over: 0.4, blur: 0, scale: 1 })}">${c.passed ? "✓" : "✗"} ${esc(c.rule.replace(/_/g, " "))}</span>`).join(" ");
+    return chapter(10, "A bill becomes a voucher", t) +
+      `<div style="position:absolute;left:${X}px;top:${Y}px;width:${W}px;height:${H}px;border-radius:10px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);${enter(t, 0.1)}">
+        <img src="${B.image}" style="width:100%;height:100%;display:block">
+        <div style="position:absolute;left:0;right:0;top:${scanY}px;height:3px;background:var(--saffron);box-shadow:0 0 24px 6px rgba(255,153,51,.6);opacity:${t > 0.8 && t < 3.6 ? 1 : 0}"></div></div>` +
+      boxes +
+      `<div class="card" style="left:${X + W + 60}px;top:170px;width:${1824 - X - W - 60}px;${enter(t, 0.9)}">
+        <div class="cardhead">Read from the scan</div>${read}</div>` +
+      `<div class="card" style="left:${X + W + 60}px;top:572px;width:${1824 - X - W - 60}px;${enter(t, 5.2)}">
+        <div class="cardhead">Drafted purchase voucher · ${esc(B.ticket)}</div>${lines}
+        <div class="row" style="padding:8px 0;font-size:23px;opacity:${balanced};border-top:1px solid var(--line)"><span style="color:var(--teal)">Dr ${count(t, 7.6, dr, 1, 2)} = Cr ${count(t, 7.6, dr, 1, 2)}</span><span class="amt" style="color:var(--teal)">balanced ✓</span></div>
+        <div style="margin-top:10px">${checks}</div></div>`;
+  },
+
+  matching(t) {
+    t /= 1.9; // paced to the narration: bank first, then 2B
+    const R = S.reco, bank = R.bank, gst = R.gstr2b;
+    const n = (s) => Number(String(s).replace(/,/g, ""));
+    const fmt = (v) => Math.abs(v).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+    const rowY = (i) => 236 + i * 74;
+    const matchOf = (r) => bank.matched.find((m) => n(m.amount) === n(r.amount) && m.statement_date === r.date.split("/").reverse().join("-"));
+    const stmt = bank.statement.map((r, i) => {
+      const v = n(r.amount);
+      return `<div class="row" style="position:absolute;left:96px;top:${rowY(i)}px;width:640px;${enter(t, 0.6 + i * 0.25, { dy: 10, over: 0.5, blur: 2, scale: 1 })}">
+        <span style="font-size:22px">${esc(r.date)} · ${esc(r.narration)}</span><span class="amt" style="color:${v > 0 ? "var(--teal)" : "var(--saffron)"}">${v > 0 ? "Cr" : "Dr"} ${fmt(v)}</span></div>`;
+    }).join("");
+    let k = 0;
+    const links = [], books = [], props = [];
+    bank.statement.forEach((r, i) => {
+      const m = matchOf(r);
+      const at = 2.4 + i * 0.9;
+      if (m) {
+        const by = rowY(k++);
+        const p = prog(t, at, 0.7);
+        links.push(`<path d="M736 ${rowY(i) + 26} C 900 ${rowY(i) + 26}, 960 ${by + 26}, 1124 ${by + 26}" stroke="var(--teal)" stroke-width="3" fill="none" stroke-dasharray="520" stroke-dashoffset="${520 * (1 - p)}"/>`);
+        books.push(`<div class="row" style="position:absolute;left:1124px;top:${by}px;width:700px;${enter(t, at + 0.4, { dy: 8, over: 0.5, blur: 2, scale: 1 })}">
+          <span style="font-size:22px">Voucher ${esc(m.voucher_number)} · ${esc(m.statement_date)}</span><span class="amt" style="color:var(--teal)">${fmt(n(m.amount))} ✓ matched</span></div>`);
+      } else {
+        const p = bank.proposals.find((x) => x.narration === r.narration) || {};
+        const receipt = p.tool === "create_receipt";
+        const party = p.suggested_party || "ledger for a person to pick";
+        const dr = receipt ? p.bank_ledger : party, cr = receipt ? party : p.bank_ledger;
+        props.push(`<div class="row" style="position:absolute;left:1124px;top:${rowY(bank.matched.length + props.length) + 20}px;width:700px;${enter(t, at + 0.3, { dy: 8, over: 0.5, blur: 2, scale: 1 })}">
+          <span style="font-size:21px"><b style="color:var(--saffron)">no voucher</b> → ${receipt ? "Receipt" : "Payment"}: Dr ${esc(dr)} / Cr ${esc(cr)}</span><span class="amt" style="color:var(--ink)">${esc(fmt(n(p.amount || 0)))}</span></div>`);
+      }
+    });
+    const tone = { matched: "var(--teal)", value_mismatch: "var(--saffron)", missing_in_2b: "var(--risk)", missing_in_books: "var(--saffron)" };
+    const words = { matched: "matched", value_mismatch: "value differs", missing_in_2b: "supplier hasn't filed", missing_in_books: "not in books" };
+    const g = gst.rows.map((r, i) => `<div class="pill" style="display:inline-block;margin:6px 8px 0 0;border-color:${tone[r.status]};${enter(t, 7.4 + i * 0.3, { dy: 8, over: 0.5, blur: 2, scale: 1 })}">
+      ${esc(r.invoice_no)} · <b style="color:${tone[r.status]}">${words[r.status] || r.status}</b>${Number(r.itc_at_risk) ? ` · ITC Rs ${fmt(n(r.itc_at_risk))} held` : ""}</div>`).join("");
+    return chapter(11, "Debits and credits, matched", t) +
+      `<div class="cardhead" style="position:absolute;left:96px;top:180px;${enter(t, 0.3)}">Bank statement · June</div>` +
+      `<div class="cardhead" style="position:absolute;left:1124px;top:180px;${enter(t, 0.3)}">Books in Tally · ${esc("Bank - HDFC 1234")}</div>` +
+      stmt + `<svg style="position:absolute;left:0;top:0" width="1920" height="1080">${links.join("")}</svg>` + books.join("") + props.join("") +
+      `<div class="card" style="left:96px;top:620px;width:1728px;${enter(t, 7)}">
+        <div class="cardhead">GSTR-2B against the purchase register — on supplier GSTIN and invoice number</div>${g}
+        <div class="src" style="${enter(t, 9.6)}">${esc(gst.message)}</div></div>`;
   },
 
   firm(t) {
