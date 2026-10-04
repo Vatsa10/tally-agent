@@ -46,6 +46,7 @@ def split_command(text: str) -> list[str]:
 
 #: What a PIN looks like on a /signin line: the last word, all digits.
 _PIN_WORD = re.compile(r"^\d{4,8}$")
+_HAS_DIGIT = re.compile(r"\d")
 
 
 def redact_pin(text: str) -> str:
@@ -55,7 +56,9 @@ def redact_pin(text: str) -> str:
     projector; a PIN typed for a scripted run must not survive into it.
     """
     words = text.split()
-    if len(words) >= 3 and words[0].lower() == "/signin" and _PIN_WORD.match(words[-1]):
+    # Any last word with a digit in it is masked, not only a well-formed PIN:
+    # a PIN typed one digit short is most of the real PIN.
+    if len(words) >= 3 and words[0].lower() == "/signin" and _HAS_DIGIT.search(words[-1]):
         return " ".join([*words[:-1], "****"])
     return text
 

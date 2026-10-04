@@ -869,3 +869,14 @@ async def test_the_app_signs_in_through_a_masked_modal(services, engine):
         await pilot.pause()
 
         assert app.session.who == "R. Mehta"
+
+
+async def test_a_pin_typed_a_digit_short_is_masked_too(services, engine):
+    """Three of four digits on a projector is most of the PIN."""
+    _registered(services, engine)
+    session = Session(services)
+
+    turn = await session.handle("/signin R. Mehta 482")
+
+    assert turn.lines[0].text == "/signin R. Mehta ****"
+    assert "482" not in turn.text

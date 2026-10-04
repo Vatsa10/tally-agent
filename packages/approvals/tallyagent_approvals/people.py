@@ -19,6 +19,7 @@ import hmac
 import logging
 import os
 import re
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -63,6 +64,12 @@ MAX_FAILED_PINS = 5
 #: How long a lockout lasts. Long enough that guessing is hopeless, short
 #: enough that a partner who mistyped is back before the client call ends.
 LOCKOUT = timedelta(minutes=15)
+
+#: Serialises PIN checks. The count is read, the PIN hashed, then the count
+#: written back; without this, a burst of parallel guesses from the web form
+#: all read the same count and each write back one more, so a hundred guesses
+#: cost one strike and the lockout never arrives.
+_CHECK_LOCK = threading.Lock()
 
 
 class NotSignedInError(PolicyError):
@@ -205,6 +212,10 @@ class People:
         here, so this is the one place wrong PINs are counted and a lockout is
         enforced.
         """
+        with _CHECK_LOCK:
+            return self._check(name, pin)
+
+    def _check(self, name: str, pin: str) -> User:
         now = self.clock()
         with Session(self.engine) as session:
             row = session.exec(

@@ -15,6 +15,7 @@ from tallyagent_approvals.audit import AuditLog
 from tallyagent_approvals.db import make_engine
 from tallyagent_approvals.people import (
     CLERK,
+    MAX_FAILED_PINS,
     PARTNER,
     LockedOutError,
     NotPermittedError,
@@ -320,3 +321,26 @@ def test_an_older_database_gains_the_lockout_columns(tmp_path):
     staff.add("R. Mehta", PARTNER, "4821")
     assert staff.check("R. Mehta", "4821").is_partner
     old.dispose()
+
+
+def test_parallel_guesses_each_count_as_a_strike(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    engine = make_engine(tmp_path / "race.db")
+    staff = People(engine)
+    staff.add("R. Mehta", PARTNER, "4821")
+
+    def guess(_):
+        try:
+            staff.check("R. Mehta", "0000")
+        except LockedOutError:
+            return "locked"
+        except WrongPinError:
+            return "wrong"
+        return "in"
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        outcomes = list(pool.map(guess, range(12)))
+
+    assert outcomes.count("wrong") == MAX_FAILED_PINS - 1
+    assert outcomes.count("locked") == 12 - (MAX_FAILED_PINS - 1)
