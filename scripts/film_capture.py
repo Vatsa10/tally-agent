@@ -24,9 +24,8 @@ from pathlib import Path
 
 from tallyagent_channels.tui.session import Session
 from tallyagent_core import dotenv
-from tallyagent_daemon import clients
+from tallyagent_daemon import clients, wiring
 from tallyagent_daemon import config as config_mod
-from tallyagent_daemon import wiring
 from tallyagent_daemon.firm import brief
 from tallyagent_daemon.firm.setup import make_runner
 
