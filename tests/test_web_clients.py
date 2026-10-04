@@ -252,3 +252,43 @@ def test_a_single_company_install_is_a_pool_of_one(practice):
 
     assert pool.slugs() == ["default"]
     assert pool.get("default") is practice["sharma"]
+
+
+# --- review fixes ----------------------------------------------------------------
+
+
+def test_one_client_that_cannot_be_wired_does_not_take_the_others_down(firm):
+    sharma, _ = _wire("Sharma Textiles", firm)
+
+    def factory(slug: str) -> Services:
+        if slug == "broken":
+            raise OSError("database file is locked")
+        return sharma
+
+    pool = ServicesPool(
+        entries=[Entry("sharma", "Sharma Textiles"), Entry("broken", "Broken Ltd")],
+        factory=factory,
+    )
+    app = FastAPI()
+    app.include_router(build_router(pool))
+
+    response = TestClient(app).get("/c/sharma/")
+
+    assert response.status_code == 200
+    assert "broken &mdash; Broken Ltd (unavailable)" in response.text
+
+
+def test_serve_without_a_client_is_wired_to_the_first_registered_client():
+    from tallyagent_daemon.cli import _serve_client
+    from tallyagent_daemon.clients import Client, Register
+
+    register = Register(
+        clients=[
+            Client(slug="sharma", name="S", company="Sharma"),
+            Client(slug="gupta", name="G", company="Gupta"),
+        ]
+    )
+
+    assert _serve_client(register, "") == "sharma"
+    assert _serve_client(register, "gupta") == "gupta"
+    assert _serve_client(Register(), "") == ""

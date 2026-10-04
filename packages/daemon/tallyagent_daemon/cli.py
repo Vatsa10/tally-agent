@@ -414,6 +414,20 @@ def enable_server(
         raise typer.Exit(code=1)
 
 
+def _serve_client(register: clients.Register, client: str) -> str:
+    """The client the daemon itself is wired to.
+
+    The web UI opens on the pool's default client, while the WhatsApp webhook,
+    the scheduler and the tray stay on the daemon's own wiring. With a register
+    and no --client those two would otherwise be different books: the UI on the
+    first registered client, the webhook posting into the bare config's
+    database. Picking the first client here keeps them on the same books.
+    """
+    if client or register.empty:
+        return client
+    return register.clients[0].slug
+
+
 def _services_pool(
     register: clients.Register,
     base: Config,
@@ -463,12 +477,12 @@ def serve(
     from tallyagent_daemon.app import build_app
     from tallyagent_daemon.tray import run_tray
 
+    register = clients.load(clients_path)
+    client = _serve_client(register, client)
     config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake)
     _wire_fallback(wired)
-    pool = _services_pool(
-        clients.load(clients_path), load(config_path, policy_path), wired, client, fake
-    )
+    pool = _services_pool(register, load(config_path, policy_path), wired, client, fake)
     url = f"http://{config.daemon.host}:{config.daemon.port}/"
 
     if config.daemon.tray:

@@ -24,7 +24,7 @@
         {% for c in clients %}
         <option value="/c/{{ c.slug }}/" {{ 'selected' if c.slug == slug else '' }}
                 data-slug="{{ c.slug }}" data-pending="{{ c.pending }}">
-          {{ c.slug }} &mdash; {{ c.name }} ({{ c.pending }} pending)
+          {{ c.slug }} &mdash; {{ c.name }} ({{ c.pending if c.pending is not none else 'unavailable' }}{{ ' pending' if c.pending is not none else '' }})
         </option>
         {% endfor %}
       </select>

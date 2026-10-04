@@ -13,10 +13,13 @@ is supplied by the daemon so this package never learns how a client is wired.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from tallyagent_channels.services import Services
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +80,16 @@ class ServicesPool:
             raise KeyError(f"no client called {slug!r}")
         self._wired[slug] = services
 
-    def pending_count(self, slug: str) -> int:
-        services = self.get(slug)
-        return len(services.queue.list("pending", services.company.name))
+    def pending_count(self, slug: str) -> int | None:
+        """How many tickets wait on this client, or None if it cannot be wired.
+
+        The picker counts every client on every page, so one client whose
+        database or config is broken must not take every other client's page
+        down with it. That client's own pages still fail loudly when opened.
+        """
+        try:
+            services = self.get(slug)
+            return len(services.queue.list("pending", services.company.name))
+        except Exception:
+            log.warning("could not count pending tickets for %s", slug, exc_info=True)
+            return None
