@@ -204,6 +204,12 @@ class TallyUi:
         if self._palette_open():
             self.keyboard.press("escape")
             await self._wait(0.6)
+        # Alt+G does nothing inside voucher entry. go_to is never called in the
+        # middle of a voucher this driver is keying, so a voucher screen here is
+        # the blank one Tally opens after an accept - and Escape leaves that.
+        if "vouchercreation" in self._screen_name().lower().replace(" ", ""):
+            self.keyboard.press("escape")
+            await self._wait(0.8)
         # The first Alt+G after Tally is raised is sometimes swallowed, and the
         # report name then gets typed into whatever report is open. Confirm the
         # palette is up before typing, and ask again if it is not.
@@ -354,7 +360,7 @@ class TallyUi:
         """
         run = UiRun(task=f"show voucher {number}")
         if not await self.go_to("Day Book"):
-            run.stopped = "could not bring Tally to the front"
+            run.stopped = "could not open the screen through Go To"
             return run
         if not await self.expect_screen("Day Book"):
             run.stopped = "Tally did not open the Day Book"
@@ -549,7 +555,7 @@ class TallyUi:
         puts an amount into the wrong field. So there is one copy.
         """
         if not await self.go_to("Create Voucher"):
-            run.stopped = "could not bring Tally to the front"
+            run.stopped = "could not open the screen through Go To"
             return run
         if not await self.expect_screen("Voucher Creation"):
             run.stopped = (
