@@ -6,7 +6,7 @@
 
 <div class="rounded border border-slate-200 bg-slate-50 p-3 text-sm space-y-3">
 
-  <form hx-post="/approvals/{{ item.ticket }}/edit" hx-target="#approvals">
+  <form hx-post="{{ base }}/approvals/{{ item.ticket }}/edit" hx-target="#approvals">
     <table class="w-full text-left text-xs">
       <thead class="text-slate-500">
         <tr><th class="py-1">Ledger</th><th class="py-1 text-right">Debit</th><th class="py-1 text-right">Credit</th></tr>

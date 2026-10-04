@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
+from tallyagent_channels.pool import ServicesPool
 from tallyagent_channels.web.app import build_router as build_web_router
 from tallyagent_channels.whatsapp.meta import MetaClient
 from tallyagent_channels.whatsapp.webhook import build_router as build_whatsapp_router
@@ -21,7 +22,14 @@ from tallyagent_daemon.wiring import Wired
 log = logging.getLogger(__name__)
 
 
-def build_app(wired: Wired) -> FastAPI:
+def build_app(wired: Wired, pool: ServicesPool | None = None) -> FastAPI:
+    """The daemon's application.
+
+    ``pool`` holds every client the web UI may show; without one the UI serves
+    ``wired`` alone, as a single-company install always has. The WhatsApp
+    webhook and the scheduler stay on ``wired``: a phone number and a nightly
+    job belong to one set of books, not to whichever tab is open.
+    """
     scheduler = Scheduler(wired)
 
     @asynccontextmanager
@@ -41,8 +49,6 @@ def build_app(wired: Wired) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.wired = wired
-    app.include_router(build_web_router(wired.services))
-
     if wired.config.whatsapp.enabled:
         if not wired.config.whatsapp.app_secret:
             # Refuse rather than serve an endpoint that cannot authenticate.
@@ -60,5 +66,9 @@ def build_app(wired: Wired) -> FastAPI:
         log.info("WhatsApp webhook mounted at /whatsapp/webhook")
     else:
         log.info("WhatsApp channel is disabled")
+
+    # Last, because the web router redirects every unprefixed address to the
+    # default client and would otherwise swallow the webhook.
+    app.include_router(build_web_router(pool or wired.services))
 
     return app

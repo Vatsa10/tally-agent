@@ -24,7 +24,7 @@
           {{ item.validation.warnings | length }} warning(s)
         </span>
         {% endif %}
-        <button hx-get="/approvals/{{ item.ticket }}" hx-target="#detail-{{ item.ticket }}"
+        <button hx-get="{{ base }}/approvals/{{ item.ticket }}" hx-target="#detail-{{ item.ticket }}"
                 class="underline text-slate-600">details</button>
       </div>
     </div>
@@ -35,7 +35,7 @@
       {# Who is deciding, proved at the moment of the decision. There is no
          login session here; a name and that person's PIN is what puts a real
          name on the ticket and in the audit chain. #}
-      <form hx-post="/approvals/{{ item.ticket }}/approve" hx-target="#approvals"
+      <form hx-post="{{ base }}/approvals/{{ item.ticket }}/approve" hx-target="#approvals"
             class="flex items-center gap-2">
         {% if users %}
         <select name="who" required
@@ -53,7 +53,7 @@
           Approve &amp; post
         </button>
       </form>
-      <form hx-post="/approvals/{{ item.ticket }}/reject" hx-target="#approvals"
+      <form hx-post="{{ base }}/approvals/{{ item.ticket }}/reject" hx-target="#approvals"
             class="flex items-center gap-2">
         {% if users %}
         <select name="who" required

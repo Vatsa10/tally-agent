@@ -8,7 +8,7 @@
   {% if tickets %}
   <p class="mt-2 text-xs text-amber-800">
     Queued for your approval: {{ tickets | join(", ") }} &mdash; nothing has been posted yet.
-    <button hx-get="/approvals" hx-target="#approvals" class="underline">show</button>
+    <button hx-get="{{ base }}/approvals" hx-target="#approvals" class="underline">show</button>
   </p>
   {% endif %}
 

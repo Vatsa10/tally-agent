@@ -15,6 +15,20 @@
       <h1 class="text-xl font-semibold">tallyagent</h1>
       <p class="text-sm text-slate-600">{{ services.company.name }}</p>
     </div>
+    {# One tab for every client. The client is in the address, so switching is
+       a plain navigation and each client's queue stays in its own books. #}
+    <label class="flex items-center gap-2 text-xs text-slate-600">
+      <span class="font-medium">Client</span>
+      <select id="client-picker" onchange="window.location = this.value"
+              class="rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+        {% for c in clients %}
+        <option value="/c/{{ c.slug }}/" {{ 'selected' if c.slug == slug else '' }}
+                data-slug="{{ c.slug }}" data-pending="{{ c.pending }}">
+          {{ c.slug }} &mdash; {{ c.name }} ({{ c.pending if c.pending is not none else 'unavailable' }}{{ ' pending' if c.pending is not none else '' }})
+        </option>
+        {% endfor %}
+      </select>
+    </label>
     <dl class="flex gap-4 text-xs text-slate-600">
       <div><dt class="inline font-medium">Model:</dt> <dd class="inline">{{ status.provider }}/{{ status.model }}</dd></div>
       <div><dt class="inline font-medium">Tokens:</dt> <dd class="inline">{{ status.tokens }}</dd></div>
@@ -24,7 +38,7 @@
 
   <section>
     <h2 class="text-lg font-semibold mb-2">Ask</h2>
-    <form hx-post="/chat" hx-target="#chat" hx-swap="afterbegin"
+    <form hx-post="{{ base }}/chat" hx-target="#chat" hx-swap="afterbegin"
           class="flex gap-2" hx-on::after-request="this.reset()">
       <input name="message" required autocomplete="off"
              placeholder="e.g. what is outstanding from Acme?"
@@ -37,7 +51,7 @@
   <section>
     <div class="flex items-baseline justify-between mb-2">
       <h2 class="text-lg font-semibold">Awaiting approval</h2>
-      <button hx-get="/approvals" hx-target="#approvals"
+      <button hx-get="{{ base }}/approvals" hx-target="#approvals"
               class="text-xs text-slate-600 underline">refresh</button>
     </div>
     <div id="approvals">
