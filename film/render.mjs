@@ -89,13 +89,13 @@ if (clipScenes.length) {
     const file = join(here, "clips", `${s.clip}.mkv`);
     inputs.push("-i", file);
     const len = s.clip_seconds / s.speed;
-    const push = 0.05;
+    const push = 0.025;
     filters.push(
       `[${n + 1}:v]setpts=(PTS-STARTPTS)/${s.speed},fps=${FPS},` +
       // crop's size is fixed when the filter starts (t is not defined then);
       // only its position may move. So: scale up a touch, then drift across.
       `scale=${Math.round(RECT.w * (1 + push))}:${Math.round(RECT.h * (1 + push))}:flags=lanczos,` +
-      `crop=${RECT.w}:${RECT.h}:x='(iw-ow)*min(1,t/${len.toFixed(3)})':y='(ih-oh)/2',` +
+      `crop=${RECT.w}:${RECT.h}:x='(iw-ow)*(0.35+0.3*min(1,t/${len.toFixed(3)}))':y='(ih-oh)/2',` +
       `setsar=1,setpts=PTS+${s.clip_at}/TB[c${n}]`,
     );
     const out = n === clipScenes.length - 1 ? "[v]" : `[o${n}]`;

@@ -191,6 +191,8 @@ async def main() -> int:
     wired = wiring.build(clients.apply(base, register.get("demo"), register.data_dir))
 
     light = spotlight_mod.build(show_cursor=True)
+    # The ring hops field to field while keys go in; the typing is the hold.
+    light.travel_seconds, light.hold_seconds = 0.25, 0.15
 
     async def partner_approves(step: Any) -> bool:
         # The keyed voucher is accepted only after the same partner check as

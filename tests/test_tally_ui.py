@@ -142,7 +142,10 @@ async def test_a_payment_is_keyed_field_by_field_and_accepted():
         "2500.00",
         "June rent",
     ]
-    assert keyboard.pressed[-1] == "ctrl+a", "accepted last, and only last"
+    assert keyboard.pressed[-2:] == ["ctrl+a", "escape"], (
+        "accepted last, then out of the blank voucher Tally opens after it"
+    )
+    assert keyboard.pressed.count("ctrl+a") == 1
 
 
 async def test_the_wrong_screen_stops_it_before_a_single_field():
@@ -287,7 +290,7 @@ async def test_a_ledger_with_cost_centres_is_allocated_then_accepted():
 
     assert run.completed, run.stopped
     assert "Admin" in keyboard.typed
-    assert keyboard.pressed[-1] == "ctrl+a"
+    assert keyboard.pressed[-2:] == ["ctrl+a", "escape"]
 
 
 async def test_without_a_cost_centre_the_voucher_is_left_unposted():
@@ -329,7 +332,7 @@ async def test_a_receipt_is_keyed_into_the_bank_then_from_the_party():
         "11800.00",
         "against bill 42",
     ]
-    assert keyboard.pressed[-1] == "ctrl+a"
+    assert keyboard.pressed[-2:] == ["ctrl+a", "escape"]
 
 
 async def test_a_journal_names_each_side_before_its_ledger_and_amount():
@@ -356,7 +359,7 @@ async def test_a_journal_names_each_side_before_its_ledger_and_amount():
         "5000.00",
         "June depreciation",
     ]
-    assert keyboard.pressed[-1] == "ctrl+a"
+    assert keyboard.pressed[-2:] == ["ctrl+a", "escape"]
 
 
 async def test_a_receipt_on_the_wrong_voucher_type_types_no_field():
@@ -390,7 +393,7 @@ async def test_a_receipt_into_a_cost_centre_ledger_is_allocated_then_accepted():
 
     assert run.completed, run.stopped
     assert keyboard.typed[-2:] == ["Admin", "900"], "the centre, then the whole amount"
-    assert keyboard.pressed[-1] == "ctrl+a"
+    assert keyboard.pressed[-2:] == ["ctrl+a", "escape"]
 
 
 async def test_a_receipt_without_its_cost_centre_is_left_unposted():

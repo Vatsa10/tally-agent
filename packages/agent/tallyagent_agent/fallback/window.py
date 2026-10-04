@@ -112,6 +112,20 @@ def _handle_for(title: str) -> int | None:
     return found[0] if found else None
 
 
+def _foreground_name() -> str:
+    """Who has the foreground: its title and process, for a refusal to name."""
+    try:
+        import psutil  # type: ignore[import-untyped]
+        import win32gui  # type: ignore[import-not-found]
+        import win32process  # type: ignore[import-not-found]
+
+        handle = win32gui.GetForegroundWindow()
+        _, pid = win32process.GetWindowThreadProcessId(handle)
+        return f"{win32gui.GetWindowText(handle)!r} ({psutil.Process(pid).name()})"
+    except Exception:  # noqa: BLE001 - a diagnosis, never a reason to fail
+        return "unknown"
+
+
 def _foreground() -> int | None:
     try:
         import win32gui  # type: ignore[import-not-found]
@@ -228,7 +242,8 @@ def ensure_visible(
 
     if not raise_window(bounds):
         return None, (
-            "TallyPrime is open but could not be brought to the front. "
+            "TallyPrime is open but could not be brought to the front "
+            f"({_foreground_name()} has it). "
             "Keystrokes would go to whatever is in front instead, so nothing "
             "was sent. Click the Tally window and try again."
         )

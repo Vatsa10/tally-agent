@@ -307,6 +307,10 @@ class Spotlight:
         self._key = do_key or computer_use.press
         self._click = do_click or computer_use.click
         self.travel_seconds = travel_seconds
+        #: How long a pointed-at spot is held before the work goes on. A
+        #: person previewing a click needs the default; a recording of the
+        #: agent typing does not - the typing itself is the hold.
+        self.hold_seconds = CAPTION_SECONDS
         if sleep is None:
             import time
 
@@ -351,7 +355,7 @@ class Spotlight:
                  x=x, y=y)
         )
         self._glide(x, y)
-        self._sleep(CAPTION_SECONDS)
+        self._sleep(self.hold_seconds)
 
     def key(self, key: str) -> None:
         self._show(Beat(kind="key", caption=describe("key", key, self.why)))

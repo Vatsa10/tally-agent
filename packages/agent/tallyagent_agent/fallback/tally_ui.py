@@ -240,6 +240,18 @@ class TallyUi:
         """Is Tally's Go To list up? It is what Alt+G is supposed to produce."""
         return "listofreports" in self._screen_name().lower().replace(" ", "")
 
+    async def probe_screen(self, expected: str) -> bool:
+        """Has an optional popup opened? One look, no retries, no vision.
+
+        Bill-wise and Cost Allocation screens appear only for some ledgers.
+        Asking expect_screen whether they were up cost every voucher without
+        them three header reads and a vision read - 36 seconds of a recorded
+        payment spent confirming that nothing had happened.
+        """
+        await self._wait(0.5)
+        wanted = expected.lower().replace(" ", "")
+        return wanted in self._screen_name().lower().replace(" ", "")
+
     async def expect_screen(self, expected: str) -> bool:
         """Is the screen we asked for the screen that is open?
 
@@ -594,7 +606,7 @@ class TallyUi:
         # income ledgers, and Tally then interrupts the voucher with an
         # allocation screen. Allocating the whole amount to one centre is the
         # case worth automating; anything split belongs on the XML path.
-        if await self.expect_screen("Cost Allocations"):
+        if await self.probe_screen("Cost Allocations"):
             if not cost_centre:
                 run.stopped = (
                     f"{allocated_ledger} is allocated to cost centres, and none "
@@ -651,7 +663,7 @@ class TallyUi:
         # not guess which of the party's bills this settles, and the partner can
         # match it against a bill afterwards. Choosing a particular bill belongs
         # to whoever knows which one it was.
-        if await self.expect_screen("Bill-wise Details"):
+        if await self.probe_screen("Bill-wise Details"):
             billwise = [
                 UiStep(
                     "allocate it on account",
@@ -672,7 +684,7 @@ class TallyUi:
                     return run
             # Some releases ask for a further reference row; an empty one
             # closes the screen. Only pressed if the screen is still there.
-            if await self.expect_screen("Bill-wise Details"):
+            if await self.probe_screen("Bill-wise Details"):
                 close = UiStep(
                     "finish the bill allocation",
                     keys=["enter"],
@@ -690,6 +702,14 @@ class TallyUi:
                 return run
 
         run.completed = True
+        # Accepting a voucher opens the next blank one of the same type, and
+        # Go To does nothing from inside voucher entry - measured, a receipt
+        # keyed straight after a payment could not even open its screen.
+        # The blank voucher has nothing in it, so Escape leaves it unasked.
+        await self._wait(0.6)
+        if await self.probe_screen("Voucher Creation"):
+            self.keyboard.press("escape")
+            await self._wait(0.6)
         return run
 
     def _frame(self) -> tuple[bytes, Any] | None:
@@ -871,6 +891,9 @@ def locate_on_screen(label: str) -> tuple[int, int] | None:
     return int(bounds.left + (x0 + x1) / 2), int(bounds.top + (y0 + y1) / 2)
 
 
+_HEADER_CACHE: dict[str, str] = {}
+
+
 def _screen_from_title() -> str:
     """What Tally says it is showing, read off Tally's own header.
 
@@ -885,6 +908,7 @@ def _screen_from_title() -> str:
     wrong screen, which is the direction that refuses to type.
     """
     try:
+        import hashlib  # noqa: PLC0415
         import io  # noqa: PLC0415
 
         from PIL import Image as PilImage  # noqa: PLC0415
@@ -897,9 +921,16 @@ def _screen_from_title() -> str:
         png = capture(bounds)
         image = PilImage.open(io.BytesIO(png)).convert("RGB")
         header = image.crop((0, 0, image.width, max(1, image.height // 5)))
+        # The header is the same pixels for most of a voucher; OCR is a second
+        # or two. Read it again only when it has changed.
+        key = hashlib.sha1(header.tobytes()).hexdigest()
+        if _HEADER_CACHE.get("key") == key:
+            return _HEADER_CACHE["text"]
         buffer = io.BytesIO()
         header.save(buffer, format="PNG")
-        return " ".join(_ocr_lines(buffer.getvalue()))
+        text = " ".join(_ocr_lines(buffer.getvalue()))
+        _HEADER_CACHE.update(key=key, text=text)
+        return text
     except Exception as exc:  # noqa: BLE001 - unknown screen is the wrong screen
         log.debug("could not read Tally's screen name: %s", exc)
         return ""
