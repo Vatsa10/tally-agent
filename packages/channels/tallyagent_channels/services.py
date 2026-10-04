@@ -34,6 +34,8 @@ class Services:
     people: Any = None
     #: Which client companies a partner has enabled for writing.
     consents: Any = None
+    #: The partner's standing grant for earned, hands-off posting, per client.
+    autonomy: Any = None
     #: Backups of the client's books, and the same-day gate on bulk postings.
     backups: Any = None
     #: Tier router and the latest Tier 2 observation, when perception is on.

@@ -211,6 +211,30 @@ class InboxRow(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=_now)
 
 
+class AutonomyGrantRow(SQLModel, table=True):
+    """A partner's standing instruction that this client's work may earn
+    hands-off posting, within the limits they set.
+
+    The system promotes an action type only inside a grant like this; it never
+    grants itself one. Per client, because one client's clean history says
+    nothing about another's books.
+    """
+
+    __tablename__ = "autonomy_grant"
+
+    id: int | None = Field(default=None, primary_key=True)
+    company: str = Field(index=True)
+    granted_by: str = ""
+    granted_at: datetime = Field(default_factory=_now)
+    #: Consecutive clean human approvals an action type needs before it posts
+    #: without one.
+    min_streak: int = 20
+    #: Nothing above this posts unattended, whatever the record says.
+    max_amount: str = "50000"
+    revoked_at: datetime | None = None
+    revoked_by: str = ""
+
+
 class EgressRow(SQLModel, table=True):
     """What left the machine, per model request. See docs/SECURITY.md."""
 

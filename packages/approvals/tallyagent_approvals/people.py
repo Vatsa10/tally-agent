@@ -47,6 +47,7 @@ PARTNER_ONLY = (
     "change_policy",
     "enable_keyboard_tier",
     "take_backup",
+    "grant_autonomy",
 )
 
 #: Short enough that people will use it, long enough not to be a coin flip.

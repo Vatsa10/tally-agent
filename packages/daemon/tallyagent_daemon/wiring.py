@@ -17,6 +17,7 @@ from sqlmodel import Session
 
 from tallyagent_agent.memory import Memory
 from tallyagent_approvals.audit import AuditLog
+from tallyagent_approvals.autonomy import GrantStore
 from tallyagent_approvals.backups import BackupLog
 from tallyagent_approvals.consent import ConsentStore
 from tallyagent_approvals.db import EgressRow, SqlIdempotencyStore, make_engine
@@ -132,6 +133,7 @@ def build(
         people=people,
         consents=consents,
         backups=backups,
+        autonomy=GrantStore(engine, audit),
     )
     return Wired(config=config, services=services, backend=backend, engine=engine)
 

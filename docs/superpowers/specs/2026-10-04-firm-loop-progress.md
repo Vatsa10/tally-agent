@@ -12,8 +12,8 @@ moves from gated to hands-off on a measured record and falls back on a miss.
 | # | Module | State |
 |---|---|---|
 | 1 | FirmRunner, Job protocol, Outcome, Firm Inbox, Morning Brief | **done** |
-| 2 | Earned autonomy ramp and no-touch metric | next |
-| 3 | `reconcile_2b` job: mismatch classification, vendor follow-ups, deferred-ITC ledger, IMS suggestions | |
+| 2 | Earned autonomy ramp and no-touch metric | **done** |
+| 3 | `reconcile_2b` job: mismatch classification, vendor follow-ups, deferred-ITC ledger, IMS suggestions | next |
 | 4 | Edit Log edition check, local model option | |
 | 5 | Wiring: scheduler, TUI `/inbox`, web home page, CLI `firm run` | |
 
@@ -36,3 +36,26 @@ moves from gated to hands-off on a measured record and falls back on a miss.
 
 Tests: `tests/test_firm_runner.py` (11), against two fake-Tally clients and one
 whose Tally is off.
+
+## 2. Earned autonomy - done
+
+`packages/approvals/tallyagent_approvals/autonomy.py` holds the rules; `packages/daemon/tallyagent_daemon/firm/autonomy.py` is the runner's side.
+
+- A partner switches it on per client (`autonomy_grant` table, on the audit
+  chain, a partner-only action). The grant sets the streak length (at least 5)
+  and an amount ceiling. The system promotes only inside a grant; it never
+  grants itself one.
+- An action type becomes trusted when its last `min_streak` human decisions
+  were all clean approvals. The first rejection, edit or failed post drops it
+  back to gated. Posts made by autonomy do not count towards its own record.
+- Even when trusted, an action posts only up to the largest amount a person has
+  approved in the current streak, and never above the partner's ceiling.
+  Validation warnings always go to a person.
+- Every autonomous post is signed `autonomy (N clean approvals, granted by
+  <partner>)`, so the audit chain says why nobody looked.
+- No-touch rate per client: earned posts plus standing-policy posts, over all
+  posts. This is the throughput number.
+
+Tests: `tests/test_autonomy.py` (16), including an end-to-end morning run that
+posts what earned it and queues the two over-limit receipts, each with its own
+reason.
