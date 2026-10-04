@@ -9,6 +9,7 @@ exercised by a human pressing keys is a control surface that is never tested.
 from __future__ import annotations
 
 import logging
+import re
 import shlex
 import time
 from collections.abc import Awaitable, Callable
@@ -41,6 +42,22 @@ def split_command(text: str) -> list[str]:
     except ValueError:
         parts = text.split()
     return [part[1:-1] if len(part) > 1 and part[0] == part[-1] == '"' else part for part in parts]
+
+
+#: What a PIN looks like on a /signin line: the last word, all digits.
+_PIN_WORD = re.compile(r"^\d{4,8}$")
+
+
+def redact_pin(text: str) -> str:
+    """The line as it should appear in the transcript, with any PIN masked.
+
+    A transcript is scrolled back through, screenshotted and shown on a
+    projector; a PIN typed for a scripted run must not survive into it.
+    """
+    words = text.split()
+    if len(words) >= 3 and words[0].lower() == "/signin" and _PIN_WORD.match(words[-1]):
+        return " ".join([*words[:-1], "****"])
+    return text
 
 
 @dataclass(slots=True)
@@ -97,6 +114,10 @@ class SessionStats:
 #: Asks a human to approve one Tier 3 mutating step. Supplied by the TUI.
 Tier3Approver = Callable[[Any], Awaitable[bool]]
 
+#: Asks for a PIN without echoing it, given the name signing in. Supplied by
+#: the TUI; returns an empty string when the person cancels.
+PinPrompt = Callable[[str], Awaitable[str]]
+
 
 class Session:
     """One conversation plus the commands that act on it."""
@@ -119,6 +140,7 @@ class Session:
         self.auto_approve = auto_approve
         self.stats = SessionStats()
         self.tier3_approver: Tier3Approver | None = None
+        self.pin_prompt: PinPrompt | None = None
         self.last_probe: Any = None
         # The practice's client register, and how to point this session at one
         # of them. Injected rather than imported: the channels package must not
@@ -166,7 +188,7 @@ class Session:
         if not text:
             return turn
         self.stats.turns += 1
-        turn.say("user", text)
+        turn.say("user", redact_pin(text))
         # Carried into the tools so a policy posting - which never reaches the
         # approval queue - still records who asked for it.
         self.services.tools.actor = self.who
@@ -607,27 +629,36 @@ class Session:
         )
 
     async def cmd_signin(self, args: list[str], turn: Turn) -> Turn:
-        """/signin <name> <pin> - who is at the keyboard.
+        """/signin <name> - who is at the keyboard.
 
-        The PIN is on the same line rather than a hidden prompt because this
-        window is a transcript: a masked prompt inside a Textual app is a
-        second input mode to build, and the transcript is on the user's own
-        machine. What matters is that the ticket carries a name.
+        With only a name, the PIN is asked for in a masked prompt, because the
+        transcript is on screen and a PIN in it is a PIN shown to the room.
+        ``/signin <name> <pin>`` still works for scripted runs; the echoed
+        line has the PIN masked either way.
         """
         people = self.people
         if people is None:
             return turn.say("error", "no user register is wired into this session")
-        if len(args) < 2:
-            if people.empty:
-                return turn.say(
-                    "error",
-                    'nobody is registered yet. Run: tallyagent users add "Name" '
-                    "--role partner",
-                )
-            return turn.say("error", "usage: /signin <name> <pin>")
+        has_pin = len(args) >= 2 and bool(_PIN_WORD.match(args[-1]))
+        if people.empty and not has_pin:
+            return turn.say(
+                "error",
+                'nobody is registered yet. Run: tallyagent users add "Name" '
+                "--role partner",
+            )
+        if not args:
+            return turn.say("error", "usage: /signin <name>")
 
-        pin = args[-1]
-        name = " ".join(args[:-1])
+        if has_pin:
+            pin = args[-1]
+            name = " ".join(args[:-1])
+        else:
+            name = " ".join(args)
+            if self.pin_prompt is None:
+                return turn.say("error", "usage: /signin <name> <pin>")
+            pin = await self.pin_prompt(name)
+            if not pin:
+                return turn.say("system", "Sign-in cancelled.")
         try:
             user = people.sign_in(name, pin)
         except TallyAgentError as exc:
@@ -809,7 +840,7 @@ COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
 HELP = {
     "help": "this list",
     "client": "[slug] - list the practice's clients, or switch to one",
-    "signin": "<name> <pin> - who is deciding; a ticket carries this name",
+    "signin": "<name> - who is deciding; the PIN is asked for masked",
     "signout": "stop acting as the signed-in person",
     "users": "who is registered here",
     "consent": "which client companies may be written to",

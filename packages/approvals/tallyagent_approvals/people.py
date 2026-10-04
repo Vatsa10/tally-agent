@@ -19,8 +19,9 @@ import hmac
 import logging
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Engine
 from sqlmodel import Session, select
@@ -55,6 +56,14 @@ SCRYPT_N = 2**14
 SCRYPT_R = 8
 SCRYPT_P = 1
 
+#: Wrong PINs in a row before a person is locked out. Enough for fat fingers
+#: and a forgotten digit, nowhere near enough to walk the four-digit space.
+MAX_FAILED_PINS = 5
+
+#: How long a lockout lasts. Long enough that guessing is hopeless, short
+#: enough that a partner who mistyped is back before the client call ends.
+LOCKOUT = timedelta(minutes=15)
+
 
 class NotSignedInError(PolicyError):
     """Something was attempted with nobody signed in."""
@@ -62,6 +71,10 @@ class NotSignedInError(PolicyError):
 
 class WrongPinError(PolicyError):
     """The name is known and the PIN is not."""
+
+
+class LockedOutError(PolicyError):
+    """Too many wrong PINs in a row; this person waits before trying again."""
 
 
 class NotPermittedError(PolicyError):
@@ -103,9 +116,16 @@ def hash_pin(pin: str, salt: bytes | None = None) -> tuple[str, str]:
 class People:
     """The user table, and the one signed-in person this process is acting as."""
 
-    def __init__(self, engine: Engine, audit: object | None = None) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        audit: object | None = None,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self.engine = engine
         self.audit = audit
+        # Injectable so a fifteen-minute lockout can be tested without waiting.
+        self.clock = clock or utc_now
         self.current: User | None = None
 
     # --- the register --------------------------------------------------------
@@ -179,21 +199,60 @@ class People:
 
     def check(self, name: str, pin: str) -> User:
         """Verify a name and PIN. Raises rather than returning a falsy user, so
-        a caller cannot forget to look at the answer."""
+        a caller cannot forget to look at the answer.
+
+        Every path in - sign in, the web form, a WhatsApp reply - comes through
+        here, so this is the one place wrong PINs are counted and a lockout is
+        enforced.
+        """
+        now = self.clock()
         with Session(self.engine) as session:
             row = session.exec(
                 select(UserRow).where(UserRow.name == (name or "").strip())
             ).first()
-        if row is None or row.disabled:
-            # Deliberately the same message as a wrong PIN: which names are
-            # registered is not something a form should tell whoever asks.
-            self._note("signin_failed", name or "?", reason="unknown or wrong pin")
-            raise WrongPinError("that name and PIN do not match a user here")
-        expected, _ = hash_pin(pin, bytes.fromhex(row.pin_salt))
-        if not hmac.compare_digest(expected, row.pin_hash):
-            self._note("signin_failed", row.name, reason="wrong pin")
-            raise WrongPinError("that name and PIN do not match a user here")
-        return User(name=row.name, role=row.role)
+            if row is None or row.disabled:
+                # Deliberately the same message as a wrong PIN: which names are
+                # registered is not something a form should tell whoever asks.
+                self._note("signin_failed", name or "?", reason="unknown or wrong pin")
+                raise WrongPinError("that name and PIN do not match a user here")
+            locked_until = _aware(row.locked_until)
+            if locked_until is not None and now < locked_until:
+                # Checked before the PIN, so the right PIN during a lockout
+                # does not reveal itself by succeeding.
+                self._note("signin_refused_locked", row.name, until=locked_until.isoformat())
+                raise LockedOutError(_locked_message(row.name, locked_until))
+            try:
+                expected, _ = hash_pin(pin, bytes.fromhex(row.pin_salt))
+            except ValueError:
+                expected = ""
+            if expected and hmac.compare_digest(expected, row.pin_hash):
+                if row.failed_pins or row.locked_until is not None:
+                    row.failed_pins, row.locked_until = 0, None
+                    session.add(row)
+                    session.commit()
+                return User(name=row.name, role=row.role)
+
+            if locked_until is not None:
+                # A lockout that has run out starts the count afresh.
+                row.failed_pins, row.locked_until = 0, None
+            row.failed_pins += 1
+            locked = row.failed_pins >= MAX_FAILED_PINS
+            if locked:
+                until = now + LOCKOUT
+                row.failed_pins, row.locked_until = 0, until
+            session.add(row)
+            session.commit()
+            user_name = row.name
+        self._note("signin_failed", user_name, reason="wrong pin")
+        if locked:
+            self._note(
+                "user_locked",
+                user_name,
+                after=MAX_FAILED_PINS,
+                until=until.isoformat(),
+            )
+            raise LockedOutError(_locked_message(user_name, until))
+        raise WrongPinError("that name and PIN do not match a user here")
 
     def sign_in(self, name: str, pin: str) -> User:
         user = self.check(name, pin)
@@ -249,3 +308,18 @@ class People:
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def _aware(moment: datetime | None) -> datetime | None:
+    """SQLite hands datetimes back without a zone; they were stored as UTC."""
+    if moment is None or moment.tzinfo is not None:
+        return moment
+    return moment.replace(tzinfo=UTC)
+
+
+def _locked_message(name: str, until: datetime) -> str:
+    local = until.astimezone().strftime("%H:%M")
+    return (
+        f"{name} is locked after {MAX_FAILED_PINS} wrong PINs in a row. "
+        f"Try again after {local}."
+    )
