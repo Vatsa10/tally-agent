@@ -34,6 +34,8 @@ class Services:
     people: Any = None
     #: Which client companies a partner has enabled for writing.
     consents: Any = None
+    #: Backups of the client's books, and the same-day gate on bulk postings.
+    backups: Any = None
     #: Tier router and the latest Tier 2 observation, when perception is on.
     #: Typed loosely so channels do not depend on the agent package's internals.
     tiers: Any = None

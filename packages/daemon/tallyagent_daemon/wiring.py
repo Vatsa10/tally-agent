@@ -17,6 +17,7 @@ from sqlmodel import Session
 
 from tallyagent_agent.memory import Memory
 from tallyagent_approvals.audit import AuditLog
+from tallyagent_approvals.backups import BackupLog
 from tallyagent_approvals.consent import ConsentStore
 from tallyagent_approvals.db import EgressRow, SqlIdempotencyStore, make_engine
 from tallyagent_approvals.people import People
@@ -87,6 +88,16 @@ def build(
     router = Router(provider, on_egress=_egress_writer(engine, config))
 
     queue = ApprovalQueue(engine, audit)
+    # Backups are recorded in the client's database, on the client's audit
+    # chain: "was this company backed up today" is a question about its books.
+    backups = BackupLog(
+        engine,
+        audit,
+        data_dir=config.tally_data_dir,
+        firm_db_path=config.firm_db_path,
+        root=config.backups_dir,
+    )
+    queue.backups = backups
     # The write guard stops being a name prefix here: a company is writable
     # because a partner enabled it, and the guard asks the consent table.
     consents = ConsentStore(engine, audit)
@@ -120,6 +131,7 @@ def build(
         max_steps=config.model.max_steps,
         people=people,
         consents=consents,
+        backups=backups,
     )
     return Wired(config=config, services=services, backend=backend, engine=engine)
 

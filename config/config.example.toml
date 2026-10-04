@@ -16,6 +16,10 @@ company = ""               # blank = whichever company is open in Tally
 # Tally ODBC/HTTP user, if your Tally requires one. Password comes from
 # the OS keyring / TALLY_PASSWORD env var, never from here.
 username = ""
+# Optional. Tally's data folder (F1 > Settings > Data). When set, a partner's
+# backup before a bulk posting is a zip of this folder; when blank, they take
+# Tally's own backup (Alt+Y) and record it with /backup confirm <where>.
+# data_dir = 'C:\Users\Public\TallyPrime\Data'
 
 # Live mode may only write to companies whose name starts with this. It is what
 # protects real books that appear on the same machine: a write aimed anywhere
