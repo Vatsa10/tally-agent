@@ -2,10 +2,13 @@
 
     uv run python scripts/tally_ui_rehearse.py show 12
     uv run python scripts/tally_ui_rehearse.py screen
+    uv run python scripts/tally_ui_rehearse.py receipt --ledger Bank --party Sharma
+    uv run python scripts/tally_ui_rehearse.py journal --debit Depreciation --credit Furniture
 
 ``show`` changes nothing - it opens the Day Book and rings a row. ``screen``
 just prints what the screen check reads off Tally's own header, which is the
-part that has to be right before anything is ever typed.
+part that has to be right before anything is ever typed. ``pay``, ``receipt``
+and ``journal`` key a voucher and ask at the terminal before Ctrl+A.
 """
 
 from __future__ import annotations
@@ -23,11 +26,14 @@ from tallyagent_agent.fallback.tally_ui import DesktopKeyboard, TallyUi, _screen
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("what", choices=["show", "screen", "pay"])
+    parser.add_argument("what", choices=["show", "screen", "pay", "receipt", "journal"])
     parser.add_argument("number", nargs="?", default="1")
     parser.add_argument("--date", default=date.today().isoformat())
     parser.add_argument("--ledger", default="Cash")
     parser.add_argument("--expense", default="Rent")
+    parser.add_argument("--party", default="Sundry Debtor")
+    parser.add_argument("--debit", default="Depreciation")
+    parser.add_argument("--credit", default="Furniture")
     parser.add_argument("--cost-centre", default="")
     parser.add_argument("--cost-category", default="")
     parser.add_argument("--amount", default="100.00")
@@ -55,6 +61,24 @@ async def main() -> int:
                 narration="cursor mode rehearsal",
                 cost_centre=args.cost_centre,
                 cost_category=args.cost_category,
+            )
+        elif args.what == "receipt":
+            run = await ui.enter_receipt(
+                into_ledger=args.ledger,
+                from_ledger=args.party,
+                amount=Decimal(args.amount),
+                when=date.fromisoformat(args.date),
+                narration="cursor mode rehearsal",
+                cost_centre=args.cost_centre,
+                cost_category=args.cost_category,
+            )
+        elif args.what == "journal":
+            run = await ui.enter_journal(
+                debit_ledger=args.debit,
+                credit_ledger=args.credit,
+                amount=Decimal(args.amount),
+                when=date.fromisoformat(args.date),
+                narration="cursor mode rehearsal",
             )
         else:
             run = await ui.show_voucher(args.number, date.fromisoformat(args.date))

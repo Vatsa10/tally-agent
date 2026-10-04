@@ -246,6 +246,156 @@ class TallyUi:
         one that has to be found and deleted.
         """
         run = UiRun(task=f"payment {amount} to {expense_ledger}")
+        fields = [
+            UiStep("the account to pay from", text=from_ledger, keys=["enter"]),
+            UiStep("what it is being spent on", text=expense_ledger, keys=["enter"]),
+            UiStep("the amount", text=f"{amount}", keys=["enter"]),
+        ]
+        return await self._enter_voucher(
+            run,
+            type_key="f5",
+            type_name="Payment",
+            fields=fields,
+            when=when,
+            amount=amount,
+            allocated_ledger=expense_ledger,
+            narration=narration,
+            cost_centre=cost_centre,
+            cost_category=cost_category,
+        )
+
+    async def enter_receipt(
+        self,
+        into_ledger: str,
+        from_ledger: str,
+        amount: Decimal,
+        when: date,
+        narration: str = "",
+        cost_centre: str = "",
+        cost_category: str = "",
+    ) -> UiRun:
+        """Key a receipt voucher: the mirror image of a payment.
+
+        Tally's Receipt screen asks first for the account the money landed in
+        and then for the party or income ledger it came from, so the fields go
+        in that order. An income ledger with cost centres on it interrupts the
+        voucher exactly the way an expense ledger does on a payment, and is
+        handled the same way.
+        """
+        run = UiRun(task=f"receipt {amount} from {from_ledger}")
+        fields = [
+            UiStep(
+                "the account received into",
+                text=into_ledger,
+                keys=["enter"],
+                on_screen="Receipt",
+            ),
+            UiStep(
+                "who or what it came from",
+                text=from_ledger,
+                keys=["enter"],
+                on_screen="Receipt",
+            ),
+            UiStep("the amount", text=f"{amount}", keys=["enter"], on_screen="Receipt"),
+        ]
+        return await self._enter_voucher(
+            run,
+            type_key="f6",
+            type_name="Receipt",
+            fields=fields,
+            when=when,
+            amount=amount,
+            allocated_ledger=from_ledger,
+            narration=narration,
+            cost_centre=cost_centre,
+            cost_category=cost_category,
+        )
+
+    async def enter_journal(
+        self,
+        debit_ledger: str,
+        credit_ledger: str,
+        amount: Decimal,
+        when: date,
+        narration: str = "",
+    ) -> UiRun:
+        """Key a two-line journal: one ledger debited, one credited.
+
+        A journal line in Tally starts by asking whether it is a debit or a
+        credit - "By" or "To" in the old wording, Dr or Cr on the screen - and
+        only then for the ledger and the amount. Each of those is its own
+        narrated step, so a person watching sees the side chosen before the
+        ledger is named. Two lines is the limit for the same reason a payment
+        has one expense: past that nobody can follow it, and the XML path is
+        the right tool.
+
+        No cost centre is taken. A journal ledger that pops an allocation
+        screen between the lines is caught by the per-field screen check and
+        the voucher is left unposted, which is the safe reading of a screen
+        nobody planned for.
+        """
+        run = UiRun(task=f"journal {amount} from {credit_ledger} to {debit_ledger}")
+        fields = [
+            UiStep("debit side", text="Dr", keys=["enter"], on_screen="Journal"),
+            UiStep(
+                "the ledger debited",
+                text=debit_ledger,
+                keys=["enter"],
+                on_screen="Journal",
+            ),
+            UiStep(
+                "the debit amount",
+                text=f"{amount}",
+                keys=["enter"],
+                on_screen="Journal",
+            ),
+            UiStep("credit side", text="Cr", keys=["enter"], on_screen="Journal"),
+            UiStep(
+                "the ledger credited",
+                text=credit_ledger,
+                keys=["enter"],
+                on_screen="Journal",
+            ),
+            UiStep(
+                "the credit amount",
+                text=f"{amount}",
+                keys=["enter"],
+                on_screen="Journal",
+            ),
+        ]
+        return await self._enter_voucher(
+            run,
+            type_key="f7",
+            type_name="Journal",
+            fields=fields,
+            when=when,
+            amount=amount,
+            allocated_ledger=debit_ledger,
+            narration=narration,
+        )
+
+    async def _enter_voucher(
+        self,
+        run: UiRun,
+        *,
+        type_key: str,
+        type_name: str,
+        fields: list[UiStep],
+        when: date,
+        amount: Decimal,
+        allocated_ledger: str,
+        narration: str,
+        cost_centre: str = "",
+        cost_category: str = "",
+    ) -> UiRun:
+        """The part of keying a voucher that does not depend on its type.
+
+        Payment, receipt and journal differ only in the F-key that picks the
+        type and the fields in between. The screen checks, the date sub-screen,
+        the cost allocation and the approval-gated accept are the same, and a
+        safety rule fixed in one copy and not another is the kind of drift that
+        puts an amount into the wrong field. So there is one copy.
+        """
         if not await self.go_to("Create Voucher"):
             run.stopped = "could not bring Tally to the front"
             return run
@@ -256,31 +406,36 @@ class TallyUi:
             return run
 
         # Whatever voucher type was last used is the one Tally opens on.
-        await self.step(UiStep("choose the Payment voucher type", keys=["f5"]))
-        if not await self.expect_screen("Payment"):
-            run.stopped = "Tally did not switch to a Payment voucher; nothing was typed"
+        await self.step(UiStep(f"choose the {type_name} voucher type", keys=[type_key]))
+        if not await self.expect_screen(type_name):
+            run.stopped = (
+                f"Tally did not switch to a {type_name} voucher; nothing was typed"
+            )
             return run
 
         steps = [
-            UiStep("open the date field", keys=["f2"]),
+            UiStep("open the date field", keys=["f2"], on_screen=type_name),
             UiStep(
                 "the voucher date",
                 text=when.strftime("%d-%m-%Y"),
                 keys=["enter"],
                 on_screen="Change Voucher Date",
             ),
-            UiStep("the account to pay from", text=from_ledger, keys=["enter"]),
-            UiStep("what it is being spent on", text=expense_ledger, keys=["enter"]),
-            UiStep("the amount", text=f"{amount}", keys=["enter"]),
+            *fields,
         ]
         tail = [
             # An empty particulars line is how Tally is told the entries are
             # done; it is also what moves the cursor to the narration. Typed
             # before this, a narration goes into a ledger name field and Tally
             # offers to create a ledger called "June rent".
-            UiStep("no more lines", keys=["enter"]),
-            UiStep("the narration", text=narration),
-            UiStep("accept the voucher", keys=["ctrl+a"], mutating=True),
+            UiStep("no more lines", keys=["enter"], on_screen=type_name),
+            UiStep("the narration", text=narration, on_screen=type_name),
+            UiStep(
+                "accept the voucher",
+                keys=["ctrl+a"],
+                mutating=True,
+                on_screen=type_name,
+            ),
         ]
 
         run.steps = steps
@@ -289,32 +444,20 @@ class TallyUi:
             # centres on it pops a Cost Allocation screen mid-voucher, and the
             # next field then goes into *that*. Left unchecked, a narration was
             # typed into a cost centre name and Ctrl+A accepted the sub-screen.
-            # So every field re-confirms it is still the Payment voucher.
+            # So every field re-confirms it is still the voucher it started as.
             if step is not steps[0] and not await self.expect_screen(step.on_screen):
-                run.stopped = (
-                    "Tally opened another screen mid-voucher "
-                    f"({self._screen_name()[:80]!r}), so the rest was not typed"
-                )
-                self.keyboard.press("escape")
-                return run
-            if not await self.step(step):
-                run.stopped = (
-                    f"refused at {step.describe()}"
-                    if step.refused
-                    else f"could not perform {step.describe()}"
-                )
-                # Back out so Tally is not left holding a half-typed voucher.
-                self.keyboard.press("escape")
+                return self._interrupted(run)
+            if not await self._perform(run, step):
                 return run
 
-        # Most Indian companies switch cost centres on for their expense
-        # ledgers, and Tally then interrupts the voucher with an allocation
-        # screen. Allocating the whole amount to one centre is the case worth
-        # automating; anything split belongs on the XML path.
+        # Most Indian companies switch cost centres on for their expense and
+        # income ledgers, and Tally then interrupts the voucher with an
+        # allocation screen. Allocating the whole amount to one centre is the
+        # case worth automating; anything split belongs on the XML path.
         if await self.expect_screen("Cost Allocations"):
             if not cost_centre:
                 run.stopped = (
-                    f"{expense_ledger} is allocated to cost centres, and none "
+                    f"{allocated_ledger} is allocated to cost centres, and none "
                     "was given, so the voucher was left unposted"
                 )
                 self.keyboard.press("escape")
@@ -365,23 +508,37 @@ class TallyUi:
         run.steps.extend(tail)
         for step in tail:
             if not await self.expect_screen(step.on_screen):
-                run.stopped = (
-                    "Tally opened another screen mid-voucher "
-                    f"({self._screen_name()[:80]!r}), so the rest was not typed"
-                )
-                self.keyboard.press("escape")
-                return run
-            if not await self.step(step):
-                run.stopped = (
-                    f"refused at {step.describe()}"
-                    if step.refused
-                    else f"could not perform {step.describe()}"
-                )
-                self.keyboard.press("escape")
+                return self._interrupted(run)
+            if not await self._perform(run, step):
                 return run
 
         run.completed = True
         return run
+
+    def _interrupted(self, run: UiRun) -> UiRun:
+        """Stop on a screen nobody asked for, and back out of it."""
+        run.stopped = (
+            "Tally opened another screen mid-voucher "
+            f"({self._screen_name()[:80]!r}), so the rest was not typed"
+        )
+        self.keyboard.press("escape")
+        return run
+
+    async def _perform(self, run: UiRun, step: UiStep) -> bool:
+        """Do one voucher step; on refusal or failure, say so and back out.
+
+        Escaping leaves Tally without a half-typed voucher, rather than one a
+        person has to notice and clear by hand.
+        """
+        if await self.step(step):
+            return True
+        run.stopped = (
+            f"refused at {step.describe()}"
+            if step.refused
+            else f"could not perform {step.describe()}"
+        )
+        self.keyboard.press("escape")
+        return False
 
 
 def _row_position() -> tuple[int, int]:

@@ -258,7 +258,7 @@ async def test_a_sub_screen_tally_opened_by_itself_stops_the_voucher():
     assert "ctrl+a" not in keyboard.pressed
 
 
-def _with_allocation():  # type: ignore[no-untyped-def]
+def _with_allocation(voucher: str = "Payment Voucher Creation"):  # type: ignore[no-untyped-def]
     """A Tally that interrupts the voucher with a cost allocation screen once
     the amount has been keyed, the way a cost-centre ledger does."""
     keyboard = FakeKeyboard()
@@ -270,7 +270,7 @@ def _with_allocation():  # type: ignore[no-untyped-def]
             return "List of Reports"
         if len(keyboard.typed) >= 5 and "Admin" not in keyboard.typed:
             return "Cost Allocations"
-        return "Payment Voucher Creation"
+        return voucher
 
     return keyboard, screen_name
 
@@ -303,3 +303,131 @@ async def test_without_a_cost_centre_the_voucher_is_left_unposted():
     assert not run.completed
     assert "cost centres" in run.stopped
     assert "ctrl+a" not in keyboard.pressed
+
+
+# --- receipts and journals --------------------------------------------------
+
+
+async def test_a_receipt_is_keyed_into_the_bank_then_from_the_party():
+    ui, keyboard, _ = _ui(screen="Receipt Voucher Creation", approve=yes)
+
+    run = await ui.enter_receipt(
+        into_ledger="Bank - HDFC 1234",
+        from_ledger="Sharma Traders",
+        amount=Decimal("11800.00"),
+        when=date(2026, 6, 3),
+        narration="against bill 42",
+    )
+
+    assert run.completed, run.stopped
+    assert "f6" in keyboard.pressed and "f5" not in keyboard.pressed
+    assert keyboard.typed == [
+        "Create Voucher",
+        "03-06-2026",
+        "Bank - HDFC 1234",
+        "Sharma Traders",
+        "11800.00",
+        "against bill 42",
+    ]
+    assert keyboard.pressed[-1] == "ctrl+a"
+
+
+async def test_a_journal_names_each_side_before_its_ledger_and_amount():
+    ui, keyboard, _ = _ui(screen="Journal Voucher Creation", approve=yes)
+
+    run = await ui.enter_journal(
+        debit_ledger="Depreciation",
+        credit_ledger="Furniture",
+        amount=Decimal("5000.00"),
+        when=date(2026, 6, 30),
+        narration="June depreciation",
+    )
+
+    assert run.completed, run.stopped
+    assert "f7" in keyboard.pressed
+    assert keyboard.typed == [
+        "Create Voucher",
+        "30-06-2026",
+        "Dr",
+        "Depreciation",
+        "5000.00",
+        "Cr",
+        "Furniture",
+        "5000.00",
+        "June depreciation",
+    ]
+    assert keyboard.pressed[-1] == "ctrl+a"
+
+
+async def test_a_receipt_on_the_wrong_voucher_type_types_no_field():
+    """F6 that did not take leaves Tally on whatever type it was on."""
+    ui, keyboard, _ = _ui(screen="Payment Voucher Creation", approve=yes)
+
+    run = await ui.enter_receipt("Bank", "Sharma Traders", Decimal("100"), date(2026, 6, 1))
+
+    assert not run.completed
+    assert "Receipt" in run.stopped and "nothing was typed" in run.stopped
+    assert keyboard.typed == ["Create Voucher"]
+
+
+async def test_a_journal_on_the_wrong_voucher_type_types_no_field():
+    ui, keyboard, _ = _ui(screen="Receipt Voucher Creation", approve=yes)
+
+    run = await ui.enter_journal("Depreciation", "Furniture", Decimal("100"), date(2026, 6, 1))
+
+    assert not run.completed
+    assert "Journal" in run.stopped
+    assert keyboard.typed == ["Create Voucher"]
+
+
+async def test_a_receipt_into_a_cost_centre_ledger_is_allocated_then_accepted():
+    keyboard, screen_name = _with_allocation("Receipt Voucher Creation")
+    ui = TallyUi(keyboard=keyboard, approve=yes, sleep=_nosleep, screen_name=screen_name)
+
+    run = await ui.enter_receipt(
+        "Bank", "Consulting Income", Decimal("900"), date(2026, 6, 2), cost_centre="Admin"
+    )
+
+    assert run.completed, run.stopped
+    assert keyboard.typed[-2:] == ["Admin", "900"], "the centre, then the whole amount"
+    assert keyboard.pressed[-1] == "ctrl+a"
+
+
+async def test_a_receipt_without_its_cost_centre_is_left_unposted():
+    keyboard, screen_name = _with_allocation("Receipt Voucher Creation")
+    ui = TallyUi(keyboard=keyboard, approve=yes, sleep=_nosleep, screen_name=screen_name)
+
+    run = await ui.enter_receipt("Bank", "Consulting Income", Decimal("900"), date(2026, 6, 2))
+
+    assert not run.completed
+    assert "Consulting Income is allocated to cost centres" in run.stopped
+    assert "ctrl+a" not in keyboard.pressed
+
+
+async def test_refusing_a_receipt_or_journal_leaves_ctrl_a_unpressed():
+    for screen, enter in (
+        ("Receipt Voucher Creation", "enter_receipt"),
+        ("Journal Voucher Creation", "enter_journal"),
+    ):
+        ui, keyboard, _ = _ui(screen=screen, approve=no)
+
+        run = await getattr(ui, enter)("Bank", "Sharma", Decimal("100"), date(2026, 6, 1))
+
+        assert not run.completed
+        assert "refused" in run.stopped
+        assert "ctrl+a" not in keyboard.pressed
+        assert keyboard.pressed[-1] == "escape"
+
+
+async def test_every_receipt_and_journal_step_is_narrated():
+    for screen, enter in (
+        ("Receipt Voucher Creation", "enter_receipt"),
+        ("Journal Voucher Creation", "enter_journal"),
+    ):
+        ui, _, spotlight = _ui(screen=screen, approve=yes)
+
+        run = await getattr(ui, enter)("Bank", "Sharma", Decimal("100"), date(2026, 6, 1))
+
+        assert run.completed, run.stopped
+        for step in run.steps:
+            assert step.describe() in spotlight.said, step.what
