@@ -34,8 +34,10 @@ from tallyagent_agent.fallback.tally_ui import (
     DesktopKeyboard,
     TallyUi,
     _row_position,
+    grab_window,
     locate_on_screen,
 )
+from tallyagent_agent.perception.vision import VisionScreen
 from tallyagent_core import dotenv
 from tallyagent_daemon import clients, wiring
 from tallyagent_daemon import config as config_mod
@@ -205,6 +207,8 @@ async def main() -> int:
         locate=locate_on_screen,
         on_event=record_event,
         pace=0.6,
+        vision=VisionScreen(wired.services.router),
+        grab=grab_window,
     )
     manifest: dict[str, Any] = (
         json.loads(MANIFEST.read_text(encoding="utf-8")) if MANIFEST.is_file() else {}
