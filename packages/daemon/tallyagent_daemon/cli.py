@@ -414,6 +414,41 @@ def enable_server(
         raise typer.Exit(code=1)
 
 
+def _services_pool(
+    register: clients.Register,
+    base: Config,
+    wired: wiring.Wired,
+    client: str,
+    fake: bool,
+):  # type: ignore[no-untyped-def]
+    """Every registered client behind one web UI, the default already wired.
+
+    Each client is wired the way the TUI's /client switch wires it - config
+    moved by ``clients.apply``, then built fresh - but only when a page first
+    asks for it, and then kept. With no register the pool is the one company
+    this install was always serving.
+    """
+    from tallyagent_channels.pool import Entry, ServicesPool
+
+    if register.empty:
+        return ServicesPool.single(wired.services)
+
+    def wire(slug: str):  # type: ignore[no-untyped-def]
+        switched = _wire(clients.apply(base, register.get(slug), register.data_dir), fake)
+        _wire_fallback(switched)
+        return switched.services
+
+    default = register.find(client).slug if client and register.find(client) else ""
+    pool = ServicesPool(
+        entries=[Entry(c.slug, c.name) for c in register.clients],
+        factory=wire,
+        default=default or register.clients[0].slug,
+    )
+    if default:
+        pool.put(default, wired.services)
+    return pool
+
+
 @app.command()
 def serve(
     client: str = CLIENT_OPTION,
@@ -431,6 +466,9 @@ def serve(
     config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake)
     _wire_fallback(wired)
+    pool = _services_pool(
+        clients.load(clients_path), load(config_path, policy_path), wired, client, fake
+    )
     url = f"http://{config.daemon.host}:{config.daemon.port}/"
 
     if config.daemon.tray:
@@ -440,7 +478,7 @@ def serve(
     if wired.using_mock_model:
         typer.echo("Using the mock model provider (no API key configured).")
     uvicorn.run(
-        build_app(wired),
+        build_app(wired, pool),
         host=config.daemon.host,
         port=config.daemon.port,
         log_level=config.logging.level.lower(),
