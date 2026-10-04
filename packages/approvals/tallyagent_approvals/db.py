@@ -182,6 +182,35 @@ class BackupRow(SQLModel, table=True):
     method: str = ""  # file_copy | attested
 
 
+class InboxRow(SQLModel, table=True):
+    """One thing the morning run did, or needs a person for, for one client.
+
+    Lives in the firm database rather than a client's, because the point of it
+    is one list across every client - the partner's morning, not thirty.
+    """
+
+    __tablename__ = "firm_inbox"
+
+    id: int | None = Field(default=None, primary_key=True)
+    run_id: str = Field(index=True)
+    client: str = Field(index=True)
+    company: str = ""
+    job: str = Field(index=True)
+    kind: str = Field(index=True)  # done | queued | exception
+    title: str = ""
+    detail: str = ""
+    amount_at_risk: str = "0"
+    due: str = ""
+    ticket: str = ""
+    #: Same key, same thing: a re-run on the same day updates rather than
+    #: duplicating, so the inbox does not grow every time somebody presses run.
+    key: str = Field(index=True)
+    resolved: bool = Field(default=False, index=True)
+    resolved_by: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
 class EgressRow(SQLModel, table=True):
     """What left the machine, per model request. See docs/SECURITY.md."""
 
