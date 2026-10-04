@@ -16,6 +16,7 @@ from tallyagent_tools import (
     close,
     cost_centres,
     currencies,
+    gstr1,
     ingest,
     masters,
     reconcile,
@@ -173,6 +174,17 @@ TOOLS: tuple[Tool, ...] = (
         "Outward supplies for a period in GSTR-1 shape.",
         _object({"from_date": _DATE, "to_date": _DATE}),
         reports.gstr1_data,
+    ),
+    Tool(
+        "gstr1_export",
+        "Write the month's GSTR-1 JSON for the GST portal or offline tool, plus "
+        "a summary. Validates GSTINs, invoice numbers and tax first; a month "
+        "with problems returns them and writes no JSON. Reads only.",
+        _object(
+            {"month": {**_STRING, "description": "The return month, YYYY-MM."}},
+            ["month"],
+        ),
+        gstr1.gstr1_export,
     ),
     Tool(
         "gstr2_purchase_register",
