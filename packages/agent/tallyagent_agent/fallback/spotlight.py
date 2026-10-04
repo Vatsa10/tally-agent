@@ -74,7 +74,7 @@ def describe(action: str, detail: str, why: str = "") -> str:
 
 @dataclass(slots=True)
 class Beat:
-    """One thing to show. Kind is 'move', 'click', 'key' or 'stop'."""
+    """One thing to show. Kind is 'move', 'click', 'key', 'clear' or 'stop'."""
 
     kind: str
     caption: str = ""
@@ -244,6 +244,13 @@ class OverlaySink:
                 return
 
             try:
+                if beat.kind == "clear":
+                    # Hide the caption. Without a way to do this the overlay
+                    # kept the last words it was sent, and the next screen
+                    # opened under a caption that described the one before.
+                    caption.withdraw()
+                    root.update()
+                    continue
                 if beat.caption:
                     label.configure(text=beat.caption)
                     # Shrink to fit the new text. Without this the window keeps
@@ -309,8 +316,14 @@ class Spotlight:
         self._resting: tuple[int, int] | None = _pointer_now()
 
     def announce(self, why: str) -> None:
-        """The reason the next action is being taken, shown alongside it."""
+        """The reason the next action is being taken, shown alongside it.
+
+        An empty reason also takes the caption off the screen: a step that is
+        finished should not leave its words behind for the next one.
+        """
         self.why = why
+        if not why:
+            self._show(Beat(kind="clear"))
 
     def _show(self, beat: Beat) -> None:
         """Narrate, and never let narration be the thing that fails.

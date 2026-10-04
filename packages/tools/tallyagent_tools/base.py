@@ -118,6 +118,10 @@ class ToolContext:
     #: folder of scanned bills can be read without the caller doing the vision
     #: step itself. Typed as Any to keep tools independent of the llm package.
     vision: Any = None
+    #: How bills are read: "vision" (the model reads the image, OCR as the
+    #: fallback) or "ocr" (local recognition only; no image leaves the
+    #: machine). A firm's privacy choice, set from config.
+    bill_reader: str = "vision"
     #: Per-company learned facts. Used by the bill batch to remember which
     #: documents have already been through, so re-running a folder costs no
     #: extraction and queues nothing twice.

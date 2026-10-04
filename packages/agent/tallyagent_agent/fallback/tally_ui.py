@@ -724,11 +724,16 @@ def _ocr_boxes(png: bytes) -> list[tuple[str, tuple[float, float, float, float]]
 
         _OCR = RapidOCR()
     image = PilImage.open(io.BytesIO(png)).convert("RGB")
+    # Read at half size. Tally's labels are large enough to survive it, and a
+    # full 2560x1600 window took four seconds a read - most of every step.
+    scale = 0.5 if image.width > 1600 else 1.0
+    if scale != 1.0:
+        image = image.resize((int(image.width * scale), int(image.height * scale)))
     found, _ = _OCR(numpy.array(image))
     out = []
     for box, text, _score in found or []:
-        xs = [point[0] for point in box]
-        ys = [point[1] for point in box]
+        xs = [point[0] / scale for point in box]
+        ys = [point[1] / scale for point in box]
         out.append((str(text), (min(xs), min(ys), max(xs), max(ys))))
     return out
 

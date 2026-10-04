@@ -80,6 +80,8 @@ class Config:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     policy: Policy = field(default_factory=Policy.default)
     db_path: str = "./tallyagent.db"
+    #: How bills are read - see tallyagent_tools.bills.READERS.
+    bill_reader: str = "vision"
     #: Where the firm-wide tables live - at present the user register. A client
     #: switch changes ``db_path`` and leaves this alone, so the people who work
     #: here do not have to be registered once per client.
@@ -235,6 +237,7 @@ def from_dict(
         ),
         policy=policy,
         db_path=str(storage_raw.get("db_path") or "./tallyagent.db"),
+        bill_reader=str((data.get("bills") or {}).get("reader") or "vision"),
         firm_db_path=str(
             storage_raw.get("firm_db_path")
             or storage_raw.get("db_path")

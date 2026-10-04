@@ -153,6 +153,10 @@ class Recorder:
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            # No console window. One opening took the foreground from Tally at
+            # the start of every take, and the next keystroke-driven clip
+            # refused to type because Tally would not come back to the front.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
     def stop(self, timeout: float = 10.0) -> None:

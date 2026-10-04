@@ -117,6 +117,7 @@ def build(
         ledger_aliases=queue.learned_aliases(config.company.name),
         voucher_index=index,
         vision=router,
+        bill_reader=config.bill_reader,
         memory=memory,
         audit=audit,
     )

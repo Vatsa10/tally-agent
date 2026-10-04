@@ -241,7 +241,11 @@ def truth_for(path: Path) -> dict[str, Any] | None:
 
 
 async def score(
-    folder: str, label: str, limit: int = 0, cache_dir: str = "reports/bill_cache"
+    folder: str,
+    label: str,
+    limit: int = 0,
+    cache_dir: str = "reports/bill_cache",
+    reader_kind: str = "ocr",
 ) -> Report:
     """Read every bill in a folder with the real chain and score the answers."""
     dotenv.load()
@@ -252,11 +256,15 @@ async def score(
     # scan first, which here is the answer sheet. What is being measured is the
     # reader that runs on a folder nobody has touched - local OCR, then the
     # model on the text it produced.
+    # "ocr": local character recognition, then the model on the text - the
+    # image never leaves the machine. "vision": the model reads the image
+    # itself. Scored separately so the choice between them is a measurement.
     readers: list[Any] = []
-    if bills._has_ocr():
+    if reader_kind == "ocr" and bills._has_ocr():
         readers.append(bills.OcrExtractor(ctx.vision))
     readers.append(bills.ModelExtractor(ctx.vision))
     reader = bills.ChainExtractor(readers)
+    cache_dir = f"{cache_dir}-{reader_kind}"
     cache = Path(cache_dir)
     cache.mkdir(parents=True, exist_ok=True)
 
@@ -317,10 +325,11 @@ async def main() -> int:
     parser.add_argument("--label", default="generated pile")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--report", default="reports/bill_accuracy.md")
+    parser.add_argument("--reader", choices=["ocr", "vision"], default="ocr")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
-    report = await score(args.folder, args.label, args.limit)
+    report = await score(args.folder, args.label, args.limit, reader_kind=args.reader)
     if not report.bills:
         print(
             f"No bills with a truth file in {args.folder}. Each scan needs its "

@@ -420,3 +420,38 @@ async def test_a_model_that_answers_nothing_at_any_budget_says_so(tmp_path):
 
     with pytest.raises(ValueError, match="the model rather than the document"):
         await reader.extract(bill)
+
+
+# --- which reader reads the bill -----------------------------------------------
+
+
+def _readers(mode: str) -> list[str]:
+    from tallyagent_tools.bills import _default_extractor
+
+    ctx = type("Ctx", (), {"vision": object(), "bill_reader": mode})()
+    return [type(r).__name__ for r in _default_extractor(ctx).readers]
+
+
+def test_vision_reads_first_and_ocr_catches_what_it_misses(monkeypatch):
+    """Measured: vision 3.9s a bill against OCR's 13.6s, nothing drafted wrong
+    by either - but vision returned nothing on one bill, so OCR stays behind it."""
+    from tallyagent_tools import bills as bills_mod
+
+    monkeypatch.setattr(bills_mod, "_has_ocr", lambda: True)
+
+    assert _readers("vision") == ["SidecarExtractor", "ModelExtractor", "OcrExtractor"]
+
+
+def test_a_firm_that_keeps_images_in_the_office_never_sends_one(monkeypatch):
+    from tallyagent_tools import bills as bills_mod
+
+    monkeypatch.setattr(bills_mod, "_has_ocr", lambda: True)
+
+    assert _readers("ocr") == ["SidecarExtractor", "OcrExtractor"]
+
+
+def test_the_reader_is_a_config_setting():
+    from tallyagent_daemon import config as config_mod
+
+    assert config_mod.from_dict({}).bill_reader == "vision"
+    assert config_mod.from_dict({"bills": {"reader": "ocr"}}).bill_reader == "ocr"
