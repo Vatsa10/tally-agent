@@ -1,4 +1,4 @@
-# Demo runbook - a CA firm, 30 minutes, live
+# Demo runbook - a CA firm, 35 minutes, live
 
 The audience runs a practice. They have lived in TallyPrime for years and they
 have been sold "Tally integrations" before that turned out to be a file drop.
@@ -20,6 +20,7 @@ uv run tallyagent clients check                 # demo: loaded, writable, enable
 uv run python scripts/demo_prep.py --client demo  # clears stale tickets, restocks Widgets
 uv run tallyagent users list                    # R. Mehta (partner), Nikhil (clerk)
 uv run tallyagent consent list --client demo    # TA-Demo Traders: enabled by R. Mehta
+dir clients\demo\gstr2b                         # june.json present - the 2B the run reconciles
 ```
 
 Expected: one client loaded and writable, two users, an empty queue.
@@ -159,7 +160,59 @@ uv run python scripts/tally_ui_rehearse.py pay --date 2026-06-02 --amount 150.00
 > "If a screen is not the one it expected, it stops rather than typing into
 > whatever has focus."
 
-## 0:21 - The first of the month (5 min)
+## 0:21 - Every client, every morning (6 min) - the headline
+
+This is the answer to "we don't have the articles any more". Say it like that.
+
+```
+/run --force
+```
+
+Every client in the register, every job that is due, one run. The demo client
+reconciles last month's GSTR-2B; the one whose Tally is not loaded is a line in
+the report, not a crash.
+
+```
+/inbox
+```
+
+One list across every client, **money at risk first**. Walk the top lines:
+
+- **"Bharat Supplies has not filed 2 invoice(s) - Rs 43,110"**. That is the
+  *tax*, the credit itself. It is deferred, not lost: the agent carries it on a
+  deferred-ITC ledger and calls it claimable the month it appears in 2B, and
+  warns before the section 16(4) deadline. Open the follow-up it drafted:
+
+  ```powershell
+  type "reports\reco\TA-Demo Traders\2026-06\followups\Bharat Supplies.txt"
+  ```
+
+- **"BS/2026/77: taxable value differs (+2,000)"**. It says which side and by
+  how much.
+- **"Drafted missing bill BS/2026/90 from 2B"**. A bill in 2B that nobody keyed
+  in, drafted as a purchase voucher and waiting for a partner. The agent never
+  invents a supplier who is not already a ledger.
+- IMS: every 2B invoice gets accept or keep pending, with a reason. Doing
+  nothing in IMS counts as accepting.
+
+Then the throughput story:
+
+```
+/autonomy
+```
+
+> "Today every write waits for you. A partner can let this client's work *earn*
+> hands-off posting: after, say, 20 clean approvals in a row of one kind of
+> entry, that kind posts by itself - up to the largest amount you have
+> approved, never above your ceiling, and the first time anyone corrects one it
+> goes back to waiting for you. The number we watch is the no-touch rate."
+
+If they lean in: `/autonomy grant 20 25000` as R. Mehta.
+
+The brief is also a file they can forward: `reports\brief\<today>.md`. The
+daemon runs all of this at 07:30 every day without anyone typing anything.
+
+## 0:27 - The first of the month (3 min)
 
 ```
 /monthend 2026-06 tests/fixtures/live_bank_statement.csv tests/fixtures/live_gstr2b.json
@@ -181,7 +234,7 @@ Then GSTR-1:
 
 Filing-ready JSON with the problems listed before anything is uploaded.
 
-## 0:26 - The audit chain (2 min)
+## 0:30 - The audit chain (2 min)
 
 ```powershell
 uv run tallyagent audit log --client demo
@@ -192,7 +245,7 @@ Every grant, sign-in, approval and automatic posting, by name, hash-chained.
 
 > "If anything ever goes wrong in a client's books, this answers who allowed it."
 
-## 0:28 - Close (2 min)
+## 0:32 - Close (2 min)
 
 What a pilot looks like: their machine, their Tally, two clients they choose,
 two weeks. We score their own bills before they trust a batch.
