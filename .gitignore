@@ -33,3 +33,7 @@ tests/fixtures/bills_real/*.jpg
 data/
 config/clients.toml
 clients/
+film/node_modules/
+film/build/
+film/out/
+!film/data/
