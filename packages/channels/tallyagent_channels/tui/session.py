@@ -499,8 +499,12 @@ class Session:
         if not args:
             return turn.say("error", "usage: /approve <ticket>  (or A for all)")
         if args[0].upper() in ("A", "ALL"):
-            for item in list(self.pending()):
-                await self.approve(item.ticket, turn)
+            self.require("approve")
+            tickets = [item.ticket for item in self.pending()]
+            # Before the first one posts: the gate is about the whole batch.
+            self.services.queue.require_backup(tickets)
+            for ticket in tickets:
+                await self.approve(ticket, turn)
             return turn
         return await self.approve(args[0], turn, " ".join(args[1:]))
 
@@ -729,6 +733,30 @@ class Session:
             + "\n".join(f"  {consent.describe()}" for consent in active),
         )
 
+    async def cmd_backup(self, args: list[str], turn: Turn) -> Turn:
+        """/backup [confirm <where>] - a backup of these books, for today.
+
+        With no arguments: copy Tally's data folder when one is configured, or
+        say when the books were last backed up and how to record one. With
+        ``confirm``: a partner's word that they took Tally's own backup (Alt+Y),
+        and where it is. Either way it is a partner's act, on the record.
+        """
+        backups = getattr(self.services, "backups", None)
+        if backups is None:
+            return turn.say("error", "no backup log is wired into this session")
+        company = self.services.company.name
+        if args and args[0].lower() == "confirm":
+            self.require("take_backup")
+            backup = backups.attest(company, self.who, " ".join(args[1:]))
+            return turn.say("system", f"backup recorded. {backup.describe()}")
+        if backups.can_copy:
+            self.require("take_backup")
+            backup = backups.take(company, self.who)
+            return turn.say("system", f"backup taken. {backup.describe()}")
+        last = backups.latest(company)
+        state = f"Last backup: {last.describe()}" if last else "No backup on record."
+        return turn.say("system", f"{state}\n{backups.how_to_take(company)}")
+
     async def cmd_monthend(self, args: list[str], turn: Turn) -> Turn:
         """/monthend 2026-06 [bank.csv] [2b.json] - the whole close, one pack."""
         if not args:
@@ -849,6 +877,7 @@ COMMANDS: dict[str, Callable[[Session, list[str], Turn], Awaitable[Turn]]] = {
     "approvals": Session.cmd_approvals,
     "approve": Session.cmd_approve,
     "reject": Session.cmd_reject,
+    "backup": Session.cmd_backup,
     "policy": Session.cmd_policy,
     "egress": Session.cmd_egress,
     "tier3": Session.cmd_tier3,
@@ -875,7 +904,8 @@ HELP = {
     "bills": "<folder> [--dry] [--limit N] - a pile of purchase bills at once",
     "reco": "bank <file> | gstr2b <file> - propose, never post",
     "approvals": "list what is waiting for you",
-    "approve": "<ticket> or A for all",
+    "approve": "<ticket> or A for all (5 or more needs a backup from today)",
+    "backup": "[confirm <where>] - back up these books before a bulk posting",
     "reject": "<ticket> <reason> - the reason is required",
     "policy": "which action types auto-approve, and the evidence",
     "egress": "exactly what left this machine",

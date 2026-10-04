@@ -187,6 +187,9 @@ class ApprovalQueue:
         self.engine = engine
         self.audit = audit or AuditLog(engine)
         self.executor = executor
+        #: The same-day backup gate on bulk postings. A ``BackupLog``, or None
+        #: where nothing is wired - a bare queue in a unit test.
+        self.backups: Any = None
 
     # --- enqueue ------------------------------------------------------------
 
@@ -359,6 +362,29 @@ class ApprovalQueue:
             errors=result.errors,
         )
         return result
+
+    def require_backup(self, tickets: list[str]) -> None:
+        """Refuse a bulk posting unless each company in it was backed up today.
+
+        Checked before the first ticket is posted, not partway through: a gate
+        that lets four through and stops the fifth has already done the damage
+        it exists to prevent.
+        """
+        if self.backups is None:
+            return
+        per_company: dict[str, int] = {}
+        for ticket in tickets:
+            company = self.get(ticket).company
+            per_company[company] = per_company.get(company, 0) + 1
+        for company, count in per_company.items():
+            self.backups.require_for(company, count)
+
+    async def approve_many(
+        self, tickets: list[str], actor: str, reason: str = ""
+    ) -> list[tuple[str, WriteResult]]:
+        """Approve several tickets in one go, behind the backup gate."""
+        self.require_backup(tickets)
+        return [(ticket, await self.approve(ticket, actor, reason)) for ticket in tickets]
 
     def reject(self, ticket: str, actor: str, reason: str) -> ApprovalItem:
         """Reject. A reason is mandatory: an unexplained rejection teaches

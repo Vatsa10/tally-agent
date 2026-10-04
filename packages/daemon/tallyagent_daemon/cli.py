@@ -10,6 +10,7 @@
     tallyagent approvals ...     list, stats, approve, reject
     tallyagent users ...         register people and what they may decide
     tallyagent consent ...       which client companies may be written to
+    tallyagent backup ...        back up a client's books before a bulk posting
     tallyagent fake-tally        run the fake Tally for the demo
 """
 
@@ -43,6 +44,8 @@ app.add_typer(audit_app, name="audit")
 app.add_typer(consent_app, name="consent")
 app.add_typer(users_app, name="users")
 app.add_typer(clients_app, name="clients")
+backup_app = typer.Typer(help="Backups of a client's books, before a bulk posting.")
+app.add_typer(backup_app, name="backup")
 
 CONFIG_OPTION = typer.Option("config/config.toml", "--config", "-c", help="Path to config.toml.")
 POLICY_OPTION = typer.Option("config/policy.toml", "--policy", help="Path to policy.toml.")
@@ -588,19 +591,43 @@ def approvals_stats(
 
 @approvals_app.command("approve")
 def approvals_approve(
-    ticket: str,
+    ticket: str = typer.Argument("", help="The ticket. Leave out with --all."),
     actor: str = typer.Option(..., "--actor", help="Who is approving."),
     reason: str = typer.Option("", "--reason"),
+    every: bool = typer.Option(
+        False, "--all", help="Every pending ticket for this company, in one go."
+    ),
     client: str = CLIENT_OPTION,
     clients_path: str = CLIENTS_OPTION,
     config_path: str = CONFIG_OPTION,
     policy_path: str = POLICY_OPTION,
     fake: bool = FAKE_OPTION,
 ) -> None:
-    """Approve a queued action and post it."""
+    """Approve a queued action and post it, or --all of them."""
     config = _load(config_path, policy_path, client, clients_path)
     wired = _wire(config, fake)
-    result = asyncio.run(wired.services.queue.approve(ticket, actor, reason))
+    queue = wired.services.queue
+    if every:
+        tickets = [item.ticket for item in queue.list("pending", config.company.name)]
+        try:
+            results = asyncio.run(queue.approve_many(tickets, actor, reason))
+        except TallyAgentError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+        failed = 0
+        for done, outcome in results:
+            if outcome.ok:
+                typer.echo(f"{done} posted.")
+            else:
+                failed += 1
+                typer.echo(f"{done} failed: {'; '.join(outcome.errors)}", err=True)
+        if failed:
+            raise typer.Exit(code=1)
+        return
+    if not ticket:
+        typer.echo("name a ticket, or pass --all", err=True)
+        raise typer.Exit(code=2)
+    result = asyncio.run(queue.approve(ticket, actor, reason))
     if result.ok:
         number = f" as {result.voucher_number}" if result.voucher_number else ""
         typer.echo(f"{ticket} posted{number}.")
@@ -806,6 +833,59 @@ def consent_revoke(
     typer.echo(
         f"{company}: consent revoked" if closed else f"{company} was not enabled"
     )
+
+
+@backup_app.command("take")
+def backup_take(
+    by: str = typer.Option(..., "--by", help="Which partner is taking it."),
+    confirm: str = typer.Option(
+        "",
+        "--confirm",
+        help="Record Tally's own backup (Alt+Y) instead: where you saved it.",
+    ),
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """Back up a client's books, so a bulk posting today is allowed.
+
+    Copies Tally's data folder when data_dir is set in config.toml under
+    tally. Without it, take Tally's own backup and record it with --confirm.
+    """
+    wired = wiring.build(_load(config_path, policy_path, client, clients_path))
+    partner = _partner(wired, by, action="take_backup")
+    backups = wired.services.backups
+    company = wired.config.company.name
+    try:
+        if confirm:
+            backup = backups.attest(company, partner.name, confirm)
+        else:
+            backup = backups.take(company, partner.name)
+    except (TallyAgentError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(backup.describe())
+
+
+@backup_app.command("status")
+def backup_status(
+    client: str = CLIENT_OPTION,
+    clients_path: str = CLIENTS_OPTION,
+    config_path: str = CONFIG_OPTION,
+    policy_path: str = POLICY_OPTION,
+) -> None:
+    """When this client's books were last backed up."""
+    wired = wiring.build(_load(config_path, policy_path, client, clients_path))
+    backups = wired.services.backups
+    company = wired.config.company.name
+    last = backups.latest(company)
+    if last is None:
+        typer.echo(f"No backup of {company} on record.")
+    else:
+        today = "from today" if backups.taken_today(company) else "not from today"
+        typer.echo(f"{last.describe()}  ({today})")
+    typer.echo(backups.how_to_take(company))
 
 
 @clients_app.command("list")

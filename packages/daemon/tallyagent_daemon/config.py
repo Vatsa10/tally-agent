@@ -68,6 +68,12 @@ class Config:
     #: switch changes ``db_path`` and leaves this alone, so the people who work
     #: here do not have to be registered once per client.
     firm_db_path: str = "./tallyagent.db"
+    #: Tally's own data folder, where it keeps each company as files. Optional:
+    #: when set, a backup is a zip of this folder; when not, a partner takes
+    #: Tally's backup (Alt+Y) and records that they did.
+    tally_data_dir: str = ""
+    #: Where file-copy backups are written, one folder per company.
+    backups_dir: str = "./backups"
 
     @property
     def tally_is_placeholder(self) -> bool:
@@ -208,4 +214,6 @@ def from_dict(
             or storage_raw.get("db_path")
             or "./tallyagent.db"
         ),
+        tally_data_dir=str(tally_raw.get("data_dir") or ""),
+        backups_dir=str(storage_raw.get("backups_dir") or "./backups"),
     )

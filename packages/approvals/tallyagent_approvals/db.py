@@ -162,6 +162,26 @@ class UserRow(SQLModel, table=True):
     locked_until: datetime | None = None
 
 
+class BackupRow(SQLModel, table=True):
+    """One backup of a client's books, and who stands behind it.
+
+    Kept in the client's own database next to the queue it protects: the
+    question "is there a backup from today" is asked of these books, not the
+    practice's.
+    """
+
+    __tablename__ = "backups"
+
+    id: int | None = Field(default=None, primary_key=True)
+    company: str = Field(index=True)
+    #: The zip that was written, or - for an attested Tally backup - where the
+    #: partner said they saved it.
+    path: str = ""
+    taken_at: datetime = Field(default_factory=_now, index=True)
+    taken_by: str = ""
+    method: str = ""  # file_copy | attested
+
+
 class EgressRow(SQLModel, table=True):
     """What left the machine, per model request. See docs/SECURITY.md."""
 
