@@ -92,8 +92,11 @@ if (clipScenes.length) {
     const push = 0.05;
     filters.push(
       `[${n + 1}:v]setpts=(PTS-STARTPTS)/${s.speed},fps=${FPS},` +
-      `crop=w='iw/(1+${push}*t/${len.toFixed(3)})':h='ih/(1+${push}*t/${len.toFixed(3)})':x='(iw-ow)/2':y='(ih-oh)/2',` +
-      `scale=${RECT.w}:${RECT.h}:flags=lanczos,setsar=1,setpts=PTS+${s.clip_at}/TB[c${n}]`,
+      // crop's size is fixed when the filter starts (t is not defined then);
+      // only its position may move. So: scale up a touch, then drift across.
+      `scale=${Math.round(RECT.w * (1 + push))}:${Math.round(RECT.h * (1 + push))}:flags=lanczos,` +
+      `crop=${RECT.w}:${RECT.h}:x='(iw-ow)*min(1,t/${len.toFixed(3)})':y='(ih-oh)/2',` +
+      `setsar=1,setpts=PTS+${s.clip_at}/TB[c${n}]`,
     );
     const out = n === clipScenes.length - 1 ? "[v]" : `[o${n}]`;
     filters.push(`${last}[c${n}]overlay=${RECT.x}:${RECT.y}:eof_action=pass:enable='between(t,${s.clip_at},${(s.clip_at + len).toFixed(3)})'${out}`);
