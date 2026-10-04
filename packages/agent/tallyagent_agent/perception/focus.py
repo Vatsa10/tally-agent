@@ -24,9 +24,12 @@ from typing import Any
 
 import numpy as np
 
-#: Tally's active-field yellow, as a tolerance band around #F8E0A8.
+#: Tally's active-field yellow, as a tolerance band around #F8E0A8. Measured:
+#: (253,230,172) in a screen recording, (254,232,175) in the PrintWindow
+#: capture the driver reads - the first band stopped at green 231 and so found
+#: nothing live. The row band behind it, (248,232,192), is kept out by blue.
 ACTIVE_RGB_MIN = (240, 214, 148)
-ACTIVE_RGB_MAX = (255, 231, 180)
+ACTIVE_RGB_MAX = (255, 238, 182)
 
 #: An input field is a single line. Anything taller is a panel or a band.
 MAX_FIELD_HEIGHT = 70

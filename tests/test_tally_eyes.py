@@ -155,6 +155,17 @@ def test_the_highlight_on_a_synthetic_screen():
     assert 495 <= box[0] <= 505 and 695 <= box[2] <= 704, "the whole field, across its text"
 
 
+def test_the_highlight_as_printwindow_paints_it():
+    """The live capture is a shade lighter than a recording; both are the field."""
+    screen = np.full((400, 800, 3), 252, dtype=np.uint8)
+    screen[100:124, :] = (248, 232, 192)
+    screen[100:124, 500:700] = (254, 232, 175)
+
+    box = focus.active_field(screen)
+
+    assert box is not None and 495 <= box[0] <= 505
+
+
 def test_no_highlight_means_no_answer_rather_than_a_guess():
     assert focus.active_field(np.full((200, 300, 3), 250, dtype=np.uint8)) is None
 
