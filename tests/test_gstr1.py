@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -146,7 +147,54 @@ def test_unregistered_buyers_in_other_states_are_inter_state_b2cs():
     assert payload["b2cs"][0]["pos"] == "29"
 
 
+def test_a_large_inter_state_sale_to_an_unregistered_buyer_is_b2cl_not_b2cs():
+    rows = [
+        _row("INV-L", "Walk-in", "200000.00", igst="36000.00", pos="29"),
+        _row("INV-S", "Walk-in", "1000.00", igst="180.00", pos="29"),
+    ]
+    payload = build_gstr1(rows, HOME, "062026")
+    assert payload["b2cl"] == [
+        {
+            "pos": "29",
+            "inv": [
+                {
+                    "inum": "INV-L",
+                    "idt": "15-06-2026",
+                    "val": 236000.0,
+                    "itms": [
+                        {
+                            "num": 1,
+                            "itm_det": {
+                                "rt": 18.0,
+                                "txval": 200000.0,
+                                "iamt": 36000.0,
+                                "csamt": 0.0,
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+    assert [row["txval"] for row in payload["b2cs"]] == [1000.0]
+
+
+def test_a_large_intra_state_sale_to_an_unregistered_buyer_stays_in_b2cs():
+    rows = [_row("INV-L", "Walk-in", "200000.00", "18000.00", "18000.00")]
+    payload = build_gstr1(rows, HOME, "062026")
+    assert "b2cl" not in payload
+    assert payload["b2cs"][0]["txval"] == 200000.0
+
+
 # --- what the portal would reject --------------------------------------------
+
+
+def test_the_same_invoice_number_twice_in_a_month_is_a_problem():
+    rows = [
+        _row("INV-1", "Walk-in", "1000.00", "25.00", "25.00"),
+        _row("inv-1", "Walk-in", "1000.00", "25.00", "25.00"),
+    ]
+    assert any("used twice" in p for p in validate(rows, HOME))
 
 
 def test_a_company_gstin_with_a_bad_checksum_is_a_problem():
@@ -255,6 +303,19 @@ async def test_a_month_with_problems_writes_no_json_and_says_why(
     assert "No JSON was written" in (
         tmp_path / ctx.company.name / "2026-06.md"
     ).read_text(encoding="utf-8")
+
+
+async def test_a_company_name_cannot_steer_the_export_out_of_its_folder(
+    backend, company, tmp_path
+):  # type: ignore[no-untyped-def]
+    hostile = company.model_copy(update={"name": "..\\..\\Shah: Co"})
+    ctx = ToolContext(backend=backend, company=hostile)
+
+    result = await gstr1_export(ctx, "2026-06", out_dir=str(tmp_path / "out"))
+
+    summary = Path(result.data["summary_path"]).resolve()
+    assert summary.parent.parent == (tmp_path / "out").resolve()
+    assert summary.parent.name == "..-..-Shah- Co"
 
 
 def test_the_export_is_registered_as_a_read():

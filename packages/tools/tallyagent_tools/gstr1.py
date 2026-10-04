@@ -46,6 +46,16 @@ STANDARD_RATES = (
 _INVOICE_NUMBER = re.compile(r"^[A-Za-z0-9/-]{1,16}$")
 TOLERANCE = Decimal("1")
 
+#: An inter-state sale to an unregistered buyer above this invoice value is
+#: B2C Large: the portal wants it invoice by invoice in b2cl, not folded into
+#: the b2cs totals. The limit has been one lakh since August 2024.
+B2CL_LIMIT = Decimal("100000")
+
+#: Characters a Windows folder name cannot hold. Company names come from Tally,
+#: and "Shah & Co: Mumbai" must still get a folder while "..\x" must not
+#: climb out of the reports directory.
+_UNSAFE_PATH = re.compile(r'[<>:"/\\|?*\x00-\x1f]|^\.+$')
+
 
 @dataclass(slots=True)
 class Invoice:
@@ -141,8 +151,14 @@ def validate(rows: list[dict[str, Any]], company_gstin: str) -> list[str]:
             "set it on the company before filing."
         )
     home = gstin_rules.state_code(company_gstin) if company_gstin else ""
+    seen: set[str] = set()
     for inv in invoices(rows, company_gstin):
         label = f"Invoice {inv.number or '(no number)'} to {inv.party or '(no party)'}"
+        # The portal refuses a second invoice with the same number in one
+        # return, ignoring case, and bounces the whole upload with it.
+        if inv.number and inv.number.upper() in seen:
+            problems.append(f"{label}: the invoice number is used twice this month.")
+        seen.add(inv.number.upper())
         if inv.ctin and not gstin_rules.is_valid(inv.ctin):
             problems.append(
                 f"{label}: buyer GSTIN {inv.ctin} fails the format or checksum."
@@ -188,6 +204,7 @@ def build_gstr1(
     hsn: dict[tuple[str, Decimal], list[Decimal]] = defaultdict(
         lambda: [Decimal("0")] * 5
     )
+    b2cl: dict[str, list[dict[str, Any]]] = defaultdict(list)
     found = invoices(rows, company_gstin)
     for inv in found:
         if inv.ctin:
@@ -208,6 +225,25 @@ def build_gstr1(
                                 "iamt": _num(inv.iamt),
                                 "camt": _num(inv.camt),
                                 "samt": _num(inv.samt),
+                                "csamt": 0.0,
+                            },
+                        }
+                    ],
+                }
+            )
+        elif inv.pos != home and inv.total > B2CL_LIMIT:
+            b2cl[inv.pos].append(
+                {
+                    "inum": inv.number,
+                    "idt": _portal_date(inv.date),
+                    "val": _num(inv.total),
+                    "itms": [
+                        {
+                            "num": 1,
+                            "itm_det": {
+                                "rt": _num(inv.rate),
+                                "txval": _num(inv.txval),
+                                "iamt": _num(inv.iamt),
                                 "csamt": 0.0,
                             },
                         }
@@ -246,6 +282,11 @@ def build_gstr1(
             for (pos, rate, kind), t in sorted(b2cs.items())
         ],
     }
+    if b2cl:
+        payload["b2cl"] = [
+            {"pos": pos, "inv": sorted(invs, key=lambda i: i["inum"])}
+            for pos, invs in sorted(b2cl.items())
+        ]
     # A partial HSN summary is worse than none: the portal checks it against
     # the invoices, so it is only included when every supply carries a code.
     if found and all(inv.hsn for inv in found):
@@ -268,6 +309,11 @@ def build_gstr1(
     return payload
 
 
+def folder_name(company: str) -> str:
+    """A company name as one folder inside out_dir, never a path out of it."""
+    return _UNSAFE_PATH.sub("-", company.strip()) or "company"
+
+
 def summary_markdown(
     company: str, month: str, payload: dict[str, Any] | None, problems: list[str]
 ) -> str:
@@ -281,11 +327,19 @@ def summary_markdown(
                 det = inv["itms"][0]["itm_det"]
                 by_rate[det["rt"]][0] += det["txval"]
                 by_rate[det["rt"]][1] += det["iamt"] + det["camt"] + det["samt"]
+        b2cl_count = 0
+        for place in payload.get("b2cl", []):
+            for inv in place["inv"]:
+                b2cl_count += 1
+                det = inv["itms"][0]["itm_det"]
+                by_rate[det["rt"]][0] += det["txval"]
+                by_rate[det["rt"]][1] += det["iamt"]
         for row in payload["b2cs"]:
             by_rate[row["rt"]][0] += row["txval"]
             by_rate[row["rt"]][1] += row["iamt"] + row["camt"] + row["samt"]
         lines += [
             f"- B2B: {invoice_count} invoice(s) to {len(payload['b2b'])} registered buyer(s)",
+            f"- B2CL: {b2cl_count} large inter-state invoice(s)",
             f"- B2CS: {len(payload['b2cs'])} summary row(s)",
             f"- HSN summary: {'included' if 'hsn' in payload else 'not available'}",
             "",
@@ -336,7 +390,7 @@ async def gstr1_export(
         rows, company_gstin, f"{to_date.month:02d}{to_date.year}"
     )
 
-    folder = Path(out_dir) / ctx.company.name.replace("/", "-")
+    folder = Path(out_dir) / folder_name(ctx.company.name)
     folder.mkdir(parents=True, exist_ok=True)
     json_path = folder / f"{month}.json"
     if payload is not None:
