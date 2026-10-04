@@ -789,3 +789,94 @@ async def test_what_policy_posts_is_recorded_against_whoever_asked(services, eng
     await session.handle("/signin Nikhil 1199")
 
     assert services.tools.actor == "Nikhil"
+
+
+# --- the PIN stays off the screen --------------------------------------------
+
+
+def _registered(services, engine):
+    from tallyagent_approvals.people import PARTNER, People
+
+    people = People(engine, services.audit)
+    people.add("R. Mehta", PARTNER, "4821")
+    services.people = people
+    return people
+
+
+async def test_a_pin_typed_on_the_line_is_masked_in_the_transcript(services, engine):
+    """Scripted runs still pass the PIN inline; the echo must not show it."""
+    _registered(services, engine)
+    session = Session(services)
+
+    turn = await session.handle("/signin R. Mehta 4821")
+
+    assert turn.lines[0].kind == "user"
+    assert turn.lines[0].text == "/signin R. Mehta ****"
+    assert "4821" not in turn.text
+    assert session.who == "R. Mehta"
+
+
+async def test_a_name_alone_asks_for_the_pin_through_the_prompt(services, engine):
+    _registered(services, engine)
+    session = Session(services)
+    asked: list[str] = []
+
+    async def prompt(name: str) -> str:
+        asked.append(name)
+        return "4821"
+
+    session.pin_prompt = prompt
+    turn = await session.handle("/signin R. Mehta")
+
+    assert asked == ["R. Mehta"]
+    assert session.who == "R. Mehta"
+    assert "4821" not in turn.text
+
+
+async def test_cancelling_the_pin_prompt_signs_nobody_in(services, engine):
+    people = _registered(services, engine)
+    session = Session(services)
+
+    async def prompt(name: str) -> str:
+        return ""
+
+    session.pin_prompt = prompt
+    turn = await session.handle("/signin R. Mehta")
+
+    assert "cancelled" in turn.text
+    assert people.current is None
+
+
+async def test_the_app_signs_in_through_a_masked_modal(services, engine):
+    from textual.widgets import Input
+
+    from tallyagent_channels.tui.app import PinModal, TallyAgentTUI
+
+    _registered(services, engine)
+    app = TallyAgentTUI(services, LiveMode(), status_interval=3600)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.query_one("#prompt").value = "/signin R. Mehta"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert isinstance(app.screen, PinModal)
+        box = app.screen.query_one("#pin", Input)
+        assert box.password, "the PIN is masked as it is typed"
+        box.value = "4821"
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert app.session.who == "R. Mehta"
+
+
+async def test_a_pin_typed_a_digit_short_is_masked_too(services, engine):
+    """Three of four digits on a projector is most of the PIN."""
+    _registered(services, engine)
+    session = Session(services)
+
+    turn = await session.handle("/signin R. Mehta 482")
+
+    assert turn.lines[0].text == "/signin R. Mehta ****"
+    assert "482" not in turn.text

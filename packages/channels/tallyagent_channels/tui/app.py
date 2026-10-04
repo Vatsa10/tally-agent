@@ -199,6 +199,29 @@ class ReasonModal(ModalScreen[str]):
         self.dismiss(event.value.strip())
 
 
+class PinModal(ModalScreen[str]):
+    """Asks for a PIN with the characters masked.
+
+    The transcript is on screen, often in front of a client; a PIN typed into
+    the chat box would sit there for anyone to read.
+    """
+
+    BINDINGS = [Binding("escape", "dismiss('')", "cancel")]
+
+    def __init__(self, name: str) -> None:
+        super().__init__()
+        self._name = name
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="modal"):
+            yield Label(f"PIN for {self._name}")
+            yield Input(placeholder="PIN", password=True, id="pin")
+
+    @on(Input.Submitted, "#pin")
+    def _submit(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value.strip())
+
+
 class TallyAgentTUI(App[None]):
     """The app."""
 
@@ -230,6 +253,7 @@ class TallyAgentTUI(App[None]):
         self.session = Session(services, live=self.live, clients=clients, switch=switch)
         self.session.client_slug = client_slug
         self.session.tier3_approver = self._approve_tier3_step
+        self.session.pin_prompt = self._ask_pin
         self.status_interval = status_interval
 
     # --- layout -------------------------------------------------------------
@@ -437,6 +461,13 @@ class TallyAgentTUI(App[None]):
     def action_refresh_status(self) -> None:
         self.refresh_status()
         self.refresh_queue()
+
+    # --- signing in ----------------------------------------------------------
+
+    async def _ask_pin(self, name: str) -> str:
+        """Called by the session from inside a turn worker, which is what lets
+        it wait on a modal."""
+        return str(await self.push_screen_wait(PinModal(name)) or "")
 
     # --- Tier 3 -------------------------------------------------------------
 

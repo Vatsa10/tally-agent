@@ -7,13 +7,17 @@ approval in the audit chain said "web".
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from tallyagent_approvals.audit import AuditLog
 from tallyagent_approvals.db import make_engine
 from tallyagent_approvals.people import (
     CLERK,
+    MAX_FAILED_PINS,
     PARTNER,
+    LockedOutError,
     NotPermittedError,
     NotSignedInError,
     People,
@@ -209,3 +213,134 @@ def test_a_failed_log_write_does_not_stop_somebody_signing_in(engine):
     staff.add("R. Mehta", PARTNER, "4821")
 
     assert staff.sign_in("R. Mehta", "4821").is_partner
+
+
+# --- lockout -----------------------------------------------------------------
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = datetime(2026, 10, 5, 4, 0, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+@pytest.fixture
+def clock():
+    return Clock()
+
+
+@pytest.fixture
+def timed(engine, audit, clock):
+    staff = People(engine, audit, clock=clock)
+    staff.add("R. Mehta", PARTNER, "4821")
+    return staff
+
+
+def _miss(staff, times):
+    for _ in range(times):
+        with pytest.raises(WrongPinError):
+            staff.check("R. Mehta", "0000")
+
+
+def test_five_wrong_pins_in_a_row_lock_the_person_out(timed):
+    _miss(timed, 4)
+    with pytest.raises(LockedOutError, match="Try again after"):
+        timed.check("R. Mehta", "0000")
+
+
+def test_the_right_pin_does_not_get_through_a_lockout(timed):
+    _miss(timed, 4)
+    with pytest.raises(LockedOutError):
+        timed.check("R. Mehta", "0000")
+
+    with pytest.raises(LockedOutError):
+        timed.sign_in("R. Mehta", "4821")
+    with pytest.raises(LockedOutError):
+        timed.authorise("approve", "R. Mehta", "4821")
+    assert timed.current is None
+
+
+def test_a_right_pin_resets_the_count(timed):
+    _miss(timed, 4)
+    timed.check("R. Mehta", "4821")
+
+    _miss(timed, 4)
+    assert timed.check("R. Mehta", "4821").is_partner
+
+
+def test_the_lockout_ends_after_fifteen_minutes(timed, clock):
+    _miss(timed, 4)
+    with pytest.raises(LockedOutError):
+        timed.check("R. Mehta", "0000")
+
+    clock.now += timedelta(minutes=14)
+    with pytest.raises(LockedOutError):
+        timed.check("R. Mehta", "4821")
+
+    clock.now += timedelta(minutes=2)
+    assert timed.sign_in("R. Mehta", "4821").is_partner
+
+
+def test_a_lockout_is_recorded_on_the_audit_chain(timed, audit):
+    _miss(timed, 4)
+    with pytest.raises(LockedOutError):
+        timed.check("R. Mehta", "0000")
+
+    locked = [e for e in audit.entries() if e.event == "user_locked"]
+    assert len(locked) == 1
+    assert locked[0].actor == "R. Mehta"
+    assert audit.verify().ok
+
+
+def test_an_unknown_name_never_locks_and_reads_like_a_wrong_pin(timed):
+    for _ in range(10):
+        with pytest.raises(WrongPinError, match="do not match") as unknown:
+            timed.check("Nobody", "0000")
+    with pytest.raises(WrongPinError) as wrong:
+        timed.check("R. Mehta", "0000")
+    assert str(unknown.value) == str(wrong.value)
+
+
+def test_an_older_database_gains_the_lockout_columns(tmp_path):
+    """A firm's database from before lockout must open, not crash on login."""
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, name VARCHAR UNIQUE, "
+            "role VARCHAR, pin_hash VARCHAR, pin_salt VARCHAR, "
+            "created_at DATETIME, disabled BOOLEAN)"
+        )
+    make_engine(path).dispose()
+    old = make_engine(path)  # a second open must not try to add them again
+
+    staff = People(old)
+    staff.add("R. Mehta", PARTNER, "4821")
+    assert staff.check("R. Mehta", "4821").is_partner
+    old.dispose()
+
+
+def test_parallel_guesses_each_count_as_a_strike(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    engine = make_engine(tmp_path / "race.db")
+    staff = People(engine)
+    staff.add("R. Mehta", PARTNER, "4821")
+
+    def guess(_):
+        try:
+            staff.check("R. Mehta", "0000")
+        except LockedOutError:
+            return "locked"
+        except WrongPinError:
+            return "wrong"
+        return "in"
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        outcomes = list(pool.map(guess, range(12)))
+
+    assert outcomes.count("wrong") == MAX_FAILED_PINS - 1
+    assert outcomes.count("locked") == 12 - (MAX_FAILED_PINS - 1)

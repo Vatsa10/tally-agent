@@ -155,6 +155,11 @@ class UserRow(SQLModel, table=True):
     pin_salt: str = ""
     created_at: datetime = Field(default_factory=_now)
     disabled: bool = Field(default=False)
+    #: Wrong PINs in a row. A four-digit PIN only holds up if guessing stops
+    #: long before ten thousand tries, so the count is kept per person.
+    failed_pins: int = Field(default=0)
+    #: Until when this person cannot sign in, after too many wrong PINs.
+    locked_until: datetime | None = None
 
 
 class EgressRow(SQLModel, table=True):
@@ -193,7 +198,32 @@ def make_engine(db_path: str | Path = "tallyagent.db", echo: bool = False) -> En
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         engine = create_engine(f"sqlite:///{db_path}", echo=echo)
     SQLModel.metadata.create_all(engine)
+    _add_missing_columns(engine)
     return engine
+
+
+#: Columns added after a table first shipped. ``create_all`` creates missing
+#: tables but never alters an existing one, so a database from before the
+#: column existed would fail on its first query without this.
+_LATER_COLUMNS: dict[str, dict[str, str]] = {
+    "users": {
+        "failed_pins": "INTEGER NOT NULL DEFAULT 0",
+        "locked_until": "DATETIME",
+    },
+}
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    """Bring an older SQLite file up to the current columns. Safe to repeat."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table, columns in _LATER_COLUMNS.items():
+            have = {c["name"] for c in inspector.get_columns(table)}
+            for name, ddl in columns.items():
+                if name not in have:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
 
 class SqlIdempotencyStore:
