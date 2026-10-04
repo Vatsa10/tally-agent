@@ -431,3 +431,45 @@ async def test_every_receipt_and_journal_step_is_narrated():
         assert run.completed, run.stopped
         for step in run.steps:
             assert step.describe() in spotlight.said, step.what
+
+
+def _allocating_after(typed_count: int, voucher: str):  # type: ignore[no-untyped-def]
+    """A Tally that opens a cost allocation screen once ``typed_count`` texts
+    have gone in - the point at which a cost-centre ledger's amount lands."""
+    keyboard = FakeKeyboard()
+
+    def screen_name() -> str:
+        if keyboard.pressed and keyboard.pressed[-1] == "f2":
+            return "Change Voucher Date"
+        if keyboard.pressed and keyboard.pressed[-1] == "alt+g":
+            return "List of Reports"
+        if len(keyboard.typed) >= typed_count:
+            return "Cost Allocations for Furniture"
+        return voucher
+
+    ui = TallyUi(keyboard=keyboard, approve=yes, sleep=_nosleep, screen_name=screen_name)
+    return ui, keyboard
+
+
+async def test_a_journal_credit_ledger_with_cost_centres_is_named_when_it_stops():
+    # Create Voucher, date, Dr, Depreciation, 100, Cr, Furniture, 100
+    ui, keyboard = _allocating_after(8, "Journal Voucher Creation")
+
+    run = await ui.enter_journal("Depreciation", "Furniture", Decimal("100"), date(2026, 6, 1))
+
+    assert not run.completed
+    assert run.stopped.startswith("Furniture is allocated to cost centres"), run.stopped
+    assert "ctrl+a" not in keyboard.pressed
+
+
+async def test_a_journal_debit_ledger_with_cost_centres_stops_before_the_credit_line():
+    # Create Voucher, date, Dr, Depreciation, 100 - then the allocation screen
+    ui, keyboard = _allocating_after(5, "Journal Voucher Creation")
+
+    run = await ui.enter_journal("Depreciation", "Furniture", Decimal("100"), date(2026, 6, 1))
+
+    assert not run.completed
+    assert "another screen" in run.stopped
+    assert "Cr" not in keyboard.typed and "Furniture" not in keyboard.typed
+    assert "ctrl+a" not in keyboard.pressed
+    assert keyboard.pressed[-1] == "escape"

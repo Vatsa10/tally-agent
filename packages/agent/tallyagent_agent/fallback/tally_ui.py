@@ -370,7 +370,11 @@ class TallyUi:
             fields=fields,
             when=when,
             amount=amount,
-            allocated_ledger=debit_ledger,
+            # Only an allocation screen opened by the last line keyed survives
+            # to the post-field check - one opened by the debit line is caught
+            # by the screen guard before "Cr" is typed - so the ledger to name
+            # in the refusal is the credit one.
+            allocated_ledger=credit_ledger,
             narration=narration,
         )
 
